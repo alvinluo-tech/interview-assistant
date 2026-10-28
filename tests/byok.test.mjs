@@ -19,11 +19,49 @@ test('Bailian preset and saved realtime routes support Fun-ASR alongside Parafor
 });
 
 const singaporeUrl = 'https://ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1';
+
+test('speech recognition models cannot send a text-only test to chat/completions', async () => {
+  let requests = 0;
+  for (const model of ['fun-asr', 'fun-asr-flash-2026-06-15', 'fun-asr-realtime']) {
+    await assert.rejects(testChatModel(provider({ baseUrl: singaporeUrl }), model, async () => {
+      requests++;
+      return json({ error: { message: 'url error, please check url!' } }, 400);
+    }), /语音识别.*对话/);
+  }
+  assert.equal(requests, 0, 'The invalid text test must be rejected before sending a request');
+});
+
+test('recognition model classification covers audio families without blocking text-capable multimodal models', () => {
+  for (const model of ['fun-asr', 'fun-asr-flash-2026-06-15', 'fun-asr-realtime', 'fun-asr-flash-8k-realtime',
+    'paraformer-v2', 'paraformer-realtime-v2', 'sensevoice-v1', 'whisper-1', 'openai/whisper-1', 'mimo-v2-asr', 'qwen3-asr-flash', 'qwen-audio-asr']) {
+    assert.equal(configApi.isSpeechRecognitionModel(model), true, model);
+  }
+  for (const model of ['qwen-plus', 'qwen3.5-plus', 'qwen-omni-turbo', 'qwen2.5-omni', 'gpt-4o', 'custom/model', 'my-asr-aware-chat']) {
+    assert.equal(configApi.isSpeechRecognitionModel(model), false, model);
+  }
+});
+
 function singaporeSettings() {
   const connection = createProvider('dashscope-sg'); connection.apiKey = 'synthetic-key'; connection.baseUrl = singaporeUrl;
   return { ...defaultAiSettings(), providers: [connection], speechInputMode: 'realtime',
     routes: { chat: null, vision: null, tts: null, stt: { providerId: connection.id, modelId: 'fun-asr-realtime' } } };
 }
+
+test('a saved realtime model automatically selects its required streaming transport', () => {
+  const config = singaporeSettings();
+  for (const mode of [undefined, 'auto', 'file', 'segmented', 'realtime']) {
+    assert.equal(validateAiSettings({...config,speechInputMode:mode}).speechInputMode,'realtime');
+  }
+});
+
+test('unsupported Bailian file recognition is readable for repair but cannot be saved or used as a transcription route', () => {
+  const config=singaporeSettings();
+  config.providers[0].models.push({id:'fun-asr',name:'Fun-ASR',source:'discovered'});
+  config.routes.stt.modelId='fun-asr';config.speechInputMode='auto';
+  assert.equal(validateAiSettings(config,true).routes.stt.modelId,'fun-asr');
+  assert.throws(()=>validateAiSettings(config),/文件识别.*fun-asr-realtime/);
+  assert.throws(()=>resolveAiRoute(config,'stt'),/文件识别.*fun-asr-realtime/);
+});
 test('Singapore preset and existing custom connections infer the matching realtime endpoint', () => {
   const config = singaporeSettings();
   assert.equal(createProvider('dashscope-sg').baseUrl, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1');
@@ -105,6 +143,20 @@ test('lookalike and proxy addresses retain their configured model URL without fo
     });
     assert.equal(models[0].id, 'own-model');
   }
+});
+
+test('catalog rejects repeated pages, changing totals and excessive pagination, and accepts an empty catalog', async () => {
+  const connection = provider({ baseUrl: singaporeUrl });
+  for (const mode of ['repeated', 'changed', 'too-many-pages']) {
+    let page = 0;
+    await assert.rejects(discoverModels(connection, async () => {
+      page++;
+      return json({ output: { total: mode === 'changed' && page === 2 ? 3 : mode === 'too-many-pages' ? 21 : 2,
+        page_no: page, models: [{ model: mode === 'repeated' ? 'same' : `model-${page}` }] } });
+    }), /分页/);
+    assert.ok(page <= 20);
+  }
+  assert.deepEqual(await discoverModels(connection, async () => json({ output: { total: 0, models: [] } })), []);
 });
 const streaming = (value, width = 1) => {
   const bytes = new TextEncoder().encode(value);

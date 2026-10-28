@@ -99,6 +99,17 @@ fn transform_keys(config: &mut Value, encrypt: bool) -> Result<(), String> {
     }
     Ok(())
 }
+fn bailian_region(host: &str) -> Option<&'static str> {
+    for (region, public, suffix) in [
+        ("beijing", "dashscope.aliyuncs.com", ".cn-beijing.maas.aliyuncs.com"),
+        ("singapore", "dashscope-intl.aliyuncs.com", ".ap-southeast-1.maas.aliyuncs.com"),
+    ] {
+        let workspace = host.strip_suffix(suffix).is_some_and(|prefix|
+            !prefix.is_empty() && prefix.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'));
+        if host == public || workspace { return Some(region); }
+    }
+    None
+}
 fn validate(config: &Value) -> Result<(), String> {
     if let Some(mode) = config.get("speechInputMode") {
         if !matches!(mode.as_str(), Some("auto" | "segmented" | "file" | "realtime")) {
@@ -109,12 +120,10 @@ fn validate(config: &Value) -> Result<(), String> {
         let endpoint = endpoint.as_str().ok_or("实时语音地址无效")?;
         let url = tauri::Url::parse(endpoint).map_err(|_| "实时语音地址无效")?;
         let host = url.host_str().unwrap_or_default();
-        let workspace = host.strip_suffix(".cn-beijing.maas.aliyuncs.com")
-            .is_some_and(|prefix| !prefix.is_empty() && prefix.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'));
         if url.scheme() != "wss" || url.path() != "/api-ws/v1/inference" || url.query().is_some() || url.fragment().is_some()
             || !url.username().is_empty() || url.password().is_some() || url.port().is_some()
-            || !(host == "dashscope.aliyuncs.com" || workspace) {
-            return Err("持续实时语音仅支持百炼北京地域的官方 WSS 地址".into());
+            || bailian_region(host).is_none() {
+            return Err("持续实时语音仅支持百炼北京或新加坡地域的官方 WSS 地址".into());
         }
     }
     if let Some(vocabulary) = config.get("realtimeVocabularyId") {
@@ -127,6 +136,26 @@ fn validate(config: &Value) -> Result<(), String> {
         && !matches!(config["routes"]["stt"]["modelId"].as_str(),
             Some("paraformer-realtime-v2" | "fun-asr-realtime" | "fun-asr-realtime-2026-02-28")) {
         return Err("持续实时模式请选择 Fun-ASR-Realtime 或 paraformer-realtime-v2".into());
+    }
+    if config["speechInputMode"] == "realtime" {
+        let route = &config["routes"]["stt"];
+        let provider_region = config["providers"].as_array()
+            .and_then(|providers| providers.iter().find(|provider| provider["id"] == route["providerId"]))
+            .and_then(|provider| provider["baseUrl"].as_str())
+            .and_then(|base| tauri::Url::parse(base).ok())
+            .filter(|url| url.scheme() == "https" && url.port().is_none() && url.username().is_empty()
+                && url.password().is_none() && url.query().is_none() && url.fragment().is_none()
+                && url.path().trim_end_matches('/') == "/compatible-mode/v1")
+            .and_then(|url| bailian_region(url.host_str().unwrap_or_default()));
+        let endpoint_region = config["realtimeEndpoint"].as_str()
+            .and_then(|endpoint| tauri::Url::parse(endpoint).ok())
+            .and_then(|url| bailian_region(url.host_str().unwrap_or_default()));
+        if let (Some(provider), Some(endpoint)) = (provider_region, endpoint_region) {
+            if provider != endpoint { return Err("实时语音地址与语音转写连接的地域不一致，请清空实时地址以自动匹配".into()); }
+        }
+        if endpoint_region.or(provider_region) == Some("singapore") && !route.is_null() && route["modelId"] != "fun-asr-realtime" {
+            return Err("新加坡持续实时识别请选择 fun-asr-realtime 稳定版".into());
+        }
     }
     if config["version"] != 2 || config.to_string().len() > 4_000_000 {
         return Err("AI 配置版本或大小无效".into());

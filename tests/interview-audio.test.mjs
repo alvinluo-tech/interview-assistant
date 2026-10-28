@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
 
-function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false } = {}) {
+function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false } = {}) {
   let now = 1000;
   let processor;
   let resumed = 0;
@@ -28,7 +28,8 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   const mocks = {
     './aiSettings': { getAiSettings: () => realtime ? ({ speechInputMode: 'realtime' }) : ({}) },
     './realtimeAsr': { openConfiguredRealtimeAsr: async callbacks => { realtimeCallbacks = callbacks; return { push: () => { realtimeFrames++; }, close: async () => { realtimeCloses++; } }; } },
-    './aiConfig': { isRoleConfigured: (_s, role) => role !== 'stt' || stt },
+    './aiConfig': { isRoleConfigured: (_s, role) => role !== 'stt' || stt,
+      resolveAiRoute() { if (speechRouteError) throw new Error(speechRouteError); if (!stt) throw new Error('尚未配置语音转写模型'); return {}; } },
     './bridge': { onEvent: registerNative, listenEvent: async (event, handler) => registerNative(event, handler),
       startSystemAudioCapture: nativeStart ?? (async () => ({ devices: [{ id: 'speaker-a', name: '测试耳机', is_default: true }], sampleRate: 16000, channels: 1 })),
       stopSystemAudioCapture: async () => { nativeStops++; }, setSystemAudioExcludedOutputs: async () => {} },
@@ -111,6 +112,14 @@ test('continuous ASR sends live PCM, displays partial text and answers only fina
   assert.ok(h.realtimeCloses > 0);
   h.realtimeResult({ id: 'late', text: '已结束之后的语音', isFinal: true });
   assert.equal(h.engine.getInterviewEngineState().messages.filter(message => message.role === 'INTERVIEWER').length, 1);
+});
+
+test('unsupported speech configuration is explained before opening the microphone or sending audio', async () => {
+  const reason='当前 fun-asr 属于百炼文件识别模型，请改选 fun-asr-realtime';
+  const h=harness({speechRouteError:reason});await h.start();
+  assert.equal(h.engine.getInterviewEngineState().status,'error');
+  assert.equal(h.engine.getInterviewEngineState().errorMessage,reason);
+  assert.equal(h.permissionRequests,0);assert.equal(h.requests,0);
 });
 
 test('online interview receives PCM16 system playback and submits its correct WAV duration', async () => {

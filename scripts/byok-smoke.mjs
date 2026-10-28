@@ -157,6 +157,41 @@ try {
     assert.equal(config.routes.tts, null);
     assert.equal(config.routes.chat.modelId, 'private/my-model');
   });
+  await check('recognition-only models disable text tests and explain actual audio verification', async () => {
+    for (const model of ['fun-asr', 'fun-asr-flash-2026-06-15', 'fun-asr-realtime']) {
+      await cdp.input('[aria-label="自定义模型 ID"]', model);
+      await cdp.click('添加模型');
+    }
+    await cdp.input('[aria-label="搜索模型"]', 'fun');
+    const before = calls.length;
+    const controls = await cdp.evaluate(`Array.from(document.querySelectorAll('button')).filter(button=>button.textContent.trim()==='语音专用').map(button=>({disabled:button.disabled,title:button.title}))`);
+    assert.equal(controls.length, 3);assert.ok(controls.every(button=>button.disabled && button.title));
+    await cdp.evaluate(`Array.from(document.querySelectorAll('button')).filter(button=>button.textContent.trim()==='语音专用').forEach(button=>button.click())`);
+    await delay(100);assert.equal(calls.length, before, 'Disabled speech-model controls must not issue requests');
+    assert.ok((await cdp.evaluate('document.body.innerText')).includes('「测试麦克风」仅检查本地音量'));
+    await cdp.input('[aria-label="搜索模型"]', '');
+    assert.ok(await cdp.evaluate(`Array.from(document.querySelectorAll('button')).some(button=>button.textContent.trim()==='测试对话'&&!button.disabled)`));
+  });
+  await check('a saved unsupported Bailian file model can be repaired to realtime without changing its credential', async () => {
+    await cdp.click('撤销更改');
+    const config=await cdp.invoke('cmd_ai_load_settings');
+    const connection=config.providers[0];
+    connection.baseUrl='https://ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1';
+    for(const id of ['fun-asr','fun-asr-realtime'])if(!connection.models.some(model=>model.id===id))connection.models.push({id,name:id,source:'custom'});
+    config.routes.stt={providerId:connection.id,modelId:'fun-asr'};config.speechInputMode='auto';
+    await cdp.invoke('cmd_ai_save_settings',{config});
+    await cdp.waitFor("!!document.querySelector('[data-testid=unsupported-speech-model]')");
+    assert.ok(await cdp.evaluate(`Array.from(document.querySelector('#ai-route-stt').options).find(option=>option.value.includes('"modelId":"fun-asr"')).disabled`));
+    const before=calls.length;
+    await cdp.click('改用当前连接的实时识别');
+    assert.equal(await cdp.evaluate("document.querySelector('#ai-speech-mode').value"),'realtime');
+    await cdp.click('保存配置');
+    await cdp.waitFor("document.body.innerText.includes('配置已同步')&&!document.querySelector('[data-testid=unsupported-speech-model]')");
+    const repaired=await cdp.invoke('cmd_ai_load_settings');
+    assert.equal(repaired.routes.stt.modelId,'fun-asr-realtime');assert.equal(repaired.speechInputMode,'realtime');
+    assert.equal(repaired.providers[0].apiKey,connection.apiKey);assert.equal(repaired.providers[0].baseUrl,connection.baseUrl);
+    assert.equal(calls.length,before,'Changing the draft and saving must not invoke the cloud service');
+  });
   await writeFile('artifacts/byok-smoke-result.json', JSON.stringify({ passed: results.length, results, identifier }, null, 2));
   console.log(JSON.stringify({ passed: results.length, results }, null, 2));
 } catch (error) {

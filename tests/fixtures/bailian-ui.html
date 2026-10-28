@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>百炼设置隔离验证</title>
+<div id="root"></div>
+<script type="module">
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { AiServicesTab } from '/src/main/sections/AiServicesTab.tsx';
+  import { createProvider, defaultAiSettings } from '/src/lib/aiConfig.ts';
+  import { saveAiSettings, getAiSettings } from '/src/lib/aiSettings.ts';
+  import '/src/index.css';
+  const requests = [];
+  window.__bailianUiTest = { requests, getAiSettings };
+  window.fetch = async (url, init) => {
+    const parsed = new URL(url);
+    if (parsed.origin !== 'https://dashscope-intl.aliyuncs.com' || parsed.pathname !== '/api/v1/models') throw new Error('隔离测试禁止外部请求');
+    requests.push({ url: String(url), headers: init.headers });
+    const page = Number(parsed.searchParams.get('page_no'));
+    return new Response(JSON.stringify({ success: true, output: { total: 2, page_no: page, page_size: 1,
+      models: [{ model: page === 1 ? 'qwen-plus' : 'fun-asr-realtime' }] } }), { headers: { 'content-type': 'application/json' } });
+  };
+  const provider = createProvider('compatible');
+  Object.assign(provider, { name: '已有新加坡连接', baseUrl: 'https://ws-test.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1', apiKey: 'synthetic-ui-key' });
+  await saveAiSettings({ ...defaultAiSettings(), providers: [provider] });
+  createRoot(document.getElementById('root')).render(React.createElement(AiServicesTab));
+</script></html>

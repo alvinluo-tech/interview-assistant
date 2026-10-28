@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Eye, EyeOff, Loader2, Plus, RefreshCw, Search, Server, Trash2, Unplug } from 'lucide-react';
 import { Badge, Button, Card, ConfirmDialog, Input, SectionHeader, Select, showToast } from '@/ui/primitives';
 import {
-  AI_ROLES, PROVIDER_PRESETS, ROLE_LABELS, createProvider, mergeDiscoveredModels,
-  normalizeBaseUrl, removeProvider, validateModelId, type AiProvider, type AiRole, type AiSettings,
+  AI_ROLES, PROVIDER_PRESETS, ROLE_LABELS, bailianConnection, createProvider, mergeDiscoveredModels,
+  normalizeBaseUrl, removeProvider, validateModelId, isSpeechRecognitionModel, isUnsupportedBailianSpeechModel, type AiProvider, type AiRole, type AiSettings,
 } from '@/lib/aiConfig';
 import { getAiLoadError, getAiSettings, reloadAiSettings, saveAiSettings, useAiSettings } from '@/lib/aiSettings';
 import { discoverModels, testChatModel } from '@/lib/aiProtocol';
@@ -39,6 +39,10 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
   const sequence = useRef(0);
   const mounted = useRef(true);
   const provider = draft.providers.find(p => p.id === selectedId);
+  const sttProvider = draft.providers.find(p => p.id === draft.routes.stt?.providerId);
+  const realtimeSpeechSelected = isRealtimeAsrModel(draft.routes.stt?.modelId || '');
+  const unsupportedSpeechSelected = !!sttProvider && isUnsupportedBailianSpeechModel(sttProvider,draft.routes.stt?.modelId || '');
+  const automaticRealtimeEndpoint = (sttProvider && bailianConnection(sttProvider.baseUrl)?.realtimeEndpoint) || DEFAULT_REALTIME_ENDPOINT;
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const loadError = getAiLoadError();
 
@@ -144,6 +148,20 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
     });
     setStatus(null);
   }
+  function assignRoute(role: AiRole, serialized: string) {
+    const route = serialized ? JSON.parse(serialized) : null;
+    setDraft(value => ({...value,routes:{...value.routes,[role]:route},
+      ...(role==='stt' ? {speechInputMode:route && isRealtimeAsrModel(route.modelId) ? 'realtime' : value.speechInputMode==='realtime' ? 'auto' : value.speechInputMode} : {})}));
+  }
+  function useCurrentConnectionRealtime() {
+    if(!sttProvider)return;
+    const modelId='fun-asr-realtime';
+    if(sttProvider.models.length>=2000&&!sttProvider.models.some(model=>model.id===modelId)){setError('模型库已满，请先移除一个模型。');return;}
+    cancel();setError('');
+    setDraft(value=>({...value,providers:value.providers.map(provider=>provider.id===sttProvider.id ? {...provider,models:provider.models.some(model=>model.id===modelId)?provider.models:[...provider.models,{id:modelId,name:'Fun-ASR 实时识别',source:'custom'}]} : provider),
+      routes:{...value.routes,stt:{providerId:sttProvider.id,modelId}},speechInputMode:'realtime'}));
+    setStatus({kind:'info',text:'已选择当前连接的 fun-asr-realtime 和持续实时模式。请保存配置，再暂停并继续收音，或重新开始面试。'});
+  }
   const filtered = provider?.models.filter(m => `${m.id} ${m.name}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   const assignedCount = AI_ROLES.filter(role => !!draft.routes[role]).length;
 
@@ -202,7 +220,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
                   <label className="text-xs font-medium" htmlFor="ai-auth-mode">认证方式<Select id="ai-auth-mode" className="mt-1" value={provider.authMode} disabled={busy === 'save'} onChange={e => patchProvider({ authMode: e.target.value as AiProvider['authMode'] })}><option value="bearer">API Key</option><option value="none">无需密钥</option></Select></label>
                   <label className="min-w-0 text-xs font-medium" htmlFor="ai-api-key">API Key<div className="relative mt-1"><Input id="ai-api-key" className="pr-10 font-mono text-xs" type={revealKey ? 'text' : 'password'} autoComplete="off" spellCheck={false} value={provider.apiKey} disabled={busy === 'save' || provider.authMode === 'none'} onChange={e => patchProvider({ apiKey: e.target.value })} placeholder={provider.authMode === 'none' ? '本地服务不发送认证头' : '粘贴服务商提供的密钥'} /><button type="button" aria-label={revealKey ? '隐藏密钥' : '显示密钥'} className="absolute inset-y-0 right-2 px-1 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setRevealKey(v => !v)}>{revealKey ? <EyeOff size={14} /> : <Eye size={14} />}</button></div></label>
                 </div>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">密钥在本机以当前 Windows 账户加密保存；请求直接发往你设置的接口。</p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">密钥在本机以当前 Windows 账户加密保存；请求直接发往你设置的接口。百炼官方地址会按地域查询官方模型目录；新加坡目录使用百炼新加坡公共域名。</p>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void networkAction('discover')}><RefreshCw size={13} className={busy === 'discover' ? 'animate-spin' : ''} />{busy === 'discover' ? '正在获取模型…' : '连接并获取模型'}</Button>
@@ -215,16 +233,17 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">模型库 <span className="ml-1 text-xs font-normal text-muted-foreground">{provider.models.length} 个</span></h3>
                   <div className="relative w-full max-w-[230px]"><Search size={13} className="absolute left-2.5 top-2.5 text-muted-foreground" /><Input className="h-8 pl-8 text-xs" aria-label="搜索模型" placeholder="搜索模型 ID 或名称" value={search} onChange={e => { setSearch(e.target.value); setLimit(30); }} /></div>
                 </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">列表可用不代表模型支持所有用途。对话测试只验证文字作答；视觉和语音能力请以服务商说明为准。</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">目录展示不代表当前账户已开通该模型，也不代表支持所有用途。对话测试只验证文字作答；实时语音请保存后在工作台测试。</p>
                 <div className="mt-3 max-h-[280px] overflow-y-auto rounded-md border">
                   {!filtered.length && <p className="p-4 text-xs leading-relaxed text-muted-foreground">{search ? '没有匹配的模型。' : '还没有模型。获取接口模型列表，或在下方手动添加。'}</p>}
                   {filtered.slice(0, limit).map(model => <div key={model.id} className="flex items-center justify-between gap-2 border-b px-3 py-2 last:border-b-0">
                     <div className="min-w-0"><div className="truncate font-mono text-xs" title={model.id}>{model.id}</div><div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground"><span>{model.source === 'custom' ? '自定义' : '接口发现'}</span>{model.name !== model.id && <span className="truncate">{model.name}</span>}</div></div>
-                    <div className="flex shrink-0 items-center"><Button size="sm" variant="ghost" disabled={!!busy || isRealtimeAsrModel(model.id)} title={isRealtimeAsrModel(model.id) ? '语音模型请保存后在工作台测试麦克风' : undefined} onClick={() => void networkAction('test', model.id)}>{isRealtimeAsrModel(model.id) ? '语音专用' : busy === 'test' && testingId === model.id ? '测试中…' : '测试对话'}</Button><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`移除模型 ${model.id}`} disabled={!!busy} onClick={() => deleteModel(model.id)}><Trash2 size={12} /></Button></div>
+                    <div className="flex shrink-0 items-center"><Button size="sm" variant="ghost" disabled={!!busy || isSpeechRecognitionModel(model.id)} title={isRealtimeAsrModel(model.id) ? '实时语音模型：分配到语音转写、启用持续实时模式并保存后，在工作台开始收音验证字幕。' : isSpeechRecognitionModel(model.id) ? '语音识别模型不能进行文字对话测试。持续实时识别请选择已适配的 fun-asr-realtime。' : undefined} onClick={() => void networkAction('test', model.id)}>{isSpeechRecognitionModel(model.id) ? '语音专用' : busy === 'test' && testingId === model.id ? '测试中…' : '测试对话'}</Button><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`移除模型 ${model.id}`} disabled={!!busy} onClick={() => deleteModel(model.id)}><Trash2 size={12} /></Button></div>
                   </div>)}
                   {filtered.length > limit && <Button size="sm" variant="ghost" className="w-full" onClick={() => setLimit(v => v + 50)}>再显示 {Math.min(50, filtered.length - limit)} 个</Button>}
                 </div>
-                <p className="mt-2 text-[10px] text-muted-foreground">测试会向该模型发送一条短消息，服务商可能计费。</p>
+                <p className="mt-2 text-[10px] text-muted-foreground">对话测试会发送一条短消息，服务商可能计费。语音识别模型不执行此测试。</p>
+                {filtered.some(model => isSpeechRecognitionModel(model.id)) && <p className="mt-2 rounded-md border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">fun-asr、fun-asr-flash 是文件识别模型。持续实时识别请把 fun-asr-realtime 分配到「语音转写」，在「请求与语音选项」启用持续实时模式并保存，再到面试助手选择「模拟练习」开始收音、说话查看字幕。「测试麦克风」仅检查本地音量，不验证云端语音服务。</p>}
                 <form className="mt-4 rounded-md bg-muted/35 p-3" onSubmit={e => { e.preventDefault(); addCustomModel(); }}>
                   <h4 className="text-xs font-medium">添加自定义模型</h4><p className="mt-1 text-[11px] text-muted-foreground">接口不提供模型列表，或列表中没有你的模型时，直接填写精确 ID。</p>
                   <div className="mt-3 grid gap-2 min-[1120px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
@@ -244,26 +263,28 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
         <div className="divide-y">
           {AI_ROLES.map(role => <div key={role} className="grid items-center gap-2 py-3 min-[1120px]:grid-cols-[140px_minmax(0,1fr)]">
             <label htmlFor={`ai-route-${role}`}><span className="text-xs font-medium">{ROLE_LABELS[role]}</span><span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">{roleDescriptions[role]}</span></label>
-            <Select id={`ai-route-${role}`} className="min-w-0 text-xs" value={draft.routes[role] ? JSON.stringify(draft.routes[role]) : ''} disabled={busy === 'save'} onChange={e => setDraft(value => ({ ...value, routes: { ...value.routes, [role]: e.target.value ? JSON.parse(e.target.value) : null } }))}>
+            <Select id={`ai-route-${role}`} className="min-w-0 text-xs" value={draft.routes[role] ? JSON.stringify(draft.routes[role]) : ''} disabled={busy === 'save'} onChange={e => assignRoute(role,e.target.value)}>
               <option value="">{role === 'vision' ? '跟随对话模型（需支持图片输入）' : role === 'chat' ? '请选择作答模型' : '不启用'}</option>
-              {draft.providers.map(p => <optgroup key={p.id} label={p.name}>{p.models.map(m => <option key={m.id} value={JSON.stringify({ providerId: p.id, modelId: m.id })}>{p.name} / {m.name === m.id ? m.id : `${m.name} · ${m.id}`}</option>)}</optgroup>)}
+              {draft.providers.map(p => <optgroup key={p.id} label={p.name}>{p.models.map(m => <option key={m.id} disabled={role==='stt'&&isUnsupportedBailianSpeechModel(p,m.id)} value={JSON.stringify({ providerId: p.id, modelId: m.id })}>{p.name} / {m.name === m.id ? m.id : `${m.name} · ${m.id}`}{role==='stt'&&isUnsupportedBailianSpeechModel(p,m.id)?'（文件识别接口未接入）':''}</option>)}</optgroup>)}
             </Select>
           </div>)}
         </div>
+        {unsupportedSpeechSelected&&<div role="alert" data-testid="unsupported-speech-model" className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed">当前语音转写选择了 {draft.routes.stt?.modelId}。本应用尚未接入此百炼文件识别接口，不能发送到 OpenAI 文件转写地址。请改用当前连接的实时模型并保存。<Button size="sm" variant="outline" className="mt-2" disabled={!!busy} onClick={useCurrentConnectionRealtime}>改用当前连接的实时识别</Button></div>}
         <details className="mt-3 border-t pt-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">请求与语音选项</summary><div className="mt-3 grid grid-cols-2 gap-3">
           <label htmlFor="ai-speech-mode" className="col-span-2 text-xs">语音输入模式
-            <Select id="ai-speech-mode" className="mt-1" value={draft.speechInputMode ?? 'auto'} disabled={busy === 'save'} onChange={e => setDraft(value => ({ ...value, speechInputMode: e.target.value as AiSettings['speechInputMode'] }))}>
-              <option value="auto">自动适配（MiMo 使用分段实时字幕）</option>
-              <option value="segmented">分段实时字幕（约 2.5 秒一段）</option>
+            <Select id="ai-speech-mode" className="mt-1" value={realtimeSpeechSelected ? 'realtime' : draft.speechInputMode ?? 'auto'} disabled={busy === 'save'} onChange={e => setDraft(value => ({ ...value, speechInputMode: e.target.value as AiSettings['speechInputMode'] }))}>
+              <option value="auto" disabled={realtimeSpeechSelected}>自动适配（按语音模型选择通道）</option>
+              <option value="segmented" disabled={realtimeSpeechSelected}>分段实时字幕（约 2.5 秒一段）</option>
               <option value="realtime">持续实时音频（百炼 Fun-ASR / Paraformer）</option>
-              <option value="file">停顿后整句识别（减少请求）</option>
+              <option value="file" disabled={realtimeSpeechSelected}>停顿后整句识别（减少请求）</option>
             </Select>
             <p className="mt-1 leading-relaxed text-muted-foreground">MiMo 支持音频文件输入和 SSE 输出。分段模式在说话时持续提交短音频，停顿后用整句校正；预览会增加转写用量。它与持续音频输入的 WebSocket ASR 不同。</p>
           </label>
-          {draft.speechInputMode === 'realtime' && <div className="col-span-2 space-y-2 rounded-md border p-3 text-xs">
-            <p>先添加「阿里云百炼（北京）」连接并填写该地域的 Key，将语音转写分配给 fun-asr-realtime、fun-asr-realtime-2026-02-28 或 paraformer-realtime-v2。已有连接可手动添加模型 ID。持续连接可能按时长计费，暂停会断开连接。</p>
-            <label className="block">实时 WSS 地址<Input aria-label="实时 ASR WSS 地址" className="mt-1 font-mono text-xs" value={draft.realtimeEndpoint ?? DEFAULT_REALTIME_ENDPOINT} onChange={event => setDraft(value => ({ ...value, realtimeEndpoint: event.target.value }))} /></label>
-            <p className="text-muted-foreground">也可填写百炼控制台提供的业务空间专属北京域名；不要把 Key 放入 URL。</p>
+          {(realtimeSpeechSelected || draft.speechInputMode === 'realtime') && <div className="col-span-2 space-y-2 rounded-md border p-3 text-xs">
+            {realtimeSpeechSelected&&<p>当前模型需要持续实时音频，已自动选择正确通道。更换语音模型后可使用其他输入方式。</p>}
+            <p>添加对应地域的百炼连接并填写同地域的 Key，将语音转写分配给 fun-asr-realtime。北京另支持 fun-asr-realtime-2026-02-28 和 paraformer-realtime-v2；新加坡请选择稳定版。已有连接可获取模型目录或手动添加模型 ID。持续连接可能按时长计费，暂停会断开连接。</p>
+            <label className="block">实时 WSS 地址（留空自动匹配）<Input aria-label="实时 ASR WSS 地址" className="mt-1 font-mono text-xs" value={draft.realtimeEndpoint ?? ''} placeholder={automaticRealtimeEndpoint} onChange={event => setDraft(value => ({ ...value, realtimeEndpoint: event.target.value.trim() || undefined }))} /></label>
+            <p className="break-all text-muted-foreground">自动地址：{automaticRealtimeEndpoint}。也可填写同地域的官方 WSS 地址；切换地域时清空旧地址，不要把 Key 放入 URL。</p>
             <label className="block">热词表 ID（可选）<Input aria-label="ASR 热词表 ID" className="mt-1" value={draft.realtimeVocabularyId ?? ''} placeholder="百炼已创建的 vocabulary_id" onChange={event => setDraft(value => ({ ...value, realtimeVocabularyId: event.target.value }))} /></label>
           </div>}
           <label htmlFor="ai-timeout" className="text-xs">请求超时（秒）<Input id="ai-timeout" className="mt-1" type="number" min={5} max={300} value={draft.timeoutMs / 1000} disabled={busy === 'save'} onChange={e => setDraft(value => ({ ...value, timeoutMs: Number(e.target.value) * 1000 }))} /></label>

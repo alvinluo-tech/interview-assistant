@@ -4,13 +4,28 @@
 
 ## 配置百炼
 
-1. 在「设置 → AI 服务」选择「阿里云百炼（北京）」并添加连接。
-2. 填入**北京地域**业务空间可用的百炼 API Key。密钥只在应用中填写，应用沿用本机加密存储。
-3. 在「按用途选择模型」把**语音转写**分配给该连接的 `fun-asr-realtime`（稳定版）、`fun-asr-realtime-2026-02-28`（快照版）或 `paraformer-realtime-v2`。新增百炼连接预置这些模型；已有连接可手动添加对应模型 ID。对话和视觉用途可以继续使用原有 MiMo 或其他服务。
-4. 展开「请求与语音选项」，选择「持续实时音频（百炼 Fun-ASR / Paraformer）」。确认 WSS 地址后保存。语音模型不适用「测试对话」，请保存后在工作台测试麦克风。
+1. 在「设置 → AI 服务」选择「阿里云百炼（北京）」或「阿里云百炼（新加坡）」并添加连接。已有自定义连接可直接保留，无需重新创建。
+2. 填入与连接地址**相同地域**的百炼 API Key。新加坡可填写公共地址 `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`，或控制台提供的 `https://业务空间ID.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`。密钥只在应用中填写，应用沿用本机加密存储。
+3. 点击「连接并获取模型」，然后在「按用途选择模型」把**语音转写**分配给该连接的 `fun-asr-realtime`（稳定版）。北京另支持 `fun-asr-realtime-2026-02-28`（快照版）和 `paraformer-realtime-v2`。新增百炼连接预置对应地域支持的模型；已有连接也可手动添加对应模型 ID。对话和视觉用途可以继续使用原有 MiMo 或其他服务。
+4. 选择已适配的实时模型后会自动使用持续实时模式，可在「请求与语音选项」检查。实时 WSS 地址**留空自动匹配**语音转写连接的地域和业务空间；也可填写同地域的官方 WSS 地址。若已有北京地址而现在改用新加坡，请清空旧地址后保存。语音模型不适用「测试对话」；测试麦克风仅检查本地音量，实际服务需要开始收音并说话查看字幕。
 5. 返回面试助手，测试麦克风音量，再启动模拟练习或线上面试。线上面试的 Windows 系统收音也使用同一实时通道。
 
-默认地址为 `wss://dashscope.aliyuncs.com/api-ws/v1/inference`，官方仍兼容该地址。优先使用控制台提供的业务空间专属地址 `wss://业务空间ID.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`。当前应用适配只支持北京地域的上述三个模型，不支持新加坡地址、8k 模型、任意代理域名或把密钥放进 URL。
+应用支持以下官方实时地址（统一路径 `/api-ws/v1/inference`）：
+
+| 地域 | 公共域名 | 业务空间专属域名 | 已适配模型 |
+| --- | --- | --- | --- |
+| 北京 | `dashscope.aliyuncs.com` | `业务空间ID.cn-beijing.maas.aliyuncs.com` | `fun-asr-realtime`、`fun-asr-realtime-2026-02-28`、`paraformer-realtime-v2` |
+| 新加坡 | `dashscope-intl.aliyuncs.com` | `业务空间ID.ap-southeast-1.maas.aliyuncs.com` | `fun-asr-realtime` |
+
+优先使用控制台提供的业务空间专属地址。未识别到官方百炼连接且未手动填写 WSS 地址时，仍保留原有北京默认地址。应用会拦截连接与实时地址的地域冲突，以及新加坡下选择北京专属模型的配置；不支持 8k 模型、任意代理 WSS 域名或把密钥放进 URL。
+
+## 模型发现
+
+对于北京和新加坡的官方百炼 HTTPS 兼容地址，「连接并获取模型」优先查询原生 `/api/v1/models` 模型目录，解析 `output.models[].model` 并按 `output.total` 分页，最多 2000 个模型。查询按部署范围筛选：北京为 `asia-pacific-china`，新加坡为 `international`。新加坡使用官方目录地址 `https://dashscope-intl.aliyuncs.com/api/v1/models`；业务空间专属连接会附带 `X-DashScope-WorkSpace` 请求头。
+
+目录接口返回 404/405 时才回退到原有 `/compatible-mode/v1/models`。鉴权失败、取消、网络错误或目录格式错误会明确报错，保留界面原列表；不会伪装成功。刷新会保留自定义模型和已分配用途的模型。目录展示不代表当前账户已开通模型，真实可用性仍以请求结果为准。其他服务商和代理地址继续查询自己配置的 `/models`，不会自动把其密钥发往百炼。
+
+目录协议：[模型列表 API](https://help.aliyun.com/zh/model-studio/list-models)。
 
 官方协议：[地址与鉴权](https://help.aliyun.com/zh/model-studio/websocket-for-paraformer-real-time-service)、[客户端消息](https://help.aliyun.com/zh/model-studio/paraformer-client-events)、[服务端消息](https://help.aliyun.com/zh/model-studio/paraformer-server-events)。实际可用性和费用以服务商为准。
 
@@ -32,6 +47,12 @@ Fun-ASR 的 `run-task` 使用 `format=pcm`、`sample_rate=16000`、`heartbeat=tr
 热词支持已有百炼 `vocabulary_id`：在控制台或官方热词接口创建热词表后，把 ID 填入「热词表 ID」。应用当前不创建、编辑云端热词表，也不自动上传简历来创建热词。
 
 ## 验证范围
+
+新加坡相关回归覆盖：完整模型目录的地域与业务空间、音频模型分页、兼容接口回退、鉴权错误与取消、重复/异常分页、WSS 自动推导、地域冲突和北京专属模型拦截。前端配置和 Rust 保存层都验证地域。
+
+界面隔离测试：先在当前终端设置 `MIANSHI_UI_SMOKE=1`（PowerShell：`$env:MIANSHI_UI_SMOKE='1'`），再启动 `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1432 --strictPort`，然后运行 `node scripts/bailian-ui-smoke.mjs`（默认使用本机 Chrome，可用 `BAILIAN_TEST_BROWSER` 指定浏览器路径）。该变量让测试服务使用独立的依赖缓存，避免影响正在运行的桌面开发服务。测试只使用合成目录和测试密钥，不发送外部请求，也不读写桌面应用的个人配置。结果保存在 `artifacts/bailian-ui-results.json`，截图为 `artifacts/bailian-ui.png`。
+
+开发模式若出现 `Failed to fetch dynamically imported module`，可运行 `node scripts/check-realtime-module.mjs` 检查实时语音模块的完整依赖图。`504 Outdated Optimize Dep` 表示本地开发依赖缓存失效，尚未向百炼发送识别任务；开发服务重新加载后刷新助手窗口再试。桌面、音频测试和界面测试服务使用不同缓存目录，语音 WebSocket 依赖在启动时预构建。
 
 协议单元测试涵盖两个 Fun-ASR 模型的启动参数、PCM 字节、句子标识与定稿去重，以及通用握手、临时字幕、错误脱敏、重连、积压、超时和长会话回放。已有隔离桌面测试通过真实 Rust WebSocket 连接本机合成服务，另验证实际模拟面试窗口的录音/字幕/可编辑文字链路；Fun-ASR 云端效果仍需真实账户实测。
 

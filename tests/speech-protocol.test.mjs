@@ -4,6 +4,17 @@ import { recognizeSpeech, joinTranscript } from '../artifacts/byok-tests/speechP
 import { usesLiveSpeech } from '../artifacts/byok-tests/aiConfig.js';
 const provider = { id: 'mimo', name: 'MiMo', baseUrl: 'https://speech.example/v1', authMode: 'bearer', apiKey: 'test-credential', models: [], lastFetchedAt: null };
 
+test('Bailian file-task and realtime models never fall through to the OpenAI transcription endpoint', async()=>{
+  let requests=0;
+  const bailian={...provider,baseUrl:'https://ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1'};
+  for(const model of ['fun-asr','fun-asr-flash-2026-06-15','fun-asr-realtime']) {
+    await assert.rejects(recognizeSpeech(bailian,model,new Blob(['audio']),{},async()=>{
+      requests++;return Response.json({error:{message:'not found'}},{status:404});
+    },1000),/文件识别|实时/);
+  }
+  assert.equal(requests,0);
+});
+
 test('MiMo uploads WAV through chat audio and consumes actual SSE transcript deltas', async () => {
   const deltas = [];
   const text = await recognizeSpeech(provider, 'mimo-v2.5-asr', new Blob(['test-wav']), { lang: 'zh-CN', onDelta: delta => deltas.push(delta) }, async (url, init) => {

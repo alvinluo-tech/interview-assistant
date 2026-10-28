@@ -1,4 +1,4 @@
-import { speechProtocol, type AiProvider } from './aiConfig.js';
+import { assertFileTranscriptionModel, speechProtocol, type AiProvider } from './aiConfig.js';
 import { aiHeaders, consumeChat, transcriptionLanguage, withAiRequest, type AiFetch } from './aiProtocol.js';
 
 export interface TranscriptionOptions {
@@ -10,6 +10,7 @@ export interface TranscriptionOptions {
 
 export async function recognizeSpeech(provider: AiProvider, modelId: string, wav: Blob, options: TranscriptionOptions,
   fetcher: AiFetch, timeoutMs: number): Promise<string> {
+  assertFileTranscriptionModel(provider, modelId);
   const language = transcriptionLanguage(options.lang);
   if (speechProtocol(modelId) === 'mimo') {
     const bytes = new Uint8Array(await wav.arrayBuffer());

@@ -5,6 +5,13 @@ export type AiRole = typeof AI_ROLES[number];
 export const ROLE_LABELS: Record<AiRole, string> = {
   chat: '对话与作答', vision: '截图识别', stt: '语音转写', tts: '语音合成',
 };
+/** Known recognition-only families must not receive text-only Chat Completions probes. */
+export function isSpeechRecognitionModel(modelId: string): boolean {
+  const id = modelId.trim().toLowerCase().split('/').pop() || '';
+  return /^(?:fun-asr|paraformer|sensevoice|whisper)(?:-|$)/.test(id)
+    || /^qwen[\w.-]*-asr(?:-|$)/.test(id)
+    || /^mimo[\w.-]*-asr(?:-|$)/.test(id);
+}
 export interface AiModel {
   id: string;
   name: string;
@@ -60,6 +67,16 @@ export function bailianConnection(baseUrl: string) {
     return { region, workspaceId, realtimeEndpoint: `wss://${url.host}/api-ws/v1/inference`,
       catalogBaseUrl: `${region === 'singapore' ? 'https://dashscope-intl.aliyuncs.com' : url.origin}/api/v1` };
   } catch { return undefined; }
+}
+export function isUnsupportedBailianSpeechModel(provider: AiProvider, modelId: string): boolean {
+  return !!bailianConnection(provider.baseUrl) && isSpeechRecognitionModel(modelId) && !isRealtimeAsrModel(modelId);
+}
+function assertSpeechModelSupported(provider: AiProvider, modelId: string) {
+  if (isUnsupportedBailianSpeechModel(provider, modelId)) throw new Error(`当前选择 ${modelId} 属于百炼文件识别或专用语音模型，本应用尚未接入其文件任务接口。请改选 fun-asr-realtime 使用持续实时识别。`);
+}
+export function assertFileTranscriptionModel(provider: AiProvider, modelId: string) {
+  if (isRealtimeAsrModel(modelId)) throw new Error(`${modelId} 需要持续实时音频连接，不能使用文件转写接口。请选择持续实时模式并重新开始收音。`);
+  assertSpeechModelSupported(provider, modelId);
 }
 export function resolveRealtimeEndpoint(settings: AiSettings): string {
   const route = settings.routes.stt;
@@ -119,8 +136,10 @@ export function validateAiSettings(settings: AiSettings, allowMissingKeys = fals
   if (!Number.isInteger(settings.timeoutMs) || settings.timeoutMs < 5000 || settings.timeoutMs > 300000) throw new Error('请求超时需在 5–300 秒之间');
   const ttsVoice = settings.ttsVoice.trim();
   if (!ttsVoice || ttsVoice.length > 100 || /[\u0000-\u001f]/.test(ttsVoice)) throw new Error('语音音色需为 1–100 个字符');
-  const speechInputMode = settings.speechInputMode ?? 'auto';
-  if (!['auto', 'segmented', 'file', 'realtime'].includes(speechInputMode)) throw new Error('语音识别模式无效');
+  const requestedSpeechMode = settings.speechInputMode ?? 'auto';
+  if (!['auto', 'segmented', 'file', 'realtime'].includes(requestedSpeechMode)) throw new Error('语音识别模式无效');
+  const speechInputMode = routes.stt && isRealtimeAsrModel(routes.stt.modelId) ? 'realtime' : requestedSpeechMode;
+  if (!allowMissingKeys && routes.stt) assertSpeechModelSupported(providers.find(provider=>provider.id===routes.stt!.providerId)!,routes.stt.modelId);
   const realtimeEndpoint = settings.realtimeEndpoint ? validateRealtimeEndpoint(settings.realtimeEndpoint) : undefined;
   const realtimeVocabularyId = settings.realtimeVocabularyId?.trim();
   if (realtimeVocabularyId && !/^[\w-]{1,200}$/.test(realtimeVocabularyId)) throw new Error('热词表 ID 格式无效');
@@ -143,6 +162,7 @@ export function resolveAiRoute(settings: AiSettings, role: AiRole) {
   if (!route) throw new Error(`请先在「设置 → AI 服务」为${ROLE_LABELS[role]}选择模型`);
   const provider = settings.providers.find(p => p.id === route.providerId);
   if (!provider) throw new Error(`${ROLE_LABELS[role]}使用的连接已被删除，请重新选择`);
+  if (role === 'stt') assertSpeechModelSupported(provider, route.modelId);
   if (provider.authMode === 'bearer' && !provider.apiKey.trim()) throw new Error(`${provider.name}缺少 API Key`);
   return { provider: normalizeProvider(provider), modelId: validateModelId(route.modelId) };
 }

@@ -1,4 +1,4 @@
-import { bailianConnection, normalizeProvider, validateModelId, type AiProvider } from './aiConfig.js';
+import { bailianConnection, isSpeechRecognitionModel, normalizeProvider, validateModelId, type AiProvider } from './aiConfig.js';
 
 export type AiFetch = (url: string, init: RequestInit) => Promise<Response>;
 /** Transcription accepts ISO-639-1 (zh/en), while UI preferences use locales. */
@@ -126,7 +126,7 @@ async function discoverBailianModels(provider: AiProvider, connection: NonNullab
     const previousSize = found.size;
     for (const model of models) found.set(model.id, model);
     received += models.length;
-    if (received > expectedTotal! || (received < expectedTotal! && found.size === previousSize)) throw new Error('百炼模型目录分页不完整或重复，请重试。');
+    if (received > expectedTotal! || found.size !== received || (received < expectedTotal! && found.size === previousSize)) throw new Error('百炼模型目录分页不完整或重复，请重试。');
     if (received === expectedTotal) return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
   }
   throw new Error('百炼模型目录分页超过 20 页，请手动添加模型 ID。');
@@ -182,10 +182,12 @@ export async function consumeChat(response: Response, onDelta?: (text: string) =
   return full;
 }
 export async function testChatModel(provider: AiProvider, modelId: string, fetcher: AiFetch, signal?: AbortSignal): Promise<{ latencyMs: number; sample: string }> {
+  const selectedModel = validateModelId(modelId);
+  if (isSpeechRecognitionModel(selectedModel)) throw new Error('该模型用于语音识别，不能执行文字对话测试。请在「语音转写」中配置，并使用实际音频验证。');
   const start = performance.now();
   const sample = await withAiRequest(provider, 'chat/completions', {
     method: 'POST', headers: aiHeaders(provider, true),
-    body: JSON.stringify({ model: validateModelId(modelId), messages: [{ role: 'user', content: 'Reply with OK.' }], stream: true }),
+    body: JSON.stringify({ model: selectedModel, messages: [{ role: 'user', content: 'Reply with OK.' }], stream: true }),
   }, 30000, r => consumeChat(r), fetcher, signal);
   return { latencyMs: Math.round(performance.now() - start), sample: sample.slice(0, 160) };
 }

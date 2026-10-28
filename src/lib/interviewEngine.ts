@@ -1,5 +1,5 @@
 import { getAiSettings } from './aiSettings';
-import { isRoleConfigured } from './aiConfig';
+import { isRoleConfigured, resolveAiRoute } from './aiConfig';
 /*
  * 面试引擎：本地实现原版的「采集 → 分句 → 转写 → AI 作答」管线。
  * - SPEAKER：原生 system-audio-chunk 事件（PCM16/16k/mono base64）；
@@ -640,7 +640,7 @@ export function beginListening(audioSource: AudioSource): Promise<void> {
     const realtime = getAiSettings().speechInputMode === 'realtime';
     setState({ status: 'connecting', errorMessage: null, audio: { ...emptyAudio(), source: audioSource, recognitionMode: realtime ? 'realtime' : liveSpeechEnabled() ? 'segmented' : 'file' } });
     try {
-      if (!isRoleConfigured(getAiSettings(), 'stt')) throw new Error('尚未配置语音转写模型。请到「设置 → AI 服务 → 语音转写」选择支持转写的模型（例如 whisper-1）。');
+      resolveAiRoute(getAiSettings(), 'stt');
       if (realtime) {
         const controller = new AbortController();realtimeOpening=controller;
         const { openConfiguredRealtimeAsr } = await import('./realtimeAsr');

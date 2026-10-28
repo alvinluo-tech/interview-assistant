@@ -8,6 +8,12 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react()],
+  // Concurrent desktop and smoke servers must never invalidate each other's optimized dependencies.
+  cacheDir: `node_modules/.vite-${process.env.MIANSHI_UI_SMOKE === '1' ? 'bailian-ui' : process.env.MIANSHI_REALTIME_SMOKE === '1' ? 'audio-smoke' : 'desktop'}`,
+  optimizeDeps: {
+    entries: ['index.html'],
+    include: ['@tauri-apps/plugin-websocket'],
+  },
 
   resolve: {
     alias: {

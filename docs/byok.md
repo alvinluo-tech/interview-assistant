@@ -20,6 +20,16 @@ API 地址可填写版本前缀或完整的 `/models`、`/chat/completions` 地�
 
 MiMo-ASR 例外：选择 `mimo-*-asr` 后自动改用带 `input_audio` 的 `/chat/completions` 和 SSE，不会发到 Whisper 文件接口。「请求与语音选项」可选择自动适配、分段实时字幕或停顿后识别；MiMo 默认每约 2.5 秒提交一段音频预览，停顿后校正整句，再触发流式作答。预览会增加转写用量。这是文件接口的分段更新，不是原生 WebSocket 音频流。修改输入模式后请暂停并继续，或重新开始会话。[使用说明](microphone.md)
 
+## 语音模型点击「测试对话」出现 HTTP 400
+
+「测试对话」发送纯文字 Chat Completions 请求，不能用它验证语音识别。`fun-asr` 与 `fun-asr-flash-*` 是文件识别模型，`fun-asr-realtime` 使用实时音频接口。已识别的 Fun-ASR、Paraformer、SenseVoice、Whisper、Qwen-ASR 和 MiMo-ASR 模型会显示为「语音专用」，请求层也会在发送前拦截误用。MiMo-ASR 的实际音频请求仍按原有音频协议执行。
+
+验证百炼实时语音：将 `fun-asr-realtime` 分配到「语音转写」，启用持续实时模式并保存，返回「面试助手 → 模拟练习」开始收音，说话查看字幕。新加坡连接使用同地域 Key，实时 WSS 地址留空可按连接地域自动匹配。「测试麦克风」只检查本地设备和音量，不验证云端服务。目录中有模型也不等于当前账户已开通调用权限。
+
+如果停顿转写时报 HTTP 404，先检查保存的语音模型：百炼 `fun-asr`/`fun-asr-flash` 文件任务接口与 OpenAI `/audio/transcriptions` 不兼容，本应用当前未接入这些文件任务。现在会在保存、开始收音和发送音频前阻止误用并提示修复。已有错误配置仍可读取，设置页可点击「改用当前连接的实时识别」后保存，保留连接地址与密钥。选择已适配实时模型会自动使用持续实时模式。保存后请结束旧会话并重新开始。
+
+参考：[百炼语音模型与接口类型](https://help.aliyun.com/en/model-studio/asr-model/)、[Fun-ASR-Realtime 连接指南](https://help.aliyun.com/en/model-studio/fun-asr-realtime-websocket-api)。
+
 ## 数据与密钥
 
 - Windows 下通过 DPAPI 为当前用户加密密钥后保存到 `store.json` 的 `ai.settings.v2`，不会把新密钥以明文写入配置，也不会在跨窗口事件中广播密钥。
