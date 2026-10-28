@@ -68,11 +68,11 @@ test('collect stages only installers and embedded app binaries and generates ver
   assert.throws(() => collectRelease(root, 'v0.1.1'), /must be empty/);
 });
 
-function macFixture(t, triple, cpu, binary = 'Mianxu') {
+function macFixture(t, triple, cpu, { appName = '骆耀升老公酱面试助手', binary = 'Mianxu', dmgName = '骆耀升老公酱面试助手.dmg' } = {}) {
   const root = fixture(t);
   prepareRelease(root, 'v0.1.1');
   const target = path.join(root, 'src-tauri/target', triple, 'release/bundle');
-  const app = path.join(target, 'macos/骆耀升老公酱面试助手.app/Contents/MacOS');
+  const app = path.join(target, `macos/${appName}.app/Contents/MacOS`);
   mkdirSync(app, { recursive: true });
   mkdirSync(path.join(target, 'dmg'), { recursive: true });
   const executable = Buffer.alloc(32);
@@ -81,7 +81,7 @@ function macFixture(t, triple, cpu, binary = 'Mianxu') {
   writeFileSync(path.join(app, binary), executable);
   const image = Buffer.alloc(1024);
   image.write('koly', image.length - 512);
-  const dmg = path.join(target, 'dmg/骆耀升老公酱面试助手.dmg');
+  const dmg = path.join(target, 'dmg', dmgName);
   writeFileSync(dmg, image);
   return { root, dmg };
 }
@@ -103,7 +103,12 @@ for (const [triple, cpu, platform] of [
 }
 
 test('collect accepts the cargo binary name when the bundle used another name', t => {
-  const { root } = macFixture(t, 'aarch64-apple-darwin', 0x0100000c, 'mianxu');
+  const { root } = macFixture(t, 'aarch64-apple-darwin', 0x0100000c, { binary: 'mianxu' });
+  assert.ok(collectRelease(root, 'v0.1.1', 'aarch64-apple-darwin').includes('Mianxu_0.1.1_arm64.dmg'));
+});
+
+test('collect discovers the app bundle and executable without relying on their names', t => {
+  const { root } = macFixture(t, 'aarch64-apple-darwin', 0x0100000c, { appName: 'Mianxu', binary: 'app-binary', dmgName: 'Mianxu.dmg' });
   assert.ok(collectRelease(root, 'v0.1.1', 'aarch64-apple-darwin').includes('Mianxu_0.1.1_arm64.dmg'));
 });
 

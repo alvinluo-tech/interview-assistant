@@ -71,16 +71,19 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
   const installers = readdirSync(path.join(target, 'bundle', bundles)).filter(file => file.endsWith(extension));
   if (installers.length !== 1) throw new Error(`Expected exactly one ${bundles} installer`);
   const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
-  // The bundled executable is named after the Cargo binary (`Mianxu`); older
-  // layouts used the package or product name, and `mainBinaryName` renames only
-  // the cargo output. Accept any of them before failing.
+  // Tauri has named the bundled executable after the main binary, the package or
+  // the product name depending on version; prefer the known names and fall back
+  // to the only executable present instead of guessing wrong again.
   const binaryNames = [...new Set([config.mainBinaryName, APP_NAME, pkg.name, config.productName].filter(Boolean))];
   const appBinary = (directory, extension = '') => {
+    const files = readdirSync(directory, { withFileTypes: true })
+      .filter(entry => entry.isFile() && !entry.name.startsWith('.')).map(entry => entry.name);
     for (const name of binaryNames) {
-      const candidate = path.join(directory, `${name}${extension}`);
-      if (existsSync(candidate)) return candidate;
+      if (files.includes(`${name}${extension}`)) return path.join(directory, `${name}${extension}`);
     }
-    throw new Error(`App executable not found in ${directory} (tried ${binaryNames.join(', ')})`);
+    const candidates = extension ? files.filter(file => file.endsWith(extension)) : files;
+    if (candidates.length === 1) return path.join(directory, candidates[0]);
+    throw new Error(`App executable not found in ${directory} (found: ${files.join(', ') || 'nothing'})`);
   };
   const prefix = `${APP_NAME}_${release.version}_${bundleArch(platform)}`;
   const files = bundles === 'nsis'
@@ -88,7 +91,10 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
       [appBinary(target, '.exe'), `${prefix}-portable.exe`]]
     : [[path.join(target, 'bundle/dmg', installers[0]), `${prefix}.dmg`]];
   if (bundles === 'dmg') {
-    const executable = readFileSync(appBinary(path.join(target, 'bundle/macos', `${config.productName}.app`, 'Contents/MacOS')));
+    const macosDirectory = path.join(target, 'bundle/macos');
+    const apps = readdirSync(macosDirectory).filter(name => name.endsWith('.app'));
+    if (apps.length !== 1) throw new Error(`Expected exactly one .app in ${macosDirectory}`);
+    const executable = readFileSync(appBinary(path.join(macosDirectory, apps[0], 'Contents/MacOS')));
     if (executable.length < 8 || executable.readUInt32LE(0) !== 0xfeedfacf || executable.readUInt32LE(4) !== cpu) {
       throw new Error(`App executable architecture does not match ${triple}`);
     }
