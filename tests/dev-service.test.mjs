@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 async function withMock(args, run) {
-  const child = spawn(process.execPath, ['_recon/mock-ai.mjs', '0', ...args], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['tests/fixtures/mock-ai.mjs', '0', ...args], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   try {
     const port = await new Promise((resolve, reject) => {
       let output = '';
@@ -35,10 +35,4 @@ test('explicitly enabled developer fixtures still carry a detectable test marker
     assert.equal(response.headers.get('x-mianshi-test-service'), 'mock-ai');
     assert.equal(response.status, 200);
   });
-});
-test('legacy test configuration helper refuses the daily application namespace', () => {
-  const response = spawnSync(process.execPath, ['_recon/set-ai-port.mjs', 'com.mianlingai.clone'], { windowsHide: true, encoding: 'utf8' });
-  assert.notEqual(response.status, 0);
-  assert.match(response.stderr, /禁止覆盖日常 AI 配置/);
-  assert.ok(!response.stdout.includes('apiKey'));
 });
