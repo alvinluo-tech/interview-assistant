@@ -1,0 +1,50 @@
+{
+  "name": "mianshi-copilot",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/sync-pdf-assets.mjs && vite",
+    "build": "node scripts/sync-pdf-assets.mjs && tsc && vite build",
+    "preview": "vite preview",
+    "test:byok": "node scripts/test-byok.mjs",
+    "test:audio": "node --test tests/interview-audio.test.mjs",
+    "test:dev-services": "node --test tests/dev-service.test.mjs",
+    "test:release": "node --test tests/release.test.mjs",
+    "test:context": "node --test tests/context-documents.test.mjs",
+    "test:realtime": "node --test tests/realtime-asr.test.mjs",
+    "test:reliability": "node --test tests/reliability.test.mjs",
+    "test:core-coverage": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/documentIngest.cjs --test-coverage-include=**/artifacts/test-compiled/knowledgeContext.cjs --test-coverage-include=**/artifacts/test-compiled/realtimeAsrProtocol.cjs --test-coverage-include=**/artifacts/test-compiled/updateCheck.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/context-documents.test.mjs tests/realtime-asr.test.mjs tests/reliability.test.mjs",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "~2",
+    "@tauri-apps/plugin-dialog": "~2",
+    "@tauri-apps/plugin-fs": "~2.7.1",
+    "@tauri-apps/plugin-global-shortcut": "~2",
+    "@tauri-apps/plugin-http": "^2.8.3",
+    "@tauri-apps/plugin-log": "~2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-os": "~2",
+    "@tauri-apps/plugin-shell": "~2",
+    "@tauri-apps/plugin-store": "~2",
+    "@tauri-apps/plugin-websocket": "^2.5.0",
+    "lucide-react": "^1.62.0",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "autoprefixer": "^10.6.2",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^3.4.19",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "ws": "^8.22.0"
+  }
+}

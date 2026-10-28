@@ -1,0 +1,189 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag, e.g. v0.1.1 or v0.4.0-beta.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            shell: pwsh
+          - platform: macos-arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            shell: bash
+          - platform: macos-x64
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            shell: bash
+    env:
+      RELEASE_TARGET: ${{ matrix.target }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+        with:
+          version: 10.33.4
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+          cache-on-failure: true
+
+      - name: Install locked frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check release tooling
+        run: pnpm test:release
+
+      - name: Synchronize package versions from tag
+        id: version
+        run: node scripts/release.mjs prepare
+
+      - name: Test AI protocols
+        run: pnpm test:byok
+
+      - name: Test microphone and subtitle engine
+        run: pnpm test:audio
+
+      - name: Test document context and realtime ASR
+        run: |
+          pnpm test:context
+          pnpm test:realtime
+          pnpm test:reliability
+          pnpm test:core-coverage
+
+      - name: Test development service isolation
+        run: pnpm test:dev-services
+
+      # The native tests embed the frontend via generate_context!().
+      - name: Typecheck and build frontend
+        run: pnpm build
+
+      - name: Test native code with locked dependencies
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+
+      - name: Build platform installer
+        # Call Node directly: Windows package-manager shims can consume the cargo argument separator.
+        run: node scripts/release.mjs build
+
+      - name: Verify macOS disk image and permission manifests
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          plutil -lint src-tauri/Info.plist src-tauri/Entitlements.plist
+          hdiutil verify src-tauri/target/"$RELEASE_TARGET"/release/bundle/dmg/*.dmg
+
+      - name: Collect release assets and SHA-256 checksums
+        run: node scripts/release.mjs collect
+
+      - name: Upload verified build assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ matrix.platform }}-release
+          path: release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.build.outputs.tag }}
+      PRERELEASE: ${{ needs.build.outputs.prerelease }}
+    steps:
+      - name: Download this run's build assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: '*-release'
+          merge-multiple: true
+          path: release-assets
+
+      - name: Verify assets before publishing
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          test -f "mianshi-copilot-${TAG}-windows-x64-setup.exe"
+          test -f "mianshi-copilot-${TAG}-windows-x64-portable.exe"
+          test -f "mianshi-copilot-${TAG}-macos-arm64.dmg"
+          test -f "mianshi-copilot-${TAG}-macos-x64.dmg"
+          for platform in windows-x64 macos-arm64 macos-x64; do
+            sha256sum --check "${platform}-SHA256SUMS.txt"
+          done
+          cat *-SHA256SUMS.txt | sort -k2 > SHA256SUMS.txt
+
+      - name: Create draft, attach assets, and publish
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag --draft --title "骆耀升老公酱面试助手 ${TAG}" --generate-notes --prerelease="$PRERELEASE"
+          fi
+          gh release upload "$TAG" \
+            "release-assets/mianshi-copilot-${TAG}-windows-x64-setup.exe" \
+            "release-assets/mianshi-copilot-${TAG}-windows-x64-portable.exe" \
+            "release-assets/mianshi-copilot-${TAG}-macos-arm64.dmg" \
+            "release-assets/mianshi-copilot-${TAG}-macos-x64.dmg" \
+            release-assets/SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --draft=false --prerelease="$PRERELEASE"
+          gh release view "$TAG" --json url --jq '.url' >> "$GITHUB_STEP_SUMMARY"

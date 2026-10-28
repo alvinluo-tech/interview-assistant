@@ -1,0 +1,284 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============ shadcn/ui 设计令牌（与原应用主窗口一致） ============ */
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --primary: 201 96% 40%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 92%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 94%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 92%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 72% 46%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 88%;
+    --input: 214.3 31.8% 88%;
+    --ring: 201 96% 40%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 47% 8%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 42% 11%;
+    --card-foreground: 210 40% 98%;
+    --primary: 199 92% 52%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 22%;
+    --input: 217.2 32.6% 22%;
+    --ring: 199 92% 52%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  }
+
+  /* 应用壳高度链：html → body → #root → 布局里的 h-full。
+     缺了这层，h-full 对 auto 高度解析不出，内容溢出会带动整页（含侧边栏）滚动。 */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+}
+
+/* ============ 浮窗：透明与配色过渡 ============ */
+html.overlay,
+html.overlay body,
+html.overlay #root {
+  background: transparent !important;
+}
+html.ov-palette-capturing body.overlay #root {
+  opacity: 0;
+}
+html.ov-palette-fade body.overlay #root,
+html.ov-palette-fade body.overlay #root * {
+  transition:
+    color 1.2s,
+    background-color 1.2s,
+    border-color 1.2s,
+    box-shadow 1.2s,
+    text-shadow 1.2s;
+}
+
+/* ============ 浮窗皮肤类（ov-*，变量由 skin 对象注入） ============ */
+.ov-text {
+  color: var(--ov-fg);
+  text-shadow: var(--ov-halo);
+}
+.ov-text-2 {
+  color: var(--ov-fg-2);
+  text-shadow: var(--ov-halo);
+}
+.ov-text-3 {
+  color: var(--ov-fg-3);
+  text-shadow: var(--ov-halo);
+}
+.ov-line {
+  border-color: var(--ov-line);
+}
+.ov-line-strong {
+  border-color: var(--ov-line-strong);
+}
+.ov-chip {
+  background: var(--ov-chip-bg);
+  border-color: var(--ov-chip-border);
+  color: var(--ov-fg);
+  text-shadow: var(--ov-halo);
+}
+.ov-chip-active {
+  background: var(--ov-chip-active-bg);
+  border-color: var(--ov-chip-active-border);
+  color: var(--ov-fg);
+  text-shadow: var(--ov-halo);
+}
+.ov-bar {
+  background: var(--ov-bar);
+}
+.ov-dot {
+  background: var(--ov-dot);
+}
+.ov-pill {
+  background: var(--ov-pill-bg);
+  border-color: var(--ov-chip-border);
+  color: var(--ov-fg);
+  text-shadow: var(--ov-halo);
+}
+.ov-body {
+  font-size: calc(13.5px * var(--ov-font-scale, 1));
+  line-height: 1.5;
+}
+.ov-body-sm {
+  font-size: calc(12px * var(--ov-font-scale, 1));
+  line-height: 1.45;
+}
+
+/* ============ 浮窗 markdown（overlay-md） ============ */
+.overlay-md {
+  color: var(--ov-fg);
+  text-shadow: var(--ov-halo);
+  font-size: calc(12.5px * var(--ov-font-scale, 1));
+  line-height: 1.45;
+  font-weight: var(--ov-fw, inherit);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: clip;
+}
+.overlay-md p,
+.overlay-md li {
+  margin: 2px 0;
+}
+.overlay-md h1,
+.overlay-md h2,
+.overlay-md h3,
+.overlay-md h4,
+.overlay-md h5,
+.overlay-md h6 {
+  font-weight: 700;
+  margin: 6px 0 2px;
+}
+.overlay-md h1 { font-size: 14.5px; }
+.overlay-md h2 { font-size: 13.5px; }
+.overlay-md h3 { font-size: 13px; }
+.overlay-md h4 { font-size: 12.5px; }
+.overlay-md h5 { font-size: 12.5px; }
+.overlay-md h6 { font-size: 12.5px; }
+.overlay-md ul,
+.overlay-md ol {
+  padding-left: 16px;
+  margin: 2px 0;
+}
+.overlay-md ul { list-style: disc; }
+.overlay-md ol { list-style: decimal; }
+.overlay-md blockquote {
+  border-left: 2px solid var(--ov-md-quote);
+  padding-left: 8px;
+  margin: 3px 0;
+  color: var(--ov-fg-2);
+}
+.overlay-md hr {
+  border: 0;
+  border-top: 1px solid var(--ov-md-hr);
+  margin: 6px 0;
+}
+.overlay-md a {
+  color: var(--ov-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--ov-md-quote);
+}
+.overlay-md table {
+  border-collapse: collapse;
+  margin: 4px 0;
+  font-size: calc(11.5px * var(--ov-font-scale, 1));
+}
+.overlay-md th,
+.overlay-md td {
+  border: 1px solid var(--ov-md-table-line);
+  padding: 2px 6px;
+  text-align: left;
+}
+.overlay-md code.inline-code,
+.overlay-md code:not(pre code) {
+  background: var(--ov-md-inline-bg);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: calc(11px * var(--ov-font-scale, 1));
+}
+.overlay-md pre {
+  margin: 4px 0;
+}
+.overlay-md strong.md-answer-label {
+  border-left-color: var(--ov-line-strong);
+}
+.overlay-md p:has(> strong.md-answer-label:only-child) {
+  border-top-color: var(--ov-line);
+}
+
+/* 浮窗代码块：逐行渲染、折行不横滚（防截图识别排版） */
+.overlay-code-block {
+  background: var(--ov-md-surface);
+  border: 1px solid var(--ov-md-code-line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, Consolas, monospace;
+  font-size: calc(11.5px * var(--ov-font-scale, 1));
+  line-height: 1.5;
+}
+.overlay-code-line {
+  display: block;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: var(--ov-fg);
+  text-shadow: var(--ov-halo);
+}
+
+/* ============ 浮窗暗色覆盖（slate 系翻转） ============ */
+.overlay-dark .text-slate-900 { color: #f1f5f9; }
+.overlay-dark .text-slate-800 { color: #e2e8f0; }
+.overlay-dark .text-slate-700 { color: #cbd5e1; }
+.overlay-dark .text-slate-600 { color: #94a3b8; }
+.overlay-dark .text-slate-500 { color: #94a3b8; }
+.overlay-dark .text-slate-400 { color: #64748b; }
+.overlay-dark .text-emerald-700 { color: #6ee7b7; }
+.overlay-dark .text-amber-700 { color: #fcd34d; }
+.overlay-dark .text-red-700 { color: #fca5a5; }
+.overlay-dark .bg-white\/85 { background-color: #f8fafc33; }
+.overlay-dark .bg-white { background-color: #0f172a; }
+
+/* ============ 主窗口记录页 markdown ============ */
+.records-md {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.records-md p,
+.records-md li {
+  margin: 3px 0;
+}
+.records-md ul { list-style: disc; padding-left: 18px; }
+.records-md ol { list-style: decimal; padding-left: 18px; }
+.records-md pre {
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+.records-md code {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+/* 滚动条细化（主窗口） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
