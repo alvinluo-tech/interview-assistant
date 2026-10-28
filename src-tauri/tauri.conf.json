@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "骆耀升老公酱面试助手",
-  "mainBinaryName": "Mianxu",
   "version": "0.1.0",
   "identifier": "com.luoyaosheng.mianxu",
   "build": {

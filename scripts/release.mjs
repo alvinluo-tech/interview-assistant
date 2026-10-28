@@ -71,14 +71,24 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
   const installers = readdirSync(path.join(target, 'bundle', bundles)).filter(file => file.endsWith(extension));
   if (installers.length !== 1) throw new Error(`Expected exactly one ${bundles} installer`);
   const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
-  const binaryName = config.mainBinaryName ?? pkg.name;
+  // The bundled executable is named after the Cargo binary (`Mianxu`); older
+  // layouts used the package or product name, and `mainBinaryName` renames only
+  // the cargo output. Accept any of them before failing.
+  const binaryNames = [...new Set([config.mainBinaryName, APP_NAME, pkg.name, config.productName].filter(Boolean))];
+  const appBinary = (directory, extension = '') => {
+    for (const name of binaryNames) {
+      const candidate = path.join(directory, `${name}${extension}`);
+      if (existsSync(candidate)) return candidate;
+    }
+    throw new Error(`App executable not found in ${directory} (tried ${binaryNames.join(', ')})`);
+  };
   const prefix = `${APP_NAME}_${release.version}_${bundleArch(platform)}`;
   const files = bundles === 'nsis'
     ? [[path.join(target, 'bundle/nsis', installers[0]), `${prefix}-setup.exe`],
-      [path.join(target, `${binaryName}.exe`), `${prefix}-portable.exe`]]
+      [appBinary(target, '.exe'), `${prefix}-portable.exe`]]
     : [[path.join(target, 'bundle/dmg', installers[0]), `${prefix}.dmg`]];
   if (bundles === 'dmg') {
-    const executable = readFileSync(path.join(target, 'bundle/macos', `${config.productName}.app`, 'Contents/MacOS', binaryName));
+    const executable = readFileSync(appBinary(path.join(target, 'bundle/macos', `${config.productName}.app`, 'Contents/MacOS')));
     if (executable.length < 8 || executable.readUInt32LE(0) !== 0xfeedfacf || executable.readUInt32LE(4) !== cpu) {
       throw new Error(`App executable architecture does not match ${triple}`);
     }

@@ -68,7 +68,7 @@ test('collect stages only installers and embedded app binaries and generates ver
   assert.throws(() => collectRelease(root, 'v0.1.1'), /must be empty/);
 });
 
-function macFixture(t, triple, cpu) {
+function macFixture(t, triple, cpu, binary = 'Mianxu') {
   const root = fixture(t);
   prepareRelease(root, 'v0.1.1');
   const target = path.join(root, 'src-tauri/target', triple, 'release/bundle');
@@ -78,7 +78,7 @@ function macFixture(t, triple, cpu) {
   const executable = Buffer.alloc(32);
   executable.writeUInt32LE(0xfeedfacf, 0);
   executable.writeUInt32LE(cpu, 4);
-  writeFileSync(path.join(app, 'Mianxu'), executable);
+  writeFileSync(path.join(app, binary), executable);
   const image = Buffer.alloc(1024);
   image.write('koly', image.length - 512);
   const dmg = path.join(target, 'dmg/骆耀升老公酱面试助手.dmg');
@@ -101,6 +101,11 @@ for (const [triple, cpu, platform] of [
     assert.equal(readFileSync(path.join(output, `${platform}-SHA256SUMS.txt`), 'utf8'), `${digest}  ${filename}\n`);
   });
 }
+
+test('collect accepts the cargo binary name when the bundle used another name', t => {
+  const { root } = macFixture(t, 'aarch64-apple-darwin', 0x0100000c, 'mianxu');
+  assert.ok(collectRelease(root, 'v0.1.1', 'aarch64-apple-darwin').includes('Mianxu_0.1.1_arm64.dmg'));
+});
 
 test('macOS outputs with the wrong architecture or damaged DMG cannot ship', t => {
   const { root, dmg } = macFixture(t, 'aarch64-apple-darwin', 0x01000007);

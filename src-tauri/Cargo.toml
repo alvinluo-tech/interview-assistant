@@ -4,8 +4,14 @@ version = "0.1.0"
 description = "骆耀升老公酱面试助手"
 authors = ["clone"]
 edition = "2024"
+# Tauri 用这个字段识别主二进制，保证 macOS .app 里的可执行文件与 CFBundleExecutable 一致。
+default-run = "Mianxu"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "Mianxu"
+path = "src/main.rs"
 
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
