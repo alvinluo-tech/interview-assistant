@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -59,34 +59,6 @@ export function prepareRelease(root, tag) {
   return release;
 }
 
-/** Recursively list regular files, following symlinks and skipping unreadable entries. */
-function walkFiles(directory, depth = 0) {
-  if (depth > 4) return [];
-  let entries;
-  try { entries = readdirSync(directory, { withFileTypes: true }); } catch { return []; }
-  const files = [];
-  for (const entry of entries) {
-    const full = path.join(directory, entry.name);
-    let stat;
-    try { stat = statSync(full); } catch { continue; }
-    if (stat.isDirectory()) files.push(...walkFiles(full, depth + 1));
-    else if (stat.isFile() && stat.size >= 8) files.push(full);
-  }
-  return files;
-}
-
-/** First 8 bytes of a 64-bit Mach-O file, or undefined when the file is not one. */
-function machoHeader(file) {
-  let fd;
-  try {
-    fd = openSync(file, 'r');
-    const header = Buffer.alloc(8);
-    if (readSync(fd, header, 0, 8, 0) !== 8 || header.readUInt32LE(0) !== 0xfeedfacf) return undefined;
-    return header;
-  } catch { return undefined; }
-  finally { if (fd !== undefined) closeSync(fd); }
-}
-
 export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
   const release = parseReleaseTag(tag);
   const { platform, bundles, cpu } = releaseTarget(triple);
@@ -119,28 +91,12 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
       [appBinary(target, '.exe'), `${prefix}-portable.exe`]]
     : [[path.join(target, 'bundle/dmg', installers[0]), `${prefix}.dmg`]];
   if (bundles === 'dmg') {
-    // The bundle layout and executable name vary between Tauri versions, so
-    // locate the Mach-O binary itself instead of trusting either name.
-    const macosDirectory = path.join(target, 'bundle/macos');
-    const apps = readdirSync(macosDirectory, { withFileTypes: true })
-      .filter(entry => entry.name.toLowerCase().endsWith('.app'))
-      .map(entry => path.join(macosDirectory, entry.name));
-    const machos = (apps.length ? apps : [macosDirectory]).flatMap(directory => walkFiles(directory))
-      .map(file => ({ file, header: machoHeader(file) }))
-      .filter(entry => entry.header);
-    if (!machos.length) {
-      throw new Error(`No Mach-O executable found under ${macosDirectory}`);
-    }
-    const matching = machos.filter(entry => entry.header.readUInt32LE(4) === cpu);
-    if (!matching.length) throw new Error(`App executable architecture does not match ${triple}`);
-    const named = matching.find(entry => binaryNames.includes(path.basename(entry.file)));
-    const inMacOs = matching.filter(entry => entry.file.includes(`${path.sep}Contents${path.sep}MacOS${path.sep}`));
-    const chosen = named ?? (inMacOs.length === 1 ? inMacOs[0] : matching.length === 1 ? matching[0] : undefined);
-    if (!chosen) {
-      throw new Error(`Multiple app executables under ${macosDirectory}: ${matching.map(entry => entry.file).join(', ')}`);
-    }
-    const executable = readFileSync(chosen.file);
-    if (executable.length < 8 || executable.readUInt32LE(0) !== 0xfeedfacf) {
+    // Check the architecture on cargo's own output. The bundle layout varies
+    // between Tauri versions (the .app may not even remain in bundle/macos once
+    // the DMG is written), while the DMG step already fails the build when the
+    // app cannot be embedded.
+    const executable = readFileSync(appBinary(target));
+    if (executable.length < 8 || executable.readUInt32LE(0) !== 0xfeedfacf || executable.readUInt32LE(4) !== cpu) {
       throw new Error(`App executable architecture does not match ${triple}`);
     }
   }

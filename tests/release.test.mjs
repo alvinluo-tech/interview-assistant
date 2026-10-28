@@ -68,20 +68,18 @@ test('collect stages only installers and embedded app binaries and generates ver
   assert.throws(() => collectRelease(root, 'v0.1.1'), /must be empty/);
 });
 
-function macFixture(t, triple, cpu, { appName = '骆耀升老公酱面试助手', binary = 'Mianxu', dmgName = '骆耀升老公酱面试助手.dmg' } = {}) {
+function macFixture(t, triple, cpu, { binary = 'Mianxu', dmgName = '骆耀升老公酱面试助手.dmg' } = {}) {
   const root = fixture(t);
   prepareRelease(root, 'v0.1.1');
-  const target = path.join(root, 'src-tauri/target', triple, 'release/bundle');
-  const app = path.join(target, `macos/${appName}.app/Contents/MacOS`);
-  mkdirSync(app, { recursive: true });
-  mkdirSync(path.join(target, 'dmg'), { recursive: true });
+  const target = path.join(root, 'src-tauri/target', triple, 'release');
+  mkdirSync(path.join(target, 'bundle/dmg'), { recursive: true });
   const executable = Buffer.alloc(32);
   executable.writeUInt32LE(0xfeedfacf, 0);
   executable.writeUInt32LE(cpu, 4);
-  writeFileSync(path.join(app, binary), executable);
+  writeFileSync(path.join(target, binary), executable);
   const image = Buffer.alloc(1024);
   image.write('koly', image.length - 512);
-  const dmg = path.join(target, 'dmg', dmgName);
+  const dmg = path.join(target, 'bundle/dmg', dmgName);
   writeFileSync(dmg, image);
   return { root, dmg };
 }
@@ -102,13 +100,8 @@ for (const [triple, cpu, platform] of [
   });
 }
 
-test('collect accepts the cargo binary name when the bundle used another name', t => {
-  const { root } = macFixture(t, 'aarch64-apple-darwin', 0x0100000c, { binary: 'mianxu' });
-  assert.ok(collectRelease(root, 'v0.1.1', 'aarch64-apple-darwin').includes('Mianxu_0.1.1_arm64.dmg'));
-});
-
-test('collect discovers the app bundle and executable without relying on their names', t => {
-  const { root } = macFixture(t, 'aarch64-apple-darwin', 0x0100000c, { appName: 'Mianxu', binary: 'app-binary', dmgName: 'Mianxu.dmg' });
+test('collect discovers the DMG and accepts the cargo binary name', t => {
+  const { root } = macFixture(t, 'aarch64-apple-darwin', 0x0100000c, { binary: 'mianxu', dmgName: 'Mianxu.dmg' });
   assert.ok(collectRelease(root, 'v0.1.1', 'aarch64-apple-darwin').includes('Mianxu_0.1.1_arm64.dmg'));
 });
 
