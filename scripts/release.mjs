@@ -10,6 +10,13 @@ const targets = {
   'x86_64-apple-darwin': { platform: 'macos-x64', bundles: 'dmg', cpu: 0x01000007 },
 };
 
+/** English brand of the published bundles; the product name stays Chinese. */
+const APP_NAME = 'Mianxu';
+
+function bundleArch(platform) {
+  return platform === 'macos-arm64' ? 'arm64' : 'x64';
+}
+
 function releaseTarget(target) {
   if (!Object.hasOwn(targets, target)) throw new Error('Unsupported release target');
   return targets[target];
@@ -63,14 +70,15 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
   const extension = bundles === 'nsis' ? '.exe' : '.dmg';
   const installers = readdirSync(path.join(target, 'bundle', bundles)).filter(file => file.endsWith(extension));
   if (installers.length !== 1) throw new Error(`Expected exactly one ${bundles} installer`);
-  const prefix = `mianshi-copilot-${release.tag}-${platform}`;
+  const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
+  const binaryName = config.mainBinaryName ?? pkg.name;
+  const prefix = `${APP_NAME}_${release.version}_${bundleArch(platform)}`;
   const files = bundles === 'nsis'
     ? [[path.join(target, 'bundle/nsis', installers[0]), `${prefix}-setup.exe`],
-      [path.join(target, `${pkg.name}.exe`), `${prefix}-portable.exe`]]
+      [path.join(target, `${binaryName}.exe`), `${prefix}-portable.exe`]]
     : [[path.join(target, 'bundle/dmg', installers[0]), `${prefix}.dmg`]];
   if (bundles === 'dmg') {
-    const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
-    const executable = readFileSync(path.join(target, 'bundle/macos', `${config.productName}.app`, 'Contents/MacOS', pkg.name));
+    const executable = readFileSync(path.join(target, 'bundle/macos', `${config.productName}.app`, 'Contents/MacOS', binaryName));
     if (executable.length < 8 || executable.readUInt32LE(0) !== 0xfeedfacf || executable.readUInt32LE(4) !== cpu) {
       throw new Error(`App executable architecture does not match ${triple}`);
     }

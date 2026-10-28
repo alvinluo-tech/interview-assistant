@@ -14,7 +14,7 @@ test('release versions compare numerically and stable users skip prereleases',()
 });
 test('update check uses a real GitHub request, selects the installer, and rejects forged URLs',async()=>{
   const {checkForUpdate}=load(); let called;
-  const release={tag_name:'v0.4.0',draft:false,prerelease:false,html_url:'https://github.com/owner/project/releases/tag/v0.4.0',assets:[{name:'mianshi-copilot-v0.4.0-windows-x64-setup.exe',browser_download_url:'https://github.com/owner/project/releases/download/v0.4.0/setup.exe'}]};
+  const release={tag_name:'v0.4.0',draft:false,prerelease:false,html_url:'https://github.com/owner/project/releases/tag/v0.4.0',assets:[{name:'Mianxu_0.4.0_x64-setup.exe',browser_download_url:'https://github.com/owner/project/releases/download/v0.4.0/setup.exe'}]};
   const fetcher=async(url,options)=>{called={url,options};return {ok:true,json:async()=>[release]};};
   const result=await checkForUpdate('owner/project','0.1.0','windows-x64',fetcher);
   assert.equal(result.version,'v0.4.0'); assert.match(result.downloadUrl,/setup\.exe$/);

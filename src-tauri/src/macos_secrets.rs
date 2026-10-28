@@ -5,7 +5,7 @@ use ring::{
 };
 
 const HEADER: &[u8] = b"MLAI\x01";
-const AAD: &[u8] = b"com.mianlingai.clone.byok.v1";
+const AAD: &[u8] = b"com.luoyaosheng.mianxu.byok.v1";
 const ERROR: &str =
     "无法读取或保存 macOS 加密密钥，请解锁钥匙串并允许访问；密钥丢失时请重新配置 AI 服务";
 
@@ -32,7 +32,7 @@ fn master_key(service: &str, create: bool) -> Result<Vec<u8>, String> {
 
 #[cfg(target_os = "macos")]
 pub fn crypt(input: &[u8], protect: bool) -> Result<Vec<u8>, String> {
-    let key = master_key("com.mianlingai.clone.byok", protect)?;
+    let key = master_key("com.luoyaosheng.mianxu.byok", protect)?;
     crypt_with_key(input, protect, &key)
 }
 
@@ -95,7 +95,7 @@ mod tests {
     fn keychain_master_key_is_reused_and_missing_keys_are_not_replaced_on_read() {
         use security_framework::passwords::delete_generic_password;
         // Isolated test entry; never touch the application's real master key.
-        let service = format!("com.mianlingai.clone.byok.test.{}", std::process::id());
+        let service = format!("com.luoyaosheng.mianxu.byok.test.{}", std::process::id());
         struct Cleanup(String);
         impl Drop for Cleanup {
             fn drop(&mut self) {

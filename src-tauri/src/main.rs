@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    mianshi_copilot_lib::run()
+    mianxu_lib::run()
 }

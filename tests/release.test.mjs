@@ -7,10 +7,10 @@ import path from 'node:path';
 import { parseReleaseTag, prepareRelease, collectRelease } from '../scripts/release.mjs';
 
 function fixture(t) {
-  const root = mkdtempSync(path.join(tmpdir(), 'mianshi-release-test-'));
+  const root = mkdtempSync(path.join(tmpdir(), 'mianxu-release-test-'));
   t.after(() => {
     assert.equal(path.dirname(root), path.resolve(tmpdir()));
-    assert.ok(path.basename(root).startsWith('mianshi-release-test-'));
+    assert.ok(path.basename(root).startsWith('mianxu-release-test-'));
     rmSync(root, { recursive: true, force: true });
   });
   mkdirSync(path.join(root, 'src-tauri'), { recursive: true });
@@ -44,9 +44,9 @@ test('tag version is synchronized across all manifests and only the root Cargo l
   assert.deepEqual(config.app, oldConfig.app);
   assert.match(readFileSync(path.join(root, 'src-tauri/Cargo.toml'), 'utf8'), /^version = "0\.4\.0-rc\.1"$/m);
   const newLock = readFileSync(path.join(root, 'src-tauri/Cargo.lock'), 'utf8');
-  const withoutOwnVersion = text => text.replace(/(name = "mianshi-copilot"\r?\nversion = ")[^"]+/, '$1ROOT_VERSION');
+  const withoutOwnVersion = text => text.replace(/(name = "mianxu"\r?\nversion = ")[^"]+/, '$1ROOT_VERSION');
   assert.equal(withoutOwnVersion(newLock), withoutOwnVersion(oldLock));
-  assert.match(newLock, /name = "mianshi-copilot"\r?\nversion = "0\.4\.0-rc\.1"/);
+  assert.match(newLock, /name = "mianxu"\r?\nversion = "0\.4\.0-rc\.1"/);
 });
 test('collect stages only installers and embedded app binaries and generates verifiable checksums', t => {
   const root = fixture(t);
@@ -54,7 +54,7 @@ test('collect stages only installers and embedded app binaries and generates ver
   const target = path.join(root, 'src-tauri/target/x86_64-pc-windows-msvc/release');
   mkdirSync(path.join(target, 'bundle/nsis'), { recursive: true });
   writeFileSync(path.join(target, 'bundle/nsis/骆耀升老公酱面试助手_0.1.1_x64-setup.exe'), 'MZfixture-installer');
-  writeFileSync(path.join(target, 'mianshi-copilot.exe'), 'MZfixture-app');
+  writeFileSync(path.join(target, 'Mianxu.exe'), 'MZfixture-app');
   writeFileSync(path.join(target, 'private-test-data.json'), '{"dummy":"must not ship"}');
   const names = collectRelease(root, 'v0.1.1');
   const output = path.join(root, 'release-assets');
@@ -78,7 +78,7 @@ function macFixture(t, triple, cpu) {
   const executable = Buffer.alloc(32);
   executable.writeUInt32LE(0xfeedfacf, 0);
   executable.writeUInt32LE(cpu, 4);
-  writeFileSync(path.join(app, 'mianshi-copilot'), executable);
+  writeFileSync(path.join(app, 'Mianxu'), executable);
   const image = Buffer.alloc(1024);
   image.write('koly', image.length - 512);
   const dmg = path.join(target, 'dmg/骆耀升老公酱面试助手.dmg');
@@ -93,7 +93,7 @@ for (const [triple, cpu, platform] of [
   test(`collect ${platform} checks the app architecture and stages only the DMG with unique checksums`, t => {
     const { root } = macFixture(t, triple, cpu);
     const names = collectRelease(root, 'v0.1.1', triple);
-    const filename = `mianshi-copilot-v0.1.1-${platform}.dmg`;
+    const filename = `Mianxu_0.1.1_${platform === 'macos-arm64' ? 'arm64' : 'x64'}.dmg`;
     assert.deepEqual(names, [filename, `${platform}-SHA256SUMS.txt`]);
     const output = path.join(root, 'release-assets');
     assert.deepEqual(readdirSync(output).sort(), names.sort());
@@ -119,6 +119,6 @@ test('missing or invalid build outputs prevent staging assets', t => {
   mkdirSync(path.join(target, 'bundle/nsis'), { recursive: true });
   assert.throws(() => collectRelease(root, 'v0.1.1'), /exactly one/);
   writeFileSync(path.join(target, 'bundle/nsis/setup.exe'), 'not an executable');
-  writeFileSync(path.join(target, 'mianshi-copilot.exe'), 'MZfixture-app');
+  writeFileSync(path.join(target, 'Mianxu.exe'), 'MZfixture-app');
   assert.throws(() => collectRelease(root, 'v0.1.1'), /Invalid Windows executable/);
 });

@@ -47,6 +47,7 @@ jobs:
       RELEASE_TARGET: ${{ matrix.target }}
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     defaults:
       run:
@@ -151,6 +152,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.build.outputs.tag }}
+      VERSION: ${{ needs.build.outputs.version }}
       PRERELEASE: ${{ needs.build.outputs.prerelease }}
     steps:
       - name: Download this run's build assets
@@ -164,10 +166,10 @@ jobs:
         working-directory: release-assets
         run: |
           set -euo pipefail
-          test -f "mianshi-copilot-${TAG}-windows-x64-setup.exe"
-          test -f "mianshi-copilot-${TAG}-windows-x64-portable.exe"
-          test -f "mianshi-copilot-${TAG}-macos-arm64.dmg"
-          test -f "mianshi-copilot-${TAG}-macos-x64.dmg"
+          test -f "Mianxu_${VERSION}_x64-setup.exe"
+          test -f "Mianxu_${VERSION}_x64-portable.exe"
+          test -f "Mianxu_${VERSION}_arm64.dmg"
+          test -f "Mianxu_${VERSION}_x64.dmg"
           for platform in windows-x64 macos-arm64 macos-x64; do
             sha256sum --check "${platform}-SHA256SUMS.txt"
           done
@@ -180,10 +182,10 @@ jobs:
             gh release create "$TAG" --verify-tag --draft --title "骆耀升老公酱面试助手 ${TAG}" --generate-notes --prerelease="$PRERELEASE"
           fi
           gh release upload "$TAG" \
-            "release-assets/mianshi-copilot-${TAG}-windows-x64-setup.exe" \
-            "release-assets/mianshi-copilot-${TAG}-windows-x64-portable.exe" \
-            "release-assets/mianshi-copilot-${TAG}-macos-arm64.dmg" \
-            "release-assets/mianshi-copilot-${TAG}-macos-x64.dmg" \
+            "release-assets/Mianxu_${VERSION}_x64-setup.exe" \
+            "release-assets/Mianxu_${VERSION}_x64-portable.exe" \
+            "release-assets/Mianxu_${VERSION}_arm64.dmg" \
+            "release-assets/Mianxu_${VERSION}_x64.dmg" \
             release-assets/SHA256SUMS.txt --clobber
           gh release edit "$TAG" --draft=false --prerelease="$PRERELEASE"
           gh release view "$TAG" --json url --jq '.url' >> "$GITHUB_STEP_SUMMARY"

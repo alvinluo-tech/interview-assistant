@@ -27,7 +27,7 @@ export async function checkForUpdate(repository: string, current: string, platfo
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository)) throw new Error('请输入 GitHub 仓库 owner/repo');
   const installed=version(current);
   const response=await fetcher(`https://api.github.com/repos/${repository}/releases?per_page=30`, {
-    headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'mianshi-copilot-update-check'},signal:AbortSignal.timeout(15000),redirect:'error',
+    headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'mianxu-update-check'},signal:AbortSignal.timeout(15000),redirect:'error',
   });
   if (!response.ok) throw new Error(`检查更新失败（HTTP ${response.status}），请检查公开仓库名称、网络或 GitHub 限流。`);
   const releases=await response.json();
@@ -45,7 +45,7 @@ export async function checkForUpdate(repository: string, current: string, platfo
   };
   const releaseUrl=safeUrl(selected.html_url,'releases/tag');
   if (!releaseUrl) throw new Error('发布页地址无效，已停止更新检查。');
-  const suffix=platform==='windows-x64' ? 'windows-x64-setup.exe' : `${platform}.dmg`;
+  const suffix=platform==='windows-x64' ? '_x64-setup.exe' : platform==='macos-arm64' ? '_arm64.dmg' : '_x64.dmg';
   const asset=Array.isArray(selected.assets) ? selected.assets.find((asset: {name?: string})=>asset.name?.endsWith(suffix)) : undefined;
   return {version:selected.tag_name, releaseUrl, downloadUrl:safeUrl(asset?.browser_download_url,'releases/download')};
 }
