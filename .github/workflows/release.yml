@@ -182,7 +182,7 @@ jobs:
         run: |
           set -euo pipefail
           if ! gh release view "$TAG" > /dev/null 2>&1; then
-            gh release create "$TAG" --verify-tag --draft --title "骆耀升老公酱面试助手 ${TAG}" --generate-notes --prerelease="$PRERELEASE"
+            gh release create "$TAG" --verify-tag --draft --title "Mianxu ${TAG}" --generate-notes --prerelease="$PRERELEASE"
           fi
           gh release upload "$TAG" \
             "release-assets/Mianxu_${VERSION}_x64-setup.exe" \
