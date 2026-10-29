@@ -1,6 +1,7 @@
 ; Extend the maintained Tauri template rather than duplicating its install/update logic.
 ; MUI declarations are loaded before the template declares its pages.
 !include "${__FILEDIR__}\update-card.nsh"
+!define MIANXU_PAGES_INCLUDE "${__FILEDIR__}\installer-pages.nsh"
 SetFont "Microsoft YaHei UI" 9
 ShowInstDetails nevershow
 ShowUninstDetails nevershow
@@ -121,13 +122,15 @@ LangString MianxuRemovingHint 1033 "Removing the app using your selected options
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
+  ${If} $MxProgressStyled <> 1
   ${If} $UpdateMode = 1
   ${AndIf} $PassiveMode = 1
-    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuUpdatingTitle)"
+    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuUpdatingTitle)" "$(MianxuCardTitle)" 340
   ${ElseIf} $UpdateMode = 1
-    !insertmacro MIANXU_PROGRESS_PAGE "$(MianxuUpdatingTitle)" "$(MianxuUpdatingStatus)" "$(MianxuProgressHint)"
+    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuUpdatingTitle)" "$(MianxuUpdatingTitle)" 400
   ${Else}
-    !insertmacro MIANXU_PROGRESS_PAGE "$(MianxuInstallingTitle)" "$(MianxuInstallingStatus)" "$(MianxuProgressHint)"
+    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuInstallingTitle)" "$(MianxuInstallingTitle)" 400
+  ${EndIf}
   ${EndIf}
 !macroend
 

@@ -92,3 +92,30 @@ try {
     $bitmap.Save((Join-Path $destination 'update-hero.bmp'), [Drawing.Imaging.ImageFormat]::Bmp)
 } finally { $gradient.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
 Write-Output 'Generated high-resolution native update artwork.'
+
+foreach ($button in @(@('install', '立即安装', 'Install now'), @('launch', '立即体验', 'Open Mianxu'), @('continue', '继续', 'Continue'), @('close', '完成', 'Finish'))) {
+    foreach ($language in @('zh', 'en')) {
+        $buttonBitmap = [Drawing.Bitmap]::new(416, 88, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
+        $g = [Drawing.Graphics]::FromImage($buttonBitmap)
+        $g.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $g.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+        $g.Clear([Drawing.Color]::White)
+        $fill = [Drawing.Drawing2D.LinearGradientBrush]::new([Drawing.Point]::new(0,0), [Drawing.Point]::new(416,88), [Drawing.ColorTranslator]::FromHtml('#536EE7'), [Drawing.ColorTranslator]::FromHtml('#8061D8'))
+        $shape = [Drawing.Drawing2D.GraphicsPath]::new()
+        $shape.AddArc(0, 0, 24, 24, 180, 90)
+        $shape.AddArc(391, 0, 24, 24, 270, 90)
+        $shape.AddArc(391, 63, 24, 24, 0, 90)
+        $shape.AddArc(0, 63, 24, 24, 90, 90)
+        $shape.CloseFigure()
+        $format = [Drawing.StringFormat]::new()
+        $format.Alignment = [Drawing.StringAlignment]::Center
+        $format.LineAlignment = [Drawing.StringAlignment]::Center
+        $font = [Drawing.Font]::new('Microsoft YaHei UI', 28, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
+        try {
+            $g.FillPath($fill, $shape)
+            $caption = if ($language -eq 'zh') { $button[1] } else { $button[2] }
+            $g.DrawString($caption, $font, [Drawing.Brushes]::White, [Drawing.RectangleF]::new(0, 0, 416, 88), $format)
+            $buttonBitmap.Save((Join-Path $destination ('button-' + $button[0] + '-' + $language + '.bmp')), [Drawing.Imaging.ImageFormat]::Bmp)
+        } finally { $font.Dispose(); $format.Dispose(); $shape.Dispose(); $fill.Dispose(); $g.Dispose(); $buttonBitmap.Dispose() }
+    }
+}

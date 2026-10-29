@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { previewSource } from '../scripts/native-update-preview.mjs';
+import { customizeTemplate, restoreTemplate } from '../scripts/customize-installer-template.mjs';
 const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
 
 test('branded installer preserves upgrade identity and uses an explicit user installation policy', () => {
@@ -52,5 +53,26 @@ test('interactive installs use branded entry and completion pages around the mai
   assert.doesNotMatch(template, /!insertmacro MUI_PAGE_WELCOME|!insertmacro MUI_PAGE_DIRECTORY|!insertmacro MUI_PAGE_FINISH/);
   for (const invariant of ['Function PageLeaveReinstall', 'Function RestorePreviousInstallLocation', 'Section WebView2', 'Section Install', 'Function .onInstSuccess', 'Section Uninstall', 'ALLOWDOWNGRADES', 'CheckIfAppIsRunning']) {
     assert.ok(template.includes(invariant), `Preserve upstream behavior: ${invariant}`);
+  }
+});
+
+test('the custom installer reverses exactly to the pinned upstream engine', () => {
+  const template = readFileSync('src-tauri/windows/installer.nsi', 'utf8').replaceAll('\r\n', '\n');
+  const upstream = restoreTemplate(template);
+  assert.equal(customizeTemplate(upstream), template);
+  assert.equal(customizeTemplate(upstream.replaceAll('\n', '\r\n')), template);
+  assert.throws(() => customizeTemplate(''), /baseline/);
+  assert.throws(() => restoreTemplate(''), /provenance/);
+  assert.throws(() => restoreTemplate(template.replace('Page custom MianxuInstallPage MianxuInstallLeave', 'Page custom Removed')), /anchor/);
+  assert.throws(() => customizeTemplate(restoreTemplate(template.replace('Section WebView2', 'Section Unauthorized'))), /baseline/);
+});
+
+test('native primary action artwork uses the bitmap format accepted by NSIS', () => {
+  for (const kind of ['install', 'launch', 'continue', 'close']) for (const language of ['zh', 'en']) {
+    const bytes = readFileSync(`src-tauri/windows/branding/button-${kind}-${language}.bmp`);
+    assert.equal(bytes.toString('ascii', 0, 2), 'BM');
+    assert.equal(bytes.readInt32LE(18), 416);
+    assert.equal(bytes.readInt32LE(22), 88);
+    assert.equal(bytes.readUInt16LE(28), 24);
   }
 });

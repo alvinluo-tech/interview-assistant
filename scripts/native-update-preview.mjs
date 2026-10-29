@@ -32,7 +32,7 @@ Function .onInit
   SetOutPath "$PLUGINSDIR"
 FunctionEnd
 Section "UI preview only"
-  !insertmacro MIANXU_UPDATE_CARD "UI PREVIEW" "${language === 'English' ? 'Preview only. No application will be installed.' : '界面预览 · 不会安装程序或修改现有应用'}" "Mianxu · ${language === 'English' ? 'Update UI preview' : '更新界面预览'}"
+  !insertmacro MIANXU_UPDATE_CARD "UI PREVIEW" "${language === 'English' ? 'Preview only. No application will be installed.' : '界面预览 · 不会安装程序或修改现有应用'}" "Mianxu · ${language === 'English' ? 'Update UI preview' : '更新界面预览'}" "$(MianxuCardTitle)" 340
   ; NSIS advances its own instruction progress. This harness does no installation.
   Sleep 250
   Sleep 250

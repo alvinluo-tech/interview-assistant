@@ -22,7 +22,7 @@ delete config.plugins;
 config.bundle.createUpdaterArtifacts = false;
 config.bundle.windows.webviewInstallMode = { type: 'skip' };
 config.bundle.icon = config.bundle.icon.map(file => path.join(repo, 'src-tauri', file));
-for (const key of ['installerHooks', 'installerIcon', 'uninstallerIcon', 'sidebarImage', 'headerImage', 'uninstallerHeaderImage']) {
+for (const key of ['template', 'installerHooks', 'installerIcon', 'uninstallerIcon', 'sidebarImage', 'headerImage', 'uninstallerHeaderImage']) {
   config.bundle.windows.nsis[key] = path.join(repo, 'src-tauri', config.bundle.windows.nsis[key]);
 }
 writeFileSync(path.join(root, 'tauri.conf.json'), JSON.stringify(config, null, 2));
@@ -35,3 +35,4 @@ const env = { ...process.env };
 for (const key of ['TAURI_SIGNING_PRIVATE_KEY', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD', 'TAURI_SIGNING_PRIVATE_KEY_PATH']) delete env[key];
 execFileSync(process.execPath, [path.join(repo, 'node_modules/@tauri-apps/cli/tauri.js'), 'bundle', '--bundles', 'nsis', '--ci', '--no-sign', '--no-binary-patching'], { cwd: project, env, stdio: 'inherit', windowsHide: true });
 console.log('PASS: production branding, bilingual strings and installer/uninstaller hooks compile. The fixture was not installed.');
+execFileSync(process.execPath, [path.join(repo, 'scripts/native-installer-preview.mjs'), '--self-test'], { stdio: 'inherit', windowsHide: true });

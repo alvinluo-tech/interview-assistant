@@ -64,6 +64,7 @@
     "windows": {
       "allowDowngrades": false,
       "nsis": {
+        "template": "windows/installer.nsi",
         "installMode": "currentUser",
         "languages": [
           "SimpChinese",
