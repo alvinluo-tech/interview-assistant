@@ -441,7 +441,8 @@ export async function endExamSession(relaunch: boolean): Promise<void> {
   cancelRequest();
   const { hideOverlay, setSessionActive } = await import('./bridge');
   try {
-    if (state.sessionId) await completeExamSession(state.sessionId);
+    const sessionId = state.sessionId;
+    if (sessionId) { await persistTurns(); await completeExamSession(sessionId); }
   } finally {
     setState({ sessionId: null, phase: 'idle', turns: [], statusText: '', pendingScreenshots: [], activeTurnId: null, errorMessage: null });
     if (tickTimer) { window.clearInterval(tickTimer); tickTimer = null; }

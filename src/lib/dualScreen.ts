@@ -348,9 +348,15 @@ export function startDualTakeover(): () => void {
   }).catch(() => {});
 
   return () => {
+    const hadPhone = active && !releasing;
     disposed = true;
     cancelRestore();
     void restore(false);
+    if (hadPhone) {
+      void dualSend({ t: 'released' }).catch(() => false).then(() => {
+        if (owner === takeoverGeneration) void stopDualScreen().catch(() => {});
+      });
+    }
     cleanups.forEach((c) => c());
   };
 }

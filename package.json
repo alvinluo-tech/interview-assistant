@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test:byok": "node scripts/test-byok.mjs",
     "test:audio": "node --test tests/interview-audio.test.mjs",
-    "test:platform": "node --test tests/native-platform.test.mjs",
+    "test:platform": "node --test tests/native-platform.test.mjs tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs",
     "test:dev-services": "node --test tests/dev-service.test.mjs",
     "test:release": "node --test tests/release.test.mjs",
     "test:context": "node --test tests/context-documents.test.mjs",
