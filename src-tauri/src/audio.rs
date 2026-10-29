@@ -69,6 +69,11 @@ pub struct AudioCaptureState {
     session: Mutex<Option<CaptureSession>>,
     excluded: Mutex<Vec<String>>,
 }
+impl AudioCaptureState {
+    pub(crate) fn is_active(&self) -> bool {
+        self.session.lock().map(|slot| slot.as_ref().is_some_and(|s| !s.stop.load(Ordering::SeqCst))).unwrap_or(true)
+    }
+}
 
 fn publish_ready(
     state: &AudioCaptureState,
@@ -164,6 +169,8 @@ fn start_capture(app: AppHandle) -> Result<AudioCaptureInfo, String> {
     }
     #[cfg(any(windows, target_os = "macos"))]
     {
+        let update = app.state::<crate::updater::UpdateState>();
+        let activity = update.activity_guard()?;
         let state = app.state::<AudioCaptureState>();
         // Publish the pending session before waiting, so stop can cancel startup.
         let mut slot = state.session.lock().map_err(|_| "系统收音状态不可用")?;
@@ -234,6 +241,7 @@ fn start_capture(app: AppHandle) -> Result<AudioCaptureInfo, String> {
             info: None,
         });
         drop(slot);
+        drop(activity);
         drop(previous);
         let timeout = if cfg!(target_os = "macos") { 65 } else { 5 };
         match ready_rx.recv_timeout(std::time::Duration::from_secs(timeout)) {

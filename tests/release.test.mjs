@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseReleaseTag, prepareRelease, collectRelease } from '../scripts/release.mjs';
+import { parseReleaseTag, prepareRelease, collectRelease, buildUpdateManifest } from '../scripts/release.mjs';
 
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), 'mianxu-release-test-'));
@@ -133,4 +133,52 @@ test('a release requiring updater support cannot collect an unsigned installer',
   writeFileSync(path.join(target, 'bundle/nsis/setup.exe'), 'MZsynthetic-installer');
   writeFileSync(path.join(target, 'Mianxu.exe'), 'MZsynthetic-app');
   assert.throws(() => collectRelease(root, 'v0.1.2', 'x86_64-pc-windows-msvc', { updater: true }), /signature|签名|\.sig/);
+});
+
+function signedRoot(t, triple) {
+  const signing = JSON.parse(readFileSync('tests/fixtures/updater-signed.json', 'utf8'));
+  const root = triple.includes('windows') ? fixture(t) : macFixture(t, triple, triple.startsWith('aarch64') ? 0x0100000c : 0x01000007).root;
+  prepareRelease(root, 'v0.1.2');
+  writeFileSync(path.join(root, 'src-tauri/updater-public-key.txt'), signing.publicKey);
+  const target = path.join(root, 'src-tauri/target', triple, 'release');
+  const windows = triple.includes('windows');
+  const bundle = path.join(target, 'bundle', windows ? 'nsis' : 'macos');
+  mkdirSync(bundle, { recursive: true });
+  const source = path.join(bundle, windows ? 'setup.exe' : 'fixture.app.tar.gz');
+  const signed = signing[windows ? 'windows' : 'macos'];
+  writeFileSync(source, Buffer.from(signed.bytes, 'base64'));
+  writeFileSync(source + '.sig', signed.signature);
+  if (windows) writeFileSync(path.join(target, 'Mianxu.exe'), 'MZsynthetic-portable');
+  return { root, source, signing };
+}
+
+test('signed update collection verifies actual signatures and rejects tampering and version replay', t => {
+  const triple = 'x86_64-pc-windows-msvc';
+  const good = signedRoot(t, triple);
+  assert.ok(collectRelease(good.root, 'v0.1.2', triple, { updater: true }).includes('Mianxu_0.1.2_x64-setup.exe.sig'));
+  const bad = signedRoot(t, triple);
+  writeFileSync(bad.source, 'MZmodified-after-signing');
+  assert.throws(() => collectRelease(bad.root, 'v0.1.2', triple, { updater: true }), /signature|Signature|verification/i);
+  const replay = signedRoot(t, triple); prepareRelease(replay.root, 'v0.1.3');
+  assert.throws(() => collectRelease(replay.root, 'v0.1.3', triple, { updater: true }), /version/i);
+});
+
+test('a complete cross-platform manifest contains only verified official signed updates', t => {
+  const root = fixture(t), directory = path.join(root, 'release-assets'); mkdirSync(directory);
+  for (const triple of ['x86_64-pc-windows-msvc', 'aarch64-apple-darwin', 'x86_64-apple-darwin']) {
+    const signed = signedRoot(t, triple);
+    writeFileSync(path.join(root, 'src-tauri/updater-public-key.txt'), signed.signing.publicKey);
+    for (const name of collectRelease(signed.root, 'v0.1.2', triple, { updater: true })) {
+      writeFileSync(path.join(directory, name), readFileSync(path.join(signed.root, 'release-assets', name)));
+    }
+  }
+  const manifest = buildUpdateManifest(root, 'v0.1.2', { notes: 'Synthetic release notes', pubDate: '2026-10-29T00:00:00Z' });
+  assert.deepEqual(Object.keys(manifest.platforms), ['windows-x86_64', 'darwin-aarch64', 'darwin-x86_64']);
+  assert.equal(manifest.version, '0.1.2');
+  for (const entry of Object.values(manifest.platforms)) {
+    assert.ok(entry.url.startsWith('https://github.com/alvinluo-tech/interview-assistant/releases/download/v0.1.2/'));
+    assert.ok(entry.signature.length > 100);
+  }
+  writeFileSync(path.join(directory, 'Mianxu_0.1.2_arm64.app.tar.gz.sig'), 'damaged');
+  assert.throws(() => buildUpdateManifest(root, 'v0.1.2'), /signature|Signature|verification/i);
 });

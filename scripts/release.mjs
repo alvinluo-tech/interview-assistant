@@ -1,7 +1,7 @@
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const targets = {
@@ -59,7 +59,16 @@ export function prepareRelease(root, tag) {
   return release;
 }
 
-export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
+export function verifyUpdateArtifact(root, artifact, signature, version) {
+  if (!existsSync(signature)) throw new Error(`Updater signature missing: ${path.basename(signature)}`);
+  const toolManifest = fileURLToPath(new URL('../tools/update-verifier/Cargo.toml', import.meta.url));
+  const result = spawnSync('cargo', ['run', '--quiet', '--locked', '--manifest-path', toolManifest, '--',
+    path.join(root, 'src-tauri/updater-public-key.txt'), artifact, signature, version], { encoding: 'utf8', windowsHide: true });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr?.trim() || 'Updater signature verification failed');
+}
+
+export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc', { updater = false } = {}) {
   const release = parseReleaseTag(tag);
   const { platform, bundles, cpu } = releaseTarget(triple);
   const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -90,6 +99,20 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
     ? [[path.join(target, 'bundle/nsis', installers[0]), `${prefix}-setup.exe`],
       [appBinary(target, '.exe'), `${prefix}-portable.exe`]]
     : [[path.join(target, 'bundle/dmg', installers[0]), `${prefix}.dmg`]];
+  if (updater) {
+    if (bundles === 'nsis') {
+      const source = files[0][0], signature = source + '.sig';
+      verifyUpdateArtifact(root, source, signature, release.version);
+      files.push([signature, `${prefix}-setup.exe.sig`]);
+    } else {
+      const directory = path.join(target, 'bundle/macos');
+      const archives = readdirSync(directory).filter(name => name.endsWith('.app.tar.gz'));
+      if (archives.length !== 1) throw new Error('Expected exactly one macOS updater archive');
+      const source = path.join(directory, archives[0]), signature = source + '.sig';
+      verifyUpdateArtifact(root, source, signature, release.version);
+      files.push([source, `${prefix}.app.tar.gz`], [signature, `${prefix}.app.tar.gz.sig`]);
+    }
+  }
   if (bundles === 'dmg') {
     // Check the architecture on cargo's own output. The bundle layout varies
     // between Tauri versions (the .app may not even remain in bundle/macos once
@@ -102,10 +125,10 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
   }
   const hashes = files.map(([source, filename]) => {
     const bytes = readFileSync(source);
-    if (bundles === 'nsis' && (bytes.length < 2 || bytes.toString('ascii', 0, 2) !== 'MZ')) {
+    if (filename.endsWith('.exe') && (bytes.length < 2 || bytes.toString('ascii', 0, 2) !== 'MZ')) {
       throw new Error(`Invalid Windows executable: ${filename}`);
     }
-    if (bundles === 'dmg' && (bytes.length < 512 || bytes.toString('ascii', bytes.length - 512, bytes.length - 508) !== 'koly')) {
+    if (filename.endsWith('.dmg') && (bytes.length < 512 || bytes.toString('ascii', bytes.length - 512, bytes.length - 508) !== 'koly')) {
       throw new Error(`Invalid macOS disk image: ${filename}`);
     }
     return `${createHash('sha256').update(bytes).digest('hex')}  ${filename}`;
@@ -115,6 +138,26 @@ export function collectRelease(root, tag, triple = 'x86_64-pc-windows-msvc') {
   const checksum = `${platform}-SHA256SUMS.txt`;
   writeFileSync(path.join(output, checksum), hashes.join('\n') + '\n');
   return [...files.map(([, filename]) => filename), checksum];
+}
+
+export function buildUpdateManifest(root, tag, { notes = '', pubDate = new Date().toISOString() } = {}) {
+  const { version } = parseReleaseTag(tag);
+  if (!Number.isFinite(Date.parse(pubDate))) throw new Error('Invalid update publication date');
+  const directory = path.join(root, 'release-assets');
+  const platforms = {};
+  for (const [target, filename] of [
+    ['windows-x86_64', `Mianxu_${version}_x64-setup.exe`],
+    ['darwin-aarch64', `Mianxu_${version}_arm64.app.tar.gz`],
+    ['darwin-x86_64', `Mianxu_${version}_x64.app.tar.gz`],
+  ]) {
+    const artifact = path.join(directory, filename), signature = artifact + '.sig';
+    verifyUpdateArtifact(root, artifact, signature, version);
+    platforms[target] = { signature: readFileSync(signature, 'utf8').trim(),
+      url: `https://github.com/alvinluo-tech/interview-assistant/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(filename)}` };
+  }
+  const manifest = { version, notes: String(notes).slice(0, 32000), pub_date: pubDate, platforms };
+  writeFileSync(path.join(directory, 'latest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  return manifest;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -130,6 +173,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       '--target', triple, '--bundles', bundles, '--', '--locked'], { stdio: 'inherit' });
     if (result.error) throw result.error;
     process.exit(result.status ?? 1);
-  } else if (command === 'collect') console.log(collectRelease(process.cwd(), tag, process.env.RELEASE_TARGET).join('\n'));
-  else throw new Error('Usage: node scripts/release.mjs <prepare|build|collect> [vVERSION]');
+  } else if (command === 'collect') console.log(collectRelease(process.cwd(), tag, process.env.RELEASE_TARGET,
+    { updater: process.env.RELEASE_UPDATER === 'true' }).join('\n'));
+  else if (command === 'manifest') {
+    const notes = process.env.RELEASE_NOTES_FILE ? readFileSync(process.env.RELEASE_NOTES_FILE, 'utf8') : '';
+    buildUpdateManifest(process.cwd(), tag, { notes }); console.log('Verified signed artifacts and generated latest.json');
+  } else throw new Error('Usage: node scripts/release.mjs <prepare|build|collect|manifest> [vVERSION]');
 }

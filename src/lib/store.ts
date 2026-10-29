@@ -164,6 +164,7 @@ export const DEFAULT_EXAM_CUSTOMIZATION: ExamCustomization = {
 
 export const ALL_KEYS = [
   'updates.repository',
+  'updates.reminder',
   'capture.mode',
   'capture.compatibilityMode',
   'settings.owner',

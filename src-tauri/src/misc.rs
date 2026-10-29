@@ -101,6 +101,15 @@ pub fn cmd_os_version() -> String {
 
 #[cfg(windows)]
 pub mod guardian {
+    static CHILD: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+    static UPDATING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    pub(crate) fn stop_for_update() {
+        UPDATING.store(true, std::sync::atomic::Ordering::SeqCst);
+        if let Ok(mut slot) = CHILD.lock() {
+            if let Some(mut child) = slot.take() { let _ = child.kill(); let _ = child.wait(); }
+        }
+    }
     /// 主进程：拉起守护进程（release only）
     #[cfg(not(debug_assertions))]
     pub fn spawn_guardian(_app: tauri::AppHandle) {
@@ -122,12 +131,15 @@ pub mod guardian {
                     DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB,
                 )
                 .spawn();
-            if spawned.is_err() {
-                let _ = std::process::Command::new(&exe)
+            let spawned = spawned.or_else(|_| std::process::Command::new(&exe)
                     .arg(format!("--guardian={pid}"))
                     .env_remove(crate::disguise::PARENT)
                     .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-                    .spawn();
+                    .spawn());
+            if let Ok(mut child) = spawned {
+                let mut slot = CHILD.lock().unwrap();
+                if UPDATING.load(std::sync::atomic::Ordering::SeqCst) { let _ = child.kill(); let _ = child.wait(); }
+                else { *slot = Some(child); }
             }
         });
     }

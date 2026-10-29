@@ -20,6 +20,7 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  RELEASE_UPDATER: 'true'
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -39,12 +40,12 @@ jobs:
           - platform: macos-arm64
             runner: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             shell: bash
           - platform: macos-x64
             runner: macos-latest
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             shell: bash
     env:
       RELEASE_TARGET: ${{ matrix.target }}
@@ -85,7 +86,9 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: |
+            src-tauri -> target
+            tools/update-verifier -> target
           shared-key: desktop-${{ matrix.target }}
           env-vars: MACOSX_DEPLOYMENT_TARGET
           cache-on-failure: true
@@ -117,6 +120,9 @@ jobs:
       - name: Test development service isolation
         run: pnpm test:dev-services
 
+      - name: Test updater consent and state handling
+        run: pnpm test:updater
+
       # The native tests embed the frontend via generate_context!().
       - name: Typecheck and build frontend
         run: pnpm build
@@ -124,15 +130,18 @@ jobs:
       - name: Test native code with locked dependencies
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --workspace --lib
 
-      # Manual dispatch can check out an older tag without the CI-only overlay.
-      - name: Prepare prebuilt frontend configuration for older tags
-        if: hashFiles('src-tauri/tauri.ci.conf.json') == ''
-        run: node -e "require('node:fs').writeFileSync('src-tauri/tauri.ci.conf.json', JSON.stringify({build:{beforeBuildCommand:''}}))"
+      - name: Require release signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: node -e "if (!process.env.TAURI_SIGNING_PRIVATE_KEY) throw new Error('Missing TAURI_SIGNING_PRIVATE_KEY release secret')"
 
       - name: Build platform installer
         # Call Node directly: Windows package-manager shims can consume the cargo argument separator.
         # The frontend was built above for native tests; skip only the duplicate hook.
-        run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.ci.conf.json -- --locked
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.release.conf.json -- --locked
 
       - name: Verify macOS disk image and permission manifests
         if: runner.os == 'macOS'
@@ -167,6 +176,22 @@ jobs:
       VERSION: ${{ needs.build.outputs.version }}
       PRERELEASE: ${{ needs.build.outputs.prerelease }}
     steps:
+      - name: Check out release tooling and public key
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+
+      - name: Set up signature verifier toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
       - name: Download this run's build assets
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -190,14 +215,25 @@ jobs:
       - name: Create draft, attach assets, and publish
         run: |
           set -euo pipefail
-          if ! gh release view "$TAG" > /dev/null 2>&1; then
+          if gh release view "$TAG" --json isDraft > release-status.json 2>/dev/null; then
+            node -e "if (!JSON.parse(require('node:fs').readFileSync('release-status.json')).isDraft) throw new Error('Release is already public; publish a new version instead of replacing updater assets')"
+          else
             gh release create "$TAG" --verify-tag --draft --title "Mianxu ${TAG}" --generate-notes --prerelease="$PRERELEASE"
           fi
+          gh release view "$TAG" --json body --jq '.body' > release-notes.txt
+          RELEASE_NOTES_FILE=release-notes.txt node scripts/release.mjs manifest "$TAG"
+          (cd release-assets && sha256sum latest.json >> SHA256SUMS.txt)
           gh release upload "$TAG" \
             "release-assets/Mianxu_${VERSION}_x64-setup.exe" \
             "release-assets/Mianxu_${VERSION}_x64-portable.exe" \
             "release-assets/Mianxu_${VERSION}_arm64.dmg" \
             "release-assets/Mianxu_${VERSION}_x64.dmg" \
+            "release-assets/Mianxu_${VERSION}_x64-setup.exe.sig" \
+            "release-assets/Mianxu_${VERSION}_arm64.app.tar.gz" \
+            "release-assets/Mianxu_${VERSION}_arm64.app.tar.gz.sig" \
+            "release-assets/Mianxu_${VERSION}_x64.app.tar.gz" \
+            "release-assets/Mianxu_${VERSION}_x64.app.tar.gz.sig" \
+            release-assets/latest.json \
             release-assets/SHA256SUMS.txt --clobber
           gh release edit "$TAG" --draft=false --prerelease="$PRERELEASE"
           gh release view "$TAG" --json url --jq '.url' >> "$GITHUB_STEP_SUMMARY"

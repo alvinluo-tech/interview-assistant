@@ -62,3 +62,43 @@ test('native progress and failures stay visible without being called up-to-date'
   assert.match(h.updater.getSnapshot().error, /签名/);
   stop();
 });
+
+test('subscribers receive shared snapshots and unsubscribe cleanly', async () => {
+  const h = client(); let notifications = 0;
+  const stop = h.updater.subscribe(() => notifications++);
+  await h.updater.refresh();
+  assert.equal(notifications, 1);
+  stop(); await h.updater.check();
+  assert.equal(notifications, 1);
+  await assert.rejects(h.updater.install(), /下载|验证/);
+});
+
+test('concurrent commands coalesce and native failures remain retryable', async () => {
+  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, console });
+  let reject, calls = 0;
+  const updater = api.createUpdateClient({
+    invoke: () => { calls++; return new Promise((_, no) => { reject = no; }); },
+    listen: async () => () => {}, read: () => undefined, write: async () => {}, now: () => 0,
+  });
+  const pending = updater.check();
+  assert.equal(updater.refresh(), pending);
+  assert.equal(calls, 1);
+  reject(new Error('Network offline')); await pending;
+  assert.equal(updater.getSnapshot().phase, 'error');
+  assert.equal(updater.getSnapshot().error, 'Network offline');
+  const retry = updater.check(true); reject('HTTP 404'); await retry;
+  assert.equal(calls, 2);
+  assert.equal(updater.getSnapshot().error, 'HTTP 404');
+});
+
+test('reminders expire and a different version can prompt again', async () => {
+  const h = client(); await h.updater.connect(); await h.updater.check(); await h.updater.defer();
+  h.saved.set('updates.reminder', { version: '0.1.2', until: 1 });
+  assert.equal(h.updater.shouldPrompt(), true);
+  h.saved.set('updates.reminder', { version: '0.1.1', until: 2_000_000 });
+  assert.equal(h.updater.shouldPrompt(), true);
+  h.saved.set('updates.reminder', { version: '0.1.2', until: 'invalid' });
+  assert.equal(h.updater.shouldPrompt(), true);
+  h.emit({ ...h.updater.getSnapshot(), phase: 'upToDate' });
+  assert.equal(h.updater.shouldPrompt(), false);
+});

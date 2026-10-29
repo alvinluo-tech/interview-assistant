@@ -29,7 +29,7 @@ import {
 } from '@/lib/backend';
 import { getSetting, useSetting } from '@/lib/store';
 import { buildKnowledgeContext } from '@/lib/knowledgeContext';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { cmd } from '@/lib/bridge';
 import { activeMockSession, mockMeta } from '@/lib/mock';
 import { MockReportDialog } from './MockReportDialog';
 
@@ -44,23 +44,7 @@ const DIFFICULTY = [
 const ROUNDS = [8, 12, 16, 20, 24];
 
 async function openMockWindow(sessionId: string) {
-  const existing = await WebviewWindow.getByLabel('mock');
-  if (existing) {
-    await existing.close();
-  }
-  const win = new WebviewWindow('mock', {
-    url: `index.html#mock?sid=${sessionId}`,
-    title: '模拟面试',
-    width: 1120,
-    height: 720,
-    minWidth: 900,
-    minHeight: 600,
-    center: true,
-    decorations: true,
-  });
-  win.once('tauri://error', (e) => {
-    showToast({ type: 'error', title: '接入面试间失败，请稍后重试', description: String(e.payload ?? '') });
-  });
+  await cmd('cmd_open_mock', { sessionId });
 }
 
 export function MockPage() {

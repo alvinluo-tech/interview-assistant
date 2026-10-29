@@ -32,4 +32,5 @@ analysis_mianling/
 docs/native-osd-and-dual-screen.md
 docs/original-app-gap-analysis.md
 src-tauri/target
+tools/update-verifier/target/
 src-tauri/gen/schemas

@@ -29,6 +29,9 @@ impl Default for DualState {
         }
     }
 }
+impl DualState {
+    pub(crate) fn has_peer(&self) -> bool { self.peer_tx.lock().map(|p| p.is_some()).unwrap_or(true) }
+}
 
 const PAGE: &str = include_str!("dual_page.html");
 
@@ -77,6 +80,8 @@ fn current_peer(state: &DualState, generation: u64, tx: &Arc<mpsc::SyncSender<St
 
 #[tauri::command]
 pub fn cmd_dual_start(app: AppHandle, state: State<'_, DualState>) -> Result<serde_json::Value, String> {
+    let updater = app.state::<crate::updater::UpdateState>();
+    let _activity = updater.activity_guard()?;
     stop_server(&state);
     emit_peer_reason(&app, 0, "restarted");
     let token = random_token()?;
@@ -198,6 +203,8 @@ impl Write for PrefixedStream {
 }
 
 fn serve_peer(app: AppHandle, mut ws: tungstenite::WebSocket<PrefixedStream>, session_gen: u64) {
+    let updater = app.state::<crate::updater::UpdateState>();
+    let Ok(activity) = updater.activity_guard() else { return; };
     let state: State<DualState> = app.state();
     let (tx, rx) = mpsc::sync_channel::<String>(8);
     let tx = Arc::new(tx);
@@ -208,6 +215,7 @@ fn serve_peer(app: AppHandle, mut ws: tungstenite::WebSocket<PrefixedStream>, se
         *guard = Some(Arc::clone(&tx));
         emit_peer(&app, 1);
     }
+    drop(activity);
 
     let mut closed = false;
     // 全程阻塞模式：写不会被 WouldBlock 打断；读用 40ms 超时轮询收发两向

@@ -12,10 +12,11 @@
     "test:platform": "node --test tests/native-platform.test.mjs tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs",
     "test:dev-services": "node --test tests/dev-service.test.mjs",
     "test:release": "node --test tests/release.test.mjs",
+    "test:updater": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/updateCheck.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/updater-client.test.mjs",
     "test:context": "node --test tests/context-documents.test.mjs",
     "test:realtime": "node --test tests/realtime-asr.test.mjs",
     "test:reliability": "node --test tests/reliability.test.mjs",
-    "test:core-coverage": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/documentIngest.cjs --test-coverage-include=**/artifacts/test-compiled/knowledgeContext.cjs --test-coverage-include=**/artifacts/test-compiled/realtimeAsrProtocol.cjs --test-coverage-include=**/artifacts/test-compiled/updateCheck.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/context-documents.test.mjs tests/realtime-asr.test.mjs tests/reliability.test.mjs",
+    "test:core-coverage": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/documentIngest.cjs --test-coverage-include=**/artifacts/test-compiled/knowledgeContext.cjs --test-coverage-include=**/artifacts/test-compiled/realtimeAsrProtocol.cjs --test-coverage-include=**/artifacts/test-compiled/updateCheck.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/context-documents.test.mjs tests/realtime-asr.test.mjs tests/reliability.test.mjs tests/updater-client.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

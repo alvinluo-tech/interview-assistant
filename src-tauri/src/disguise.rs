@@ -11,6 +11,8 @@ const MARKER: &str = "MIANSHI_DISGUISED";
 const REAL_EXE: &str = "MIANSHI_REAL_EXE";
 #[cfg(windows)]
 pub(crate) const PARENT: &str = "MIANSHI_RELAUNCH_PARENT";
+#[cfg(windows)]
+const UPDATE_ORIGINAL: &str = "MIANXU_UPDATE_ORIGINAL";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
@@ -269,6 +271,21 @@ fn is_copy(path: &Path, identifier: &str) -> bool {
         || copy_dir(identifier).is_some_and(|dir| path.parent().is_some_and(|parent| parent == dir))
 }
 #[cfg(windows)]
+pub(crate) fn running_copy(path: &Path, identifier: &str) -> bool { is_copy(path, identifier) }
+
+#[cfg(windows)]
+pub(crate) fn relaunch_original_for_update(app: &AppHandle) -> Result<(), String> {
+    let current = std::env::current_exe().map_err(|e| e.to_string())?;
+    if !is_copy(&current, &app.config().identifier) { return Err("当前已经是原程序。".into()); }
+    let original = real_exe(&current, &app.config().identifier)?;
+    app.store("store.json").map_err(|e| e.to_string())?.save().map_err(|e| e.to_string())?;
+    std::process::Command::new(original).env(UPDATE_ORIGINAL, "1").env(PARENT, std::process::id().to_string())
+        .env_remove(MARKER).env_remove(REAL_EXE).spawn().map_err(|e| e.to_string())?;
+    crate::misc::guardian::stop_for_update();
+    app.exit(0);
+    Ok(())
+}
+#[cfg(windows)]
 fn real_exe(current: &Path, identifier: &str) -> Result<PathBuf, String> {
     if !is_copy(current, identifier) {
         return Ok(current.into());
@@ -349,6 +366,7 @@ pub fn wait_for_handoff() -> Result<(), String> {
 
 #[cfg(windows)]
 pub fn maybe_relaunch(identifier: &str) -> Result<bool, String> {
+    if std::env::var_os(UPDATE_ORIGINAL).is_some() { return Ok(false); }
     // dev 下不做副本切换：tauri dev 的进程树里挂着 Vite，副本接管后原进程退出
     // 会把 dev server 一起带走；调试对象也应该是本体。伪装仅在打包版生效。
     if cfg!(debug_assertions) {

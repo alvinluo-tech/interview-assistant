@@ -80,7 +80,9 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: |
+            src-tauri -> target
+            tools/update-verifier -> target
           # Match the release job, including its automatic compiler/OS hashes.
           shared-key: desktop-${{ matrix.target }}
           env-vars: MACOSX_DEPLOYMENT_TARGET
@@ -109,6 +111,9 @@ jobs:
 
       - name: Test development service isolation
         run: pnpm test:dev-services
+
+      - name: Test updater consent and state handling
+        run: pnpm test:updater
 
       # generate_context!() in native tests embeds dist, so build it first.
       - name: Typecheck and build frontend

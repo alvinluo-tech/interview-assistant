@@ -40,7 +40,7 @@ import { ExamOverlay } from '@/overlay/ExamOverlay';
 import { InterviewOverlay } from '@/overlay/InterviewOverlay';
 import { StealthTab } from './StealthTab';
 import { backupData, getDataError } from '@/lib/backend';
-import { checkForUpdate, DEFAULT_UPDATE_REPOSITORY, type AvailableUpdate } from '@/lib/updateCheck';
+import { UpdateStatusButton } from '../UpdateNotice';
 
 type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'changelog' | 'about';
 
@@ -826,23 +826,9 @@ function AboutTab() {
   const aiReady = useAiReady();
   const activeProvider = ai.providers.find(p => p.id === ai.routes.chat?.providerId);
   const [osVersion, setOsVersion] = useState('');
-  const [checking, setChecking] = useState(false);
-  const [checkResult, setCheckResult] = useState<string | null>(null);
-  const [repository,setRepository] = useSetting('updates.repository','');
-  const [available,setAvailable] = useState<AvailableUpdate|null>(null);
   const [dataBusy,setDataBusy] = useState(false);
   const [confirmRestore,setConfirmRestore] = useState(false);
   const dataError=getDataError();
-  async function checkUpdates() {
-    setChecking(true);setAvailable(null);setCheckResult('正在查询 GitHub Release…');
-    try {
-      const [{platform,arch},{fetch}] = await Promise.all([import('@tauri-apps/plugin-os'),import('@tauri-apps/plugin-http')]);
-      const target=platform()==='macos' ? `macos-${arch()==='aarch64'?'arm64':'x64'}` : `${platform()}-x64`;
-      const found=await checkForUpdate(repository.trim() || DEFAULT_UPDATE_REPOSITORY,APP_VERSION,target,fetch);
-      setAvailable(found);setCheckResult(found ? `发现新版本 ${found.version}` : '未发现更高版本的公开正式发布。');
-    } catch(error) {setCheckResult(String((error as Error).message||error));}
-    finally {setChecking(false);}
-  }
   async function dataAction(restore:boolean) {
     setConfirmRestore(false);setDataBusy(true);
     try {await backupData(restore);showToast({type:'success',title:restore?'已恢复备份':'本地备份已保存',description:restore?'已同步到所有窗口。':'包含简历、资料、题库与记录，不包含 API Key。'});}
@@ -868,20 +854,11 @@ function AboutTab() {
           label="客户端更新"
           value={
             <div className="flex items-center gap-2">
-              <span>{checkResult ?? '检查官方 GitHub Release，下载对应系统的安装包。'}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={checking}
-                onClick={() => void checkUpdates()}
-              >
-                {checking ? '检查中' : '检查更新'}
-              </Button>
-              {available && <Button size="sm" onClick={() => void import('@tauri-apps/plugin-opener').then(({openUrl})=>openUrl(available.downloadUrl||available.releaseUrl))}>{available.downloadUrl?'下载安装包':'查看发布页'}</Button>}
+              <span>自动检查官方更新，确认后下载与安装。</span>
+              <UpdateStatusButton />
             </div>
           }
         />
-        <Row label="更新仓库" value={<Input aria-label="GitHub 更新仓库" value={repository} placeholder={DEFAULT_UPDATE_REPOSITORY} onChange={event=>setRepository(event.target.value)} />} />
         <Row label="本地数据备份" value={<div className="space-y-2"><p className="text-xs text-muted-foreground">每次保存会保留上一份数据；手动备份可恢复。恢复前也会保留当前文件。</p>{dataError&&<p role="alert" className="text-xs text-destructive">{dataError}</p>}<Button size="sm" variant="outline" disabled={dataBusy} onClick={()=>void dataAction(false)}>创建手动备份</Button><Button size="sm" variant="ghost" disabled={dataBusy} onClick={()=>setConfirmRestore(true)}>恢复手动备份</Button></div>} />
         <Row
           label="AI 接口"

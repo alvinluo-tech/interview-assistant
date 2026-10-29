@@ -20,6 +20,7 @@ mod protection;
 #[cfg(any(target_os = "macos", test))]
 mod screen_permissions;
 mod settings;
+mod updater;
 #[cfg(target_os = "macos")]
 mod window_macos;
 
@@ -108,6 +109,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_websocket::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::UpdateState::default())
         .manage(ai_settings::AiSettingsLock::default())
         .manage(data_store::DataState::default())
         .manage(OverlayState::default())
@@ -125,6 +128,12 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            overlay::cmd_open_mock,
+            updater::cmd_updater_status,
+            updater::cmd_updater_check,
+            updater::cmd_updater_download,
+            updater::cmd_updater_install,
+            updater::cmd_updater_restore_original,
             ai_settings::cmd_ai_load_settings,
             ai_settings::cmd_ai_save_settings,
             data_store::cmd_data_read,

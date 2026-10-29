@@ -50,7 +50,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -58,5 +60,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      },
+      "endpoints": [
+        "https://github.com/alvinluo-tech/interview-assistant/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE2MUU4QjQ1NEFDRDlDQ0UKUldUT25NMUtSWXNlRm93K1lXU2x3T0ovUEhjT2FtaVVlOEhMU1E0L2ExRGRaOGM3M2ljYWVzeFQK"
+    }
   }
 }

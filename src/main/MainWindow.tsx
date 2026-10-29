@@ -37,6 +37,7 @@ import { Onboarding } from './Onboarding';
 import { ChangelogDialog } from './ChangelogDialog';
 import { FeedbackDialog } from './FeedbackDialog';
 import { LocalProfileDialog } from './LocalProfileDialog';
+import { UpdateNotice } from './UpdateNotice';
 
 type Section =
   | 'interview'
@@ -154,6 +155,7 @@ export function MainWindow() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <TitleBar />
+      <UpdateNotice />
       {dataError&&<div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive">本地数据读取失败，已阻止覆盖。请在「设置 → 关于」恢复手动备份。{dataError}</div>}
       <UsageNotice />
       {changelogOpen && <ChangelogDialog onClose={() => setChangelogOpen(false)} />}

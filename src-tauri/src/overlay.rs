@@ -130,6 +130,8 @@ mod drag_tests {
 
 /// 显示浮窗：seq 自增、广播 overlay-shown、按 interactive 设置穿透。返回 seq。
 pub fn show_overlay_and_emit(app: &AppHandle) -> Result<i64, String> {
+    let update = app.state::<crate::updater::UpdateState>();
+    let _activity = update.activity_guard()?;
     let state: State<OverlayState> = app.state();
     let win = overlay_window(app).ok_or("overlay window missing")?;
     let native =
@@ -393,11 +395,14 @@ pub fn cmd_overlay_session_ready(
 }
 
 #[tauri::command]
-pub fn cmd_set_session_active(state: State<'_, OverlayState>, active: bool) {
+pub fn cmd_set_session_active(app: AppHandle, state: State<'_, OverlayState>, active: bool) -> Result<(), String> {
+    let update = app.state::<crate::updater::UpdateState>();
+    let _guard = if active { Some(update.activity_guard()?) } else { None };
     state.session_active.store(active, Ordering::SeqCst);
     if active {
         *state.last_heartbeat.lock().unwrap() = Instant::now();
     }
+    Ok(())
 }
 
 /// 崩溃恢复握手：返回 true 表示该 seq 尚未就绪（前端据此判定恢复失败）
@@ -438,6 +443,25 @@ pub fn cmd_overlay_debug(state: State<'_, OverlayState>) -> serde_json::Value {
 }
 
 // ---------- 主窗口 ----------
+
+#[tauri::command]
+pub async fn cmd_open_mock(app: AppHandle, window: tauri::WebviewWindow, session_id: String) -> Result<(), String> {
+    if window.label() != "main" { return Err("只能从主窗口打开模拟面试。".into()); }
+    if session_id.is_empty() || session_id.len() > 128 || !session_id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+        return Err("模拟面试编号无效。".into());
+    }
+    let update = app.state::<crate::updater::UpdateState>();
+    let _activity = update.activity_guard()?;
+    if let Some(existing) = app.get_webview_window("mock") {
+        existing.unminimize().map_err(|e| e.to_string())?;
+        existing.show().map_err(|e| e.to_string())?;
+        return existing.set_focus().map_err(|e| e.to_string());
+    }
+    tauri::WebviewWindowBuilder::new(&app, "mock", tauri::WebviewUrl::App(format!("index.html#mock?sid={session_id}").into()))
+        .title("模拟面试").inner_size(1120.0, 720.0).min_inner_size(900.0, 600.0)
+        .center().decorations(true).build().map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 #[tauri::command]
 pub fn cmd_show_main(app: AppHandle) -> Result<(), String> {
