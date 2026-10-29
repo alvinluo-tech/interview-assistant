@@ -87,6 +87,23 @@ fn overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("overlay")
 }
 
+#[cfg(test)]
+mod drag_tests {
+    use super::*;
+    #[test]
+    fn ending_an_old_drag_cannot_cancel_its_replacement() {
+        let state = OverlayState::default();
+        let first = state.begin_drag(true).unwrap().unwrap();
+        assert!(state.begin_drag(true).unwrap().is_none());
+        state.begin_drag(false).unwrap();
+        let replacement = state.begin_drag(true).unwrap().unwrap();
+        assert!(!state.finish_drag(first));
+        assert!(state.drag_active.load(Ordering::SeqCst));
+        assert!(state.finish_drag(replacement));
+        assert!(!state.drag_active.load(Ordering::SeqCst));
+    }
+}
+
 /// 显示浮窗：seq 自增、广播 overlay-shown、按 interactive 设置穿透。返回 seq。
 pub fn show_overlay_and_emit(app: &AppHandle) -> Result<i64, String> {
     let state: State<OverlayState> = app.state();
