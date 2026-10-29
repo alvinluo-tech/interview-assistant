@@ -1,6 +1,18 @@
 use super::media::{AudioFormat, AudioPlane, PcmChunks, SampleKind, bgra_to_rgba, decode_audio};
 
 #[test]
+fn idle_flush_pads_the_speech_tail_and_does_not_replay_it_later() {
+    let mut converter = PcmChunks::new(16000).unwrap();
+    assert!(converter.push(&vec![0.5; 640]).is_empty());
+    let tail = converter.flush().unwrap();
+    assert_eq!(&tail[..640], &vec![16384; 640]);
+    assert_eq!(&tail[640..], &vec![0; 960]);
+    assert!(converter.flush().is_none());
+    let next = converter.push(&vec![-0.5; 1600]);
+    assert_eq!(next, vec![vec![-16384; 1600]]);
+}
+
+#[test]
 fn audio_playout_sends_silence_on_idle_and_rejects_stale_or_overflowed_audio() {
     use super::media::AudioPlayout;
     let mut playout = AudioPlayout::new();
