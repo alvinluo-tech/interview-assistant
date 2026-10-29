@@ -60,6 +60,10 @@ fn emit_peer(app: &AppHandle, count: u32) {
     let _ = app.emit("dual-peer", serde_json::json!({ "count": count }));
 }
 
+fn authorized_request(line: &str, token: &str, _websocket: bool) -> bool {
+    line.split_whitespace().nth(1).is_some_and(|path| path.contains(token))
+}
+
 #[tauri::command]
 pub fn cmd_dual_start(app: AppHandle, state: State<'_, DualState>) -> Result<serde_json::Value, String> {
     stop_server(&state);
@@ -116,11 +120,7 @@ fn handle_conn(app: AppHandle, mut stream: TcpStream, session_gen: u64) {
     let first_line = head.lines().next().unwrap_or_default().to_string();
     let is_ws = head.to_ascii_lowercase().contains("upgrade: websocket");
     let state: State<DualState> = app.state();
-    let token_ok = first_line
-        .split_whitespace()
-        .nth(1)
-        .map(|path| path.contains(&*state.token.lock().unwrap()))
-        .unwrap_or(false);
+    let token_ok = authorized_request(&first_line, &state.token.lock().unwrap(), is_ws);
     if !token_ok {
         let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         return;
@@ -271,4 +271,24 @@ fn stop_server(state: &DualState) {
     *state.stop_flag.lock().unwrap() = Arc::new(AtomicBool::new(false));
     *state.peer_tx.lock().unwrap() = None;
     *state.token.lock().unwrap() = String::new();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pairing_requires_a_nonempty_exact_token_on_the_correct_route() {
+        let token = "0123456789abcdef0123456789abcdef";
+        assert!(authorized_request(&format!("GET /?token={token} HTTP/1.1"), token, false));
+        assert!(authorized_request(&format!("GET /ws?token={token} HTTP/1.1"), token, true));
+        for (line, expected, ws) in [
+            (format!("GET /ws?token=x{token} HTTP/1.1"), token, true),
+            (format!("GET /ws?other={token} HTTP/1.1"), token, true),
+            (format!("GET /wrong?token={token} HTTP/1.1"), token, true),
+            (format!("GET /ws?token={token}&token=other HTTP/1.1"), token, true),
+            ("GET /ws?token=anything HTTP/1.1".into(), "", true),
+            (format!("POST /ws?token={token} HTTP/1.1"), token, true),
+        ] { assert!(!authorized_request(&line, expected, ws), "{line}"); }
+    }
 }
