@@ -293,6 +293,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cancelled_start_cannot_publish_into_a_replacement_session() {
+        let state = AudioCaptureState::default();
+        let old = Arc::new(AtomicBool::new(false));
+        let current = Arc::new(AtomicBool::new(false));
+        *state.session.lock().unwrap() = Some(CaptureSession { stop: current.clone(), handle: None, info: None });
+        let info = AudioCaptureInfo { devices: vec![], sample_rate: 16000, channels: 1 };
+        assert!(publish_ready(&state, &old, info.clone()).is_err());
+        assert!(state.session.lock().unwrap().as_ref().unwrap().info.is_none());
+        assert_eq!(publish_ready(&state, &current, info.clone()).unwrap().sample_rate, 16000);
+        current.store(true, Ordering::SeqCst);
+        assert!(publish_ready(&state, &current, info).is_err());
+    }
+
+    #[test]
     fn loopback_one_second_keeps_its_duration_at_16khz() {
         for rate in [16000, 44100, 48000, 96000] {
             let input: Vec<f32> = (0..rate)
