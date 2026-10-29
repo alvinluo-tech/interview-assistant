@@ -33,6 +33,8 @@ Mac 收音范围是系统播放声音，`devices` 返回空数组，由既有界
 
 ## 已验证与未验证
 
+2026-10-29 首轮真实 Mac CI 在原生测试编译阶段失败：[运行记录](https://github.com/alvinluo-tech/interview-assistant/actions/runs/40809364863)。Tauri 构建校验只读取通用 `tauri` dependency，未合并目标条件中的 `macos-private-api` feature，因而报告 feature 与 Mac 配置不匹配。此失败发生在应用测试和 DMG 打包之前，不能视作 Mac 编译通过。
+
 Windows 已执行前端构建、现有协议与音频回归、原生 workspace 单测、媒体/坐标/队列/取消测试、权限命令桥测试和依赖审计。额外使用浏览器模拟 Mac 原生命令，验证设置页的拒绝/允许授权、打开设置、标题保存、共享限制开关和说明，未出现页面运行错误。
 
 本轮结果：前端及协议测试 105 项通过；Rust 测试 41 项通过，1 项需要真实 Windows 播放设备的测试跳过；媒体 crate 的 Windows Clippy 检查通过；生产前端依赖审计未发现已知漏洞。原有核心前端覆盖率门槛也通过，此结果不代表 Mac 原生代码的真机覆盖率。
