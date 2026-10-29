@@ -1,6 +1,23 @@
 use super::media::{AudioFormat, AudioPlane, PcmChunks, SampleKind, bgra_to_rgba, decode_audio};
 
 #[test]
+fn audio_playout_sends_silence_on_idle_and_rejects_stale_or_overflowed_audio() {
+    use super::media::AudioPlayout;
+    let mut playout = AudioPlayout::new();
+    assert!(playout.tick(149).unwrap().is_none());
+    assert_eq!(playout.tick(150).unwrap().unwrap(), vec![0; 1600]);
+    playout.push(vec![vec![100; 1600]]).unwrap();
+    assert!(playout.tick(249).unwrap().is_none());
+    assert_eq!(playout.tick(250).unwrap().unwrap(), vec![100; 1600]);
+    assert_eq!(playout.tick(350).unwrap().unwrap(), vec![0; 1600]);
+    assert!(playout.tick(1100).is_err());
+    let mut full = AudioPlayout::new();
+    full.push(vec![vec![0; 1600]; 20]).unwrap();
+    assert!(full.push(vec![vec![0; 1600]]).is_err());
+    assert!(AudioPlayout::new().push(vec![vec![0; 1601]]).is_err());
+}
+
+#[test]
 fn window_capture_uses_frontmost_eligible_window_and_never_widens_scope() {
     use super::selection::{WindowCandidate, choose_window};
     let candidates = [
