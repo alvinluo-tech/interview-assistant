@@ -103,6 +103,15 @@ export function subscribeSolver(cb: () => void): () => void {
 }
 
 let tickTimer: number | null = null;
+let generation = 0;
+let requestController: AbortController | null = null;
+let startingSolve = false;
+function cancelRequest() {
+  generation++;
+  requestController?.abort();
+  requestController = null;
+  startingSolve = false;
+}
 function ensureTicker() {
   if (tickTimer) return;
   tickTimer = window.setInterval(() => {
@@ -134,6 +143,7 @@ export function customizationSummary(): string {
 // ---------------- 会话 ----------------
 
 export async function startExamSession(goalId: string | null): Promise<void> {
+  cancelRequest();
   const mode = getSetting('exam.mode', 'quick') as ExamModeKey;
   const goals = readData<{ id: string; name: string; companyName?: string }[]>('goals', []);
   const goal = goals.find((g) => g.id === goalId);
@@ -199,9 +209,16 @@ export function clearPendingScreenshots() {
 }
 
 export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
+  if (startingSolve || requestController || ['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) return;
+  startingSolve = true;
   if (!state.sessionId) {
-    await startExamSession(state.goalId);
+    try { await startExamSession(state.goalId); }
+    catch (error) { startingSolve = false; throw error; }
   }
+  startingSolve = false;
+  const current = ++generation;
+  const controller = new AbortController();
+  requestController = controller;
   const modeInfo = examModeInfo(state.mode);
   const maxPages = modeInfo.maxScreenshotPages;
   let shots = opts?.screenshots ?? state.pendingScreenshots;
@@ -209,7 +226,10 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     // 单页：直接截
     try {
       shots = [await captureScreen(captureOptions())];
+      if (current !== generation) return;
     } catch(error) {
+      if (current !== generation) return;
+      requestController = null;
       setState({phase:'error',statusText:'',errorMessage:`截图失败：${String((error as Error).message||error)}`});
       return;
     }
@@ -237,8 +257,10 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   try {
     const c = customization();
     const answer = await chatWithImages(buildExamUserPrompt(c), shots, {
+      signal: controller.signal,
       system: EXAM_SYSTEM_PROMPT+'\n'+(state.mode==='instant'?'简洁输出结论，避免展开长篇解释。':state.mode==='programming'?'给出完整可运行代码、边界条件与时间空间复杂度。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路，保持简明。'),
       onDelta: (delta) => {
+        if (current !== generation) return;
         setState({
           phase: 'streaming',
           statusText: 'AI 输出中…',
@@ -246,6 +268,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
         });
       },
     });
+    if (current !== generation) return;
     const doneTurns = state.turns.map((t) =>
       t.id === turn.id
         ? {
@@ -260,6 +283,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     setState({ phase: 'done', statusText: '', turns: doneTurns, activeTurnId: null });
     await persistTurns();
   } catch (e) {
+    if (current !== generation) return;
     const err = e as Error;
     if (err?.name === 'AbortError') {
       setState({ phase: 'idle', statusText: '', activeTurnId: null });
@@ -271,7 +295,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       errorMessage: String(err?.message ?? e),
       activeTurnId: null,
     });
-  }
+  } finally { if (current === generation) requestController = null; }
 }
 
 /** 从答案中提取服务端建议追问（原版 [[FOLLOWUP: a|b|c]] 协议） */
@@ -294,6 +318,7 @@ export async function followUp(opts: {
   message?: string;
   screenshots?: string[];
 }): Promise<void> {
+  if (startingSolve || requestController || ['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) return;
   const last = state.turns[state.turns.length - 1];
   if (!last) return;
   const map: Record<string, string> = {
@@ -304,12 +329,16 @@ export async function followUp(opts: {
   };
   const prompt = opts.message ?? map[opts.intent ?? ''] ?? opts.message ?? '';
   if (!prompt) return;
+  const current = ++generation;
+  const controller = new AbortController();
+  requestController = controller;
+  const prefix = `> ${opts.message ?? labelOfIntent(opts.intent)}\n\n`;
   const turn: SolverTurn = {
     id: `t${Date.now()}`,
     reasoning: '',
     reasoningDone: false,
     reasoningDurationMs: 0,
-    body: `> ${opts.message ?? labelOfIntent(opts.intent)}\n\n`,
+    body: prefix,
     followUpOptions: [],
     createdAt: Date.now(),
   };
@@ -333,33 +362,37 @@ export async function followUp(opts: {
       `以下是之前的题目与答案：\n\n${context}\n\n现在请：${prompt}`,
       opts.screenshots ?? [],
       {
+        signal: controller.signal,
         system: EXAM_SYSTEM_PROMPT,
         onDelta: (delta) => {
+          if (current !== generation) return;
           setState({
             turns: state.turns.map((t) => (t.id === turn.id ? { ...t, body: t.body + delta } : t)),
           });
         },
       },
     );
+    if (current !== generation) return;
     setState({
       phase: 'done',
       statusText: '',
       turns: state.turns.map((t) =>
         t.id === turn.id
-          ? { ...t, body: t.body + (answer || ''), reasoningDone: true, reasoningDurationMs: Date.now() - startedAt }
+          ? { ...t, body: answer ? prefix + answer : t.body, reasoningDone: true, reasoningDurationMs: Date.now() - startedAt }
           : t,
       ),
       activeTurnId: null,
     });
     await persistTurns();
   } catch (e) {
+    if (current !== generation) return;
     setState({
       phase: 'error',
       statusText: '',
       errorMessage: String((e as Error).message ?? e),
       activeTurnId: null,
     });
-  }
+  } finally { if (current === generation) requestController = null; }
 }
 
 /** 多页收集态：发送 */
@@ -379,6 +412,7 @@ export function setSolverMode(mode: ExamModeKey) {
 }
 
 export async function abortSolve(): Promise<void> {
+  cancelRequest();
   setState({
     phase: 'idle',
     statusText: '',
@@ -390,16 +424,19 @@ export async function abortSolve(): Promise<void> {
 }
 
 export async function endExamSession(relaunch: boolean): Promise<void> {
+  cancelRequest();
   const { hideOverlay, setSessionActive } = await import('./bridge');
-  if (state.sessionId) {
-    await completeExamSession(state.sessionId);
+  try {
+    if (state.sessionId) await completeExamSession(state.sessionId);
+  } finally {
+    setState({ sessionId: null, phase: 'idle', turns: [], statusText: '', pendingScreenshots: [], activeTurnId: null, errorMessage: null });
+    if (tickTimer) { window.clearInterval(tickTimer); tickTimer = null; }
+    try { await setSessionActive(false); }
+    finally {
+      try { await hideOverlay(); }
+      finally { const { showMain } = await import('./bridge'); void relaunch; await showMain(); }
+    }
   }
-  await setSessionActive(false);
-  setState({ sessionId: null, phase: 'idle', turns: [], statusText: '' });
-  await hideOverlay();
-  const { showMain } = await import('./bridge');
-  void relaunch;
-  await showMain();
 }
 
 // ---------------- 复制（原版 PG/FG/xt） ----------------

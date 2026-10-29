@@ -1,4 +1,5 @@
 export interface AvailableUpdate { version: string; releaseUrl: string; downloadUrl?: string }
+export const DEFAULT_UPDATE_REPOSITORY = 'alvinluo-tech/interview-assistant';
 function version(value: string) {
   const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
   if (!match) throw new Error('版本号格式无效');
@@ -23,6 +24,7 @@ export function compareVersions(a: string, b: string): number {
 }
 export async function checkForUpdate(repository: string, current: string, platform: string,
   fetcher: (url: string, options: RequestInit) => Promise<Pick<Response,'ok'|'status'|'json'>>) : Promise<AvailableUpdate | null> {
+  if (!['windows-x64', 'macos-arm64', 'macos-x64'].includes(platform)) throw new Error('当前平台尚不支持客户端更新。');
   repository=repository.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository)) throw new Error('请输入 GitHub 仓库 owner/repo');
   const installed=version(current);

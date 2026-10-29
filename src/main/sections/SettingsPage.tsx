@@ -40,7 +40,7 @@ import { ExamOverlay } from '@/overlay/ExamOverlay';
 import { InterviewOverlay } from '@/overlay/InterviewOverlay';
 import { StealthTab } from './StealthTab';
 import { backupData, getDataError } from '@/lib/backend';
-import { checkForUpdate, type AvailableUpdate } from '@/lib/updateCheck';
+import { checkForUpdate, DEFAULT_UPDATE_REPOSITORY, type AvailableUpdate } from '@/lib/updateCheck';
 
 type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'changelog' | 'about';
 
@@ -838,7 +838,7 @@ function AboutTab() {
     try {
       const [{platform,arch},{fetch}] = await Promise.all([import('@tauri-apps/plugin-os'),import('@tauri-apps/plugin-http')]);
       const target=platform()==='macos' ? `macos-${arch()==='aarch64'?'arm64':'x64'}` : `${platform()}-x64`;
-      const found=await checkForUpdate(repository,APP_VERSION,target,fetch);
+      const found=await checkForUpdate(repository.trim() || DEFAULT_UPDATE_REPOSITORY,APP_VERSION,target,fetch);
       setAvailable(found);setCheckResult(found ? `发现新版本 ${found.version}` : '未发现更高版本的公开正式发布。');
     } catch(error) {setCheckResult(String((error as Error).message||error));}
     finally {setChecking(false);}
@@ -868,11 +868,11 @@ function AboutTab() {
           label="客户端更新"
           value={
             <div className="flex items-center gap-2">
-              <span>{checkResult ?? '填写公开 GitHub 仓库后手动检查。'}</span>
+              <span>{checkResult ?? '检查官方 GitHub Release，下载对应系统的安装包。'}</span>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={checking || !repository.trim()}
+                disabled={checking}
                 onClick={() => void checkUpdates()}
               >
                 {checking ? '检查中' : '检查更新'}
@@ -881,7 +881,7 @@ function AboutTab() {
             </div>
           }
         />
-        <Row label="更新仓库" value={<Input aria-label="GitHub 更新仓库" value={repository} placeholder="owner/repo" onChange={event=>setRepository(event.target.value)} />} />
+        <Row label="更新仓库" value={<Input aria-label="GitHub 更新仓库" value={repository} placeholder={DEFAULT_UPDATE_REPOSITORY} onChange={event=>setRepository(event.target.value)} />} />
         <Row label="本地数据备份" value={<div className="space-y-2"><p className="text-xs text-muted-foreground">每次保存会保留上一份数据；手动备份可恢复。恢复前也会保留当前文件。</p>{dataError&&<p role="alert" className="text-xs text-destructive">{dataError}</p>}<Button size="sm" variant="outline" disabled={dataBusy} onClick={()=>void dataAction(false)}>创建手动备份</Button><Button size="sm" variant="ghost" disabled={dataBusy} onClick={()=>setConfirmRestore(true)}>恢复手动备份</Button></div>} />
         <Row
           label="AI 接口"
