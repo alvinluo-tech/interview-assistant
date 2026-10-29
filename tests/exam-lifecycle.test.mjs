@@ -47,6 +47,7 @@ test('ending an exam cancels generation and ignores late streamed text and compl
   assert.equal(h.api.getSolverState().sessionId, null);
   assert.equal(h.api.getSolverState().turns.length, 0);
   assert.ok(h.calls.includes('hide') && h.calls.includes('main'));
+  assert.ok(h.calls.indexOf('persist') >= 0 && h.calls.indexOf('persist') < h.calls.indexOf('complete'), 'Save the partial answer before completing the record');
 });
 
 test('two initial solve actions cannot create two sessions before either creation completes', async () => {

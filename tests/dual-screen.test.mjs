@@ -127,3 +127,11 @@ test('zero and near-zero background opacity also apply to nested buttons', () =>
     }
   }
 });
+
+test('hiding the overlay ends phone control instead of leaving a connected but unresponsive page', async () => {
+  const h = harness(), stop = h.api.startDualTakeover(); await flush();
+  h.emit('dual-peer', { count: 1 }); await flush();
+  stop(); await flush();
+  assert.equal(h.stopped(), 1);
+  assert.ok(h.calls.some(([name, args]) => name === 'cmd_dual_send' && JSON.parse(args.text).t === 'released'));
+});
