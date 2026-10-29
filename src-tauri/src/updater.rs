@@ -5,6 +5,9 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri_plugin_store::StoreExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
+#[path = "update_install.rs"]
+mod install_policy;
+use install_policy::InstallMode;
 
 const ENDPOINT: &str = "https://github.com/alvinluo-tech/interview-assistant/releases/latest/download/latest.json";
 const PUBLIC_KEY: &str = include_str!("../updater-public-key.txt");
@@ -22,6 +25,7 @@ pub struct Snapshot {
     total: Option<u64>,
     busy: bool,
     can_install: bool,
+    install_mode: String,
     can_restore_original: bool,
     install_reason: Option<String>,
     error: Option<String>,
@@ -31,7 +35,7 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self { phase: "idle".into(), current_version: String::new(), version: None, notes: None,
             date: None, release_url: "https://github.com/alvinluo-tech/interview-assistant/releases/latest".into(),
-            downloaded: 0, total: None, busy: false, can_install: false, can_restore_original: false,
+            downloaded: 0, total: None, busy: false, can_install: false, install_mode: "unavailable".into(), can_restore_original: false,
             install_reason: None, error: None, updated_from: None }
     }
 }
@@ -75,13 +79,14 @@ fn official_artifact(url: &tauri::Url, version: &str) -> bool {
         && url.path().starts_with(&format!("/alvinluo-tech/interview-assistant/releases/download/v{version}/"))
 }
 
-fn install_location(app: &AppHandle) -> (bool, bool, Option<String>) {
-    if cfg!(debug_assertions) { return (false, false, Some("开发测试版仅支持检查更新，请安装正式版后使用自动安装。".into())); }
-    let Ok(exe) = std::env::current_exe() else { return (false, false, Some("无法确认程序安装位置。".into())); };
+fn install_location(app: &AppHandle) -> (InstallMode, bool, Option<String>) {
+    #[cfg(not(windows))]
+    if cfg!(debug_assertions) { return (InstallMode::Unavailable, false, Some("开发测试版请使用正式安装版本进行自动更新。".into())); }
+    let Ok(exe) = std::env::current_exe() else { return (InstallMode::Unavailable, false, Some("无法确认程序安装位置。".into())); };
     #[cfg(windows)]
     {
         if crate::disguise::running_copy(&exe, &app.config().identifier) {
-            return (false, true, Some("当前运行的是进程伪装副本，请先恢复原程序再更新。".into()));
+            return (InstallMode::Restore, true, Some("当前运行的是进程伪装副本，请先恢复原程序再更新。".into()));
         }
         use winreg::{RegKey, enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_64KEY}};
         let key = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}", app.config().product_name.as_deref().unwrap_or(""));
@@ -90,18 +95,23 @@ fn install_location(app: &AppHandle) -> (bool, bool, Option<String>) {
                 .and_then(|k| k.get_value::<String, _>("InstallLocation").ok())
                 .is_some_and(|location| same_install_directory(&exe, std::path::Path::new(location.trim_matches('"'))))
         });
-        if installed { return (true, false, None); }
-        (false, false, Some("当前为免安装版或无法确认安装位置，请使用官方安装包手动更新。".into()))
+        let mode = install_policy::windows_mode(cfg!(debug_assertions), installed, false);
+        let reason = match mode {
+            InstallMode::Installer if cfg!(debug_assertions) => Some("当前是开发版，下载并验证后可通过安装向导安装正式版。".into()),
+            InstallMode::Installer => Some("当前是免安装版，下载并验证后将打开官方安装向导。".into()),
+            _ => None,
+        };
+        (mode, false, reason)
     }
     #[cfg(target_os = "macos")]
     {
         let _ = app;
         let bundle = exe.ancestors().find(|p| p.extension().is_some_and(|e| e == "app"));
-        if bundle.is_some_and(|p| !p.starts_with("/Volumes")) { (true, false, None) }
-        else { (false, false, Some("请先将应用从 DMG 拖到 Applications，再使用自动更新。".into())) }
+        if bundle.is_some_and(|p| !p.starts_with("/Volumes")) { (InstallMode::Managed, false, None) }
+        else { (InstallMode::Unavailable, false, Some("请先将应用从 DMG 拖到 Applications，再使用自动更新。".into())) }
     }
     #[cfg(not(any(windows, target_os = "macos")))]
-    { let _ = (app, exe); (false, false, Some("当前平台不支持自动安装，请手动下载。".into())) }
+    { let _ = (app, exe); (InstallMode::Unavailable, false, Some("当前平台不支持自动安装，请手动下载。".into())) }
 }
 
 #[cfg(any(windows, test))]
@@ -127,7 +137,8 @@ fn snapshot(app: &AppHandle) -> Snapshot {
     core.view.current_version = app.package_info().version.to_string();
     core.view.busy = busy(app);
     let (allowed, restore, reason) = install_location(app);
-    core.view.can_install = allowed;
+    core.view.can_install = allowed.can_install();
+    core.view.install_mode = allowed.as_str().into();
     core.view.can_restore_original = restore;
     core.view.install_reason = reason;
     core.view.clone()
@@ -200,7 +211,8 @@ pub async fn cmd_updater_check(app: AppHandle, window: WebviewWindow, manual: bo
 #[tauri::command]
 pub async fn cmd_updater_download(app: AppHandle, window: WebviewWindow) -> Result<Snapshot, String> {
     require_main(&window)?;
-    if !install_location(&app).0 { return Err(install_location(&app).2.unwrap_or_default()); }
+    let location = install_location(&app);
+    if !location.0.can_install() { return Err(location.2.unwrap_or_default()); }
     let update = {
         let state = app.state::<UpdateState>(); let mut core = state.core.lock().unwrap();
         if core.working { return Err("已有更新任务正在进行，请稍候。".into()); }
@@ -231,7 +243,8 @@ pub async fn cmd_updater_install(app: AppHandle, window: WebviewWindow) -> Resul
     {
         let state = app.state::<UpdateState>(); let mut gate = state.activity_guard()?;
         if busy(&app) { return Err("请先结束面试、笔试、录音或手机副屏会话，再安装更新。".into()); }
-        if !install_location(&app).0 { return Err(install_location(&app).2.unwrap_or_default()); }
+        let location = install_location(&app);
+        if !location.0.can_install() { return Err(location.2.unwrap_or_default()); }
         *gate = true;
     }
     let result = match install_ready(&app).await { Ok(view) => view, Err(error) => fail(&app, error) };
@@ -246,6 +259,26 @@ async fn install_ready(app: &AppHandle) -> Result<Snapshot, String> {
         let bytes = core.bytes.take().ok_or("下载内容已失效，请重新下载。")?;
         core.working = true; (update, bytes)
     };
+    #[cfg(windows)]
+    if install_location(app).0 == InstallMode::Installer {
+        // A development/portable executable is not an update destination. Launch
+        // the signed official installer normally: NEVER use /UPDATE or /D here.
+        // NSIS will locate an existing installation or offer its normal directory.
+        let mut random = [0u8; 16];
+        getrandom::fill(&mut random).map_err(|e| format!("无法准备安装包：{e}"))?;
+        let nonce: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("verified-installers");
+        set_phase(app, "installing");
+        tauri::async_runtime::spawn_blocking(move || {
+            install_policy::stage_verified_installer(&cache, &nonce, &bytes, |file| {
+                std::process::Command::new(file).spawn().map(|_| ())
+            })
+        }).await.map_err(|e| e.to_string())?.map_err(|e| format!("无法启动安装向导，请重试：{e}"))?;
+        // Do not record a completed upgrade: the user may cancel this wizard.
+        crate::misc::guardian::stop_for_update();
+        app.exit(0);
+        return Ok(snapshot(app));
+    }
     let store = app.store("store.json").map_err(|e| e.to_string())?;
     store.set("updates.pending", serde_json::json!({"from":app.package_info().version.to_string(),"to":update.version}));
     store.save().map_err(|e| e.to_string())?;
@@ -266,6 +299,10 @@ pub fn cmd_updater_restore_original(app: AppHandle, window: WebviewWindow) -> Re
     #[cfg(windows)] { crate::disguise::relaunch_original_for_update(&app) }
     #[cfg(not(windows))] { Err("当前平台不需要恢复 Windows 原程序。".into()) }
 }
+
+#[cfg(test)]
+#[path = "../../tests/updater-install-policy.rs"]
+mod installer_contract_tests;
 
 #[cfg(test)]
 mod tests {

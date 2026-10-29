@@ -57,6 +57,7 @@ export function updateFailure(error?: string | null) {
 }
 
 export function updatePresentation(state: UpdateSnapshot) {
+  const handoff = state.installMode === 'installer';
   const views = {
     idle: ['让应用保持最新', '检查是否有新的功能和体验改进。'],
     checking: ['正在检查更新', '正在获取最新版本信息，请稍候。'],
@@ -64,8 +65,8 @@ export function updatePresentation(state: UpdateSnapshot) {
     upToDate: ['已经是最新版本', '当前版本已是最新，安心继续使用。'],
     downloading: ['正在下载更新', '下载期间可以返回工作台，完成后由你决定安装时间。'],
     verifying: ['正在验证更新文件', '下载已完成，正在检查文件的完整性与来源。'],
-    ready: ['更新已准备就绪', '安装将重启应用，请先保存正在编辑的内容。'],
-    installing: ['正在安装更新', '应用即将退出并更新，请等待安装完成。'],
+    ready: ['更新已准备就绪', handoff ? '安装包已通过验证。点击后将退出当前应用并打开官方安装向导。' : '安装将重启应用，请先保存正在编辑的内容。'],
+    installing: [handoff ? '正在打开安装向导' : '正在安装更新', handoff ? '请在官方安装向导中完成安装。' : '应用即将退出并更新，请等待安装完成。'],
     error: [updateFailure(state.error).title, updateFailure(state.error).description],
   };
   let action: 'check' | 'download' | 'install' | 'release' | 'restore' | null;
@@ -75,6 +76,6 @@ export function updatePresentation(state: UpdateSnapshot) {
   else if (state.phase === 'ready') action = 'install';
   else if (state.phase === 'available' || state.phase === 'error' && state.version) action = 'download';
   else action = 'check';
-  const labels = { check: '检查更新', download: state.phase === 'error' ? '重新下载' : '下载更新', install: '重启并安装', release: '下载官方安装包', restore: '恢复原程序后更新' };
+  const labels = { check: '检查更新', download: state.phase === 'error' ? '重新下载' : handoff ? '下载正式版' : '下载更新', install: handoff ? '安装正式版' : '重启并安装', release: '前往发布页', restore: '恢复原程序后更新' };
   return { title: views[state.phase][0], description: views[state.phase][1], action, actionLabel: action ? labels[action] : '', disabled: state.busy && (action === 'install' || action === 'restore') };
 }

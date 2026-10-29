@@ -101,12 +101,27 @@ try {
   await cdp.waitFor("document.querySelector('[role=alert]')?.textContent.includes('签名验证失败')");
   assert.equal(await cdp.evaluate("document.querySelector('.update-error details').open"), false);
   await saveScreenshot('updater-branded-error');
-  await cdp.evaluate("__test.emit({phase:'available',canInstall:false,installReason:'免安装版请手动更新',error:null})");
-  await cdp.waitFor("document.body.innerText.includes('免安装版请手动更新')");
+  await cdp.evaluate("__test.emit({phase:'available',canInstall:true,installMode:'installer',installReason:'当前是开发版，下载并验证后可通过安装向导安装正式版。',error:null})");
+  await cdp.waitFor("document.querySelector('.update-primary')?.textContent.includes('下载正式版')");
+  await cdp.click('下载正式版');
+  await cdp.waitFor("document.querySelector('.update-primary')?.textContent.includes('安装正式版')");
+  assert.equal(await cdp.evaluate("__test.calls.filter(n=>n==='cmd_updater_install').length"), 1);
+  assert.equal(await cdp.evaluate("__test.calls.some(n=>n.startsWith('plugin:opener|'))"), false);
+  assert.equal(await cdp.evaluate("document.querySelector('.update-description').textContent.includes('安装向导')"), true);
+  await saveScreenshot('updater-installer-handoff-ready');
+  await cdp.evaluate('__test.emit({busy:true})');
+  await cdp.waitFor("document.querySelector('.update-primary')?.disabled === true");
+  await cdp.evaluate('__test.emit({busy:false})');
+  await cdp.waitFor("document.querySelector('.update-primary')?.disabled === false");
+  await cdp.click('安装正式版');
+  assert.equal(await cdp.evaluate("__test.calls.filter(n=>n==='cmd_updater_install').length"), 2);
+  assert.equal(await cdp.evaluate("__test.calls.some(n=>n.startsWith('plugin:opener|'))"), false);
+  await cdp.evaluate("__test.emit({phase:'available',canInstall:false,installMode:'unavailable',installReason:'当前平台不支持自动安装',error:null})");
+  await cdp.waitFor("document.querySelector('.update-primary')?.textContent.includes('前往发布页')");
   assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='下载更新')"), false);
   assert.deepEqual(await cdp.evaluate('__errors'), []);
-  await writeFile('artifacts/updater-ui-results.json', JSON.stringify({ passed: true, explicitConsent: true, busyBlocked: true, manualFallback: true }, null, 2));
-  console.log('PASS: actual updater dialog, download progress, explicit installation consent, busy gate, failure display, portable fallback.');
+  await writeFile('artifacts/updater-ui-results.json', JSON.stringify({ passed: true, explicitConsent: true, busyBlocked: true, installerHandoff: true, noBrowserRedirect: true, manualFallback: true }, null, 2));
+  console.log('PASS: actual updater dialog, download progress, explicit installation consent, busy gate, installer handoff without browser redirect, failure display, truthful unsupported fallback.');
 } finally {
   if (cdp.socket) { await cdp.command('Browser.close', {}).catch(() => {}); cdp.close(); }
   browser.kill();

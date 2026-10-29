@@ -10,6 +10,7 @@ export interface UpdateSnapshot {
   total?: number;
   busy: boolean;
   canInstall: boolean;
+  installMode?: 'managed' | 'installer' | 'restore' | 'unavailable';
   installReason?: string;
   canRestoreOriginal?: boolean;
   error?: string;
