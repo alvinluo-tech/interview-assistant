@@ -5,8 +5,6 @@
 import { useEffect, useState } from 'react';
 import {
   BookOpen,
-  Briefcase,
-  Building2,
   ChevronsUpDown,
   Copy,
   FileText,
@@ -33,7 +31,6 @@ import { MockPage } from './sections/MockPage';
 import { QuestionBankPage } from './sections/QuestionBankPage';
 import { ResourcePage } from './sections/ResourcePage';
 import { RecordsPage } from './sections/RecordsPage';
-import { JobApplyPage } from './sections/JobApplyPage';
 import { SettingsPage } from './sections/SettingsPage';
 import { UsageNotice } from './UsageNotice';
 import { Onboarding } from './Onboarding';
@@ -48,7 +45,6 @@ type Section =
   | 'question-bank'
   | 'resource'
   | 'records'
-  | 'job-apply'
   | 'settings';
 
 const BIG_NAV: { key: Section; label: string; desc: string; icon: React.ReactNode }[] = [
@@ -61,7 +57,6 @@ const SMALL_NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
   { key: 'question-bank', label: '面试题库', icon: <BookOpen size={15} /> },
   { key: 'resource', label: '资料管理', icon: <FileText size={15} /> },
   { key: 'records', label: '历史记录', icon: <History size={15} /> },
-  { key: 'job-apply', label: '网申助手', icon: <Briefcase size={15} /> },
 ];
 
 const PAGE_TITLES: Record<Exclude<Section, 'interview' | 'settings'>, { h1: string; sub: string }> = {
@@ -79,10 +74,6 @@ const PAGE_TITLES: Record<Exclude<Section, 'interview' | 'settings'>, { h1: stri
     sub: '简历、岗位和面试资料在这里统一维护。面试开始前只需要选，不用临时编辑。',
   },
   records: { h1: '历史记录', sub: '每场面试的问答记录、每次笔试的题目与答案。' },
-  'job-apply': {
-    h1: '网申助手',
-    sub: 'AI 替你一家接一家投网申，用的就是你在这里上传的简历。（本复刻版为占位页）',
-  },
 };
 
 export function MainWindow() {
@@ -194,7 +185,6 @@ export function MainWindow() {
                   {section === 'question-bank' && <QuestionBankPage />}
                   {section === 'resource' && <ResourcePage />}
                   {section === 'records' && <RecordsPage />}
-                  {section === 'job-apply' && <JobApplyPage />}
                   {section === 'settings' && <SettingsPage />}
                 </>
               )}
@@ -408,5 +398,4 @@ export async function recallWorkbench() {
 }
 
 void Card;
-void Building2;
 void readData;

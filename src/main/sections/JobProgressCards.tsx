@@ -4,7 +4,7 @@
  * 原版走服务端 jobProgress.followUp/submitCheckin；这里用本地会话数据驱动同一套交互。
  */
 import { useState } from 'react';
-import { CalendarCheck, MessageCircleQuestion, X } from 'lucide-react';
+import { CalendarCheck, MessageCircleQuestion } from 'lucide-react';
 import { useData, type ExamSessionRecord, type Goal, type InterviewSession } from '@/lib/backend';
 
 export interface JobProgressState {
@@ -46,7 +46,6 @@ export function JobProgressCards() {
   const [goals] = useData<Goal[]>('goals', []);
   const [progress, setProgress] = useData<JobProgressState>('jobProgress', EMPTY_PROGRESS);
   const [marking, setMarking] = useState(false);
-  const [promoShown, setPromoShown] = useState(false);
   const [offerInput, setOfferInput] = useState('');
   const [ocInput, setOcInput] = useState('');
 
@@ -94,7 +93,6 @@ export function JobProgressCards() {
           ),
         );
       }
-      if (markValue === 'FAILED' && pending.kind === 'exam') setPromoShown(true);
     } finally {
       setMarking(false);
     }
@@ -114,43 +112,10 @@ export function JobProgressCards() {
     setOcInput('');
   };
 
-  if (!pending && !checkinDue && !promoShown) return null;
+  if (!pending && !checkinDue) return null;
 
   return (
     <div className="mb-4 space-y-3">
-      {promoShown && (
-        <section className="rounded-xl border border-primary/25 bg-primary/[0.04] p-4">
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <MessageCircleQuestion className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="line-clamp-2 text-[13px] font-medium leading-snug text-foreground">
-                这家没过，多投几家：让 AI 全自动投网申
-              </p>
-              <p className="text-[12px] leading-relaxed text-muted-foreground">
-                全自动投网申：自动登录招聘网站、按岗位定制简历、填完申请表提交，一家接一家投完。免费试投 5 家。
-              </p>
-              <button
-                type="button"
-                className="mt-2 inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-accent"
-                onClick={() => window.open('https://www.mianlingai.com/job-apply?from=desktop-followup-failed', '_blank')}
-              >
-                在浏览器里看看
-              </button>
-            </div>
-            <button
-              type="button"
-              aria-label="关闭"
-              className="-m-1 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => setPromoShown(false)}
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-        </section>
-      )}
-
       {pending && (
         <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-start gap-2">

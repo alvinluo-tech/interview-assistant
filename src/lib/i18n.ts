@@ -116,7 +116,6 @@ const en: Record<string, string> = {
   "面试题库": "Question Bank",
   "资料管理": "Resources",
   "历史记录": "History",
-  "网申助手": "Job Apply",
   "设置": "Settings",
   "反馈": "Feedback",
   "剩余额度": "Remaining Credit",
