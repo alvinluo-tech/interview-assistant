@@ -778,12 +778,10 @@ async function applyIvPalette() {
       b = Math.round(b / n);
       const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
       const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-      const { getSetting, setSetting } = await import('@/lib/store');
-      const current = normalizeStyle(getSetting('overlay.style', DEFAULT_OVERLAY_STYLE));
-      setSetting('overlay.style', {
-        ...current,
-        paletteBg: hex,
-        paletteFg: lum > 0.4 ? '#0f172a' : '#f8fafc',
+      const { applyPaletteLook } = await import('@/lib/dualCamera');
+      await applyPaletteLook('interview', {
+        bg: hex,
+        fg: lum > 0.4 ? '#0f172a' : '#f8fafc',
         theme: lum > 0.4 ? 'light' : 'dark',
       });
     }

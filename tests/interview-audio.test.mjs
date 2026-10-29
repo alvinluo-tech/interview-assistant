@@ -35,6 +35,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       stopSystemAudioCapture: async () => { nativeStops++; }, setSystemAudioExcludedOutputs: async () => {} },
     './ai': { liveSpeechEnabled: () => live, buildInterviewSystemPrompt: () => '', chatStream: chat ?? (async () => '测试回答'), transcribeAudio: async (wav, options) => { requests++; wavs.push(wav); return transcribe ? transcribe(wav, options) : '请介绍一下你的项目经历'; } },
     './backend': { readData: (_key, fallback) => fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async () => {}, completeSession: async () => {} },
+    './examEngine': { getSolverState: () => ({ turns: [] }) },
     './store': { getSetting: (key, fallback) => settings[key] ?? fallback },
     './events': { bus: { emit() {} } },
   };

@@ -23,11 +23,13 @@ import { generateMockReport, mockMeta } from '@/lib/mock';
 import { useAiReady } from '@/lib/aiSettings';
 import { mdToPlain, Md } from '@/overlay/Md';
 import { MockReportDialog } from './MockReportDialog';
+import { JobProgressCards } from './JobProgressCards';
 
 export function RecordsPage() {
   const [tab, setTab] = useState<'interview' | 'exam'>('interview');
   return (
     <div className="flex flex-col gap-4">
+      <JobProgressCards />
       <div className="flex gap-1.5">
         {[
           { key: 'interview', label: '面试记录' },

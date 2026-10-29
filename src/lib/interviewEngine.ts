@@ -27,6 +27,8 @@ import {
   completeSession,
   updateSession,
 } from './backend';
+import type { ExamSessionRecord } from './backend';
+import { getSolverState } from './examEngine';
 import { getSetting } from './store';
 import { bus } from './events';
 import { openMicrophone, type MicrophoneCapture } from './microphone';
@@ -533,10 +535,48 @@ function buildSystemPromptForSession(question: string): { prompt: string; source
     customAnswerStyle: prefs.customAnswerStyle ?? '',
     goalName: goal?.name,
     goalCompany: goal?.companyName,
-    contextBlock: context.text,
+    contextBlock: [context.text, priorProgressBlock(goalId), solverMemoryBlock()].filter(Boolean).join('\n\n'),
     lang: interviewLang(),
   });
   return { prompt, sources: context.sources };
+}
+
+/** 同岗位此前几轮的进度标记（本地版 jobProgress：标过结果的面试/笔试进入回答上下文） */
+function priorProgressBlock(goalId: string | null): string {
+  if (!goalId) return '';
+  const label: Record<string, string> = {
+    PASSED: '已通过',
+    OC: '已拿 OC',
+    OFFER: '已拿 offer',
+    FAILED: '未通过',
+    WAITING: '结果待定',
+  };
+  const lines: string[] = [];
+  const interviews = readData<InterviewSession[]>('interviewSessions', [])
+    .filter((s) => s.type === 'INTERVIEW' && s.goalId === goalId && s.outcome)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  interviews.forEach((s, i) => {
+    lines.push(`该岗位第 ${i + 1} 轮面试（${new Date(s.createdAt).toLocaleDateString('zh-CN')}）：${label[s.outcome!]}`);
+  });
+  const exams = readData<ExamSessionRecord[]>('examSessions', [])
+    .filter((e) => e.goalId === goalId && e.outcome)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  exams.forEach((e) => {
+    lines.push(`该岗位笔试（${new Date(e.createdAt).toLocaleDateString('zh-CN')}）：${label[e.outcome!]}`);
+  });
+  if (lines.length === 0) return '';
+  return `【该岗位此前的进展（用户标记）】\n${lines.join('\n')}\n回答时可结合这些轮次的结果调整说法。`;
+}
+
+/** 面试中截屏解过的题（原版 2026-10-28「interview-remembers-screen-solves」）：solver 答案进入语音回答上下文 */
+function solverMemoryBlock(): string {
+  const turns = getSolverState().turns.filter((t) => t.body.trim().length > 0).slice(-3);
+  if (turns.length === 0) return '';
+  const items = turns.map((t, i) => {
+    const body = t.body.length > 1200 ? `${t.body.slice(0, 1200)}…` : t.body;
+    return `${i + 1}. ${body}`;
+  });
+  return `【本场面试中你已截屏解答过的题目（面试官可能追问这些题）】\n${items.join('\n')}\n如果面试官的提问与这些题目相关，请在此基础上继续深入作答，不要当作新题重复分析。`;
 }
 
 // ---------------- 会话生命周期 ----------------

@@ -70,6 +70,7 @@ export const DATA_KEYS = [
   'interviewPreference',
   'questionBanks',
   'feedback',
+  'jobProgress',
 ] as const;
 
 async function persist(key: string, value: unknown) {
@@ -172,6 +173,8 @@ export interface InterviewSession {
   status: 'ACTIVE' | 'COMPLETED';
   messages: ChatMessage[];
   metadata?: Record<string, unknown>;
+  /** 进度回访标记（本地版 jobProgress.markOutcome） */
+  outcome?: 'PASSED' | 'OC' | 'OFFER' | 'FAILED' | 'WAITING' | null;
 }
 
 export interface ExamQuestion {

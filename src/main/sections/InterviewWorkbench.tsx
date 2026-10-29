@@ -1,5 +1,6 @@
 import { useAiReady, useAiSettings } from '@/lib/aiSettings';
 import { usesLiveSpeech } from '@/lib/aiConfig';
+import { DualCameraSwitch } from '@/lib/dualCamera';
 /*
  * 面试工作台（对齐原版 tB）：面试方式、简历/岗位/资料选择、回答风格、
  * 静音门限、自动回答等偏好，开始/结束会话。
@@ -231,6 +232,12 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
         <SectionHeader title="回答策略" desc="控制 AI 回答的样子；开始面试后也可以在浮窗里热键操作。" />
         <SettingRow title="自动回答" desc="面试官说完自动出参考回答；关闭后需按「立即回答」或快捷键。">
           <Switch checked={autoAnswer} onCheckedChange={setAutoAnswer} />
+        </SettingRow>
+        <SettingRow
+          title="双机位面试"
+          desc="有第二个摄像头拍你和屏幕时打开。面试浮窗会换成几乎全透明、只留一圈淡边框，镜头里基本看不出来。"
+        >
+          <DualCameraSwitch scope="interview" />
         </SettingRow>
         <SettingRow
           title="等面试官说完的时间"
