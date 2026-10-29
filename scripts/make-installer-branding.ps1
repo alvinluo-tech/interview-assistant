@@ -47,3 +47,48 @@ foreach ($kind in @('sidebar', 'header', 'uninstall-header')) {
     } finally { $graphics.Dispose(); $bitmap.Dispose() }
 }
 Write-Output 'Generated installer and uninstaller branding bitmaps.'
+
+# Render at 2x; the native updater scales the artwork to its current window DPI.
+$bitmap = [Drawing.Bitmap]::new(1120, 420, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
+$graphics = [Drawing.Graphics]::FromImage($bitmap)
+$graphics.ScaleTransform(2, 2)
+$graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$graphics.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+$gradient = [Drawing.Drawing2D.LinearGradientBrush]::new(
+    [Drawing.Point]::new(0, 0), [Drawing.Point]::new(560, 210),
+    [Drawing.ColorTranslator]::FromHtml('#647DF5'), [Drawing.ColorTranslator]::FromHtml('#A78BFA'))
+try {
+    $graphics.FillRectangle($gradient, 0, 0, 560, 210)
+    $white = Brush '#FFFFFF'
+    $outline = [Drawing.Pen]::new([Drawing.Color]::FromArgb(100, 255, 255, 255), 1.4)
+    try {
+        $mark = [Drawing.Drawing2D.GraphicsPath]::new()
+        $mark.AddArc(250, 26, 16, 16, 180, 90)
+        $mark.AddArc(294, 26, 16, 16, 270, 90)
+        $mark.AddArc(294, 70, 16, 16, 0, 90)
+        $mark.AddArc(250, 70, 16, 16, 90, 90)
+        $mark.CloseFigure()
+        try { $graphics.DrawPath($outline, $mark) } finally { $mark.Dispose() }
+        $markFormat = [Drawing.StringFormat]::new()
+        $markFormat.Alignment = [Drawing.StringAlignment]::Center
+        $markFormat.LineAlignment = [Drawing.StringAlignment]::Center
+        $markFont = [Drawing.Font]::new('Microsoft YaHei UI', 42, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
+        try { $graphics.DrawString('面', $markFont, $white, [Drawing.RectangleF]::new(250, 26, 60, 60), $markFormat) } finally { $markFont.Dispose(); $markFormat.Dispose() }
+        $center = [Drawing.StringFormat]::new()
+        $center.Alignment = [Drawing.StringAlignment]::Center
+        $pill = Brush '#5B61C9'
+        $pillPath = [Drawing.Drawing2D.GraphicsPath]::new()
+        $pillPath.AddArc(193, 148, 26, 26, 90, 180)
+        $pillPath.AddArc(341, 148, 26, 26, 270, 180)
+        $pillPath.CloseFigure()
+        try { $graphics.FillPath($pill, $pillPath) } finally { $pill.Dispose(); $pillPath.Dispose() }
+        foreach ($line in @(@('Mianxu', 104, 28, $true), @('面试 · 笔试 · 模拟练习', 152, 12, $false))) {
+            $style = if ($line[3]) { [Drawing.FontStyle]::Bold } else { [Drawing.FontStyle]::Regular }
+            $font = [Drawing.Font]::new('Microsoft YaHei UI', [float]$line[2], $style, [Drawing.GraphicsUnit]::Pixel)
+            try { $graphics.DrawString([string]$line[0], $font, $white, [Drawing.RectangleF]::new(0, $line[1], 560, 44), $center) } finally { $font.Dispose() }
+        }
+        $center.Dispose()
+    } finally { $white.Dispose(); $outline.Dispose() }
+    $bitmap.Save((Join-Path $destination 'update-hero.bmp'), [Drawing.Imaging.ImageFormat]::Bmp)
+} finally { $gradient.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
+Write-Output 'Generated high-resolution native update artwork.'

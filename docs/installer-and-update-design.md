@@ -19,7 +19,7 @@ The project extends the maintained Tauri NSIS template with `windows/installer-h
 - Current-user installation is explicit. Chinese and English are included; NSIS chooses the OS language, with Simplified Chinese as the first fallback.
 - Welcome, finish and uninstall confirmation text use concise bilingual copy. The uninstall text distinguishes program removal from optional application-data deletion.
 - Installer and uninstaller use existing application icons and dedicated 24-bit BMP header/sidebar artwork. Source generation lives in `scripts/make-installer-branding.ps1`.
-- Passive update progress uses a compact, DPI-scaled native window, the brand color, explanatory text and the original NSIS progress range. Extraction counters and disabled wizard navigation are hidden in that mode. Interactive installation keeps the full wizard.
+- Passive automatic updates use a 560×340 logical-pixel native card: a blue/lavender brand hero above a white pane with installation status, the actual package version and the original NSIS progress control. The artwork is rendered at 2× resolution and scales with the window DPI. Windows 11 also colors the native caption; older systems retain their normal caption. Extraction counters and disabled wizard navigation are hidden. Interactive installation keeps the full wizard.
 - Older versions cannot directly overwrite newer installations (`allowDowngrades: false`). The upstream interactive installer can still offer uninstall-first handling; this setting is not a blanket ban on deliberately installing an older version after uninstalling.
 - Existing native update signatures, main-window permissions, installation-location checks, and the updater's guardian exit hook are retained.
 
@@ -35,6 +35,10 @@ pnpm build
 ```
 
 On Windows, `node scripts/installer-branding-smoke.mjs` creates an isolated project under `artifacts/`, compiles an inert Rust executable and builds the actual NSIS installer/uninstaller skin. It never launches or installs the fixture and requires no production signing credentials. Both desktop workflows run this compile check before the main installer build.
+
+`node scripts/native-update-preview.mjs` (or `--english`) builds a separately labeled, no-op native preview using the same `windows/update-card.nsh` include as production. It does not launch automatically. The preview only extracts artwork into NSIS's temporary plugin directory, waits briefly and closes. It writes no application files, installation registrations, shortcuts or uninstaller. Its version label and footer explicitly identify it as a UI preview. It is suitable for visual review without installing another fixture. The preview does not replace end-to-end acceptance of a signed production upgrade.
+
+The native card iteration passed 21 presentation/release/reliability tests and production NSIS compilation. Chinese and English native previews were inspected with the same PerMonitorV2 DPI manifest as the maintained installer. No signed production upgrade was executed for this visual iteration.
 
 For the browser flow, use the existing isolated Vite server on port 1438 with `MIANSHI_UI_SMOKE=1`, then run `node scripts/updater-ui-smoke.mjs`. Synthetic snapshots cover download consent, busy installation gates, focus trapping/restoration, narrow layout, dark theme, reduced motion, safe release-note display, failure details and portable-install fallback. Screenshots explicitly identify the preview as test data.
 
