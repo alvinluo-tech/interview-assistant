@@ -8,7 +8,7 @@ export function isTauri(): boolean {
   return '__TAURI_INTERNALS__' in window;
 }
 
-async function cmd<T>(name: string, args?: Record<string, unknown>): Promise<T> {
+export async function cmd<T>(name: string, args?: Record<string, unknown>): Promise<T> {
   if (!isTauri()) return null as T;
   return invoke<T>(name, args);
 }

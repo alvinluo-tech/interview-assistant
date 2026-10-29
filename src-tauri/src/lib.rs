@@ -9,6 +9,7 @@ mod code_sandbox;
 mod macos_secrets;
 mod capture;
 mod disguise;
+mod dual_screen;
 mod hotkeys;
 #[cfg(windows)]
 mod identity_resources;
@@ -109,6 +110,7 @@ pub fn run() {
         .manage(audio::AudioCaptureState::default())
         .manage(protection::CaptureState::default())
         .manage(disguise_state)
+        .manage(dual_screen::DualState::default())
         .on_page_load(|webview, _payload| {
             let window = webview.window();
             if let Err(error) =
@@ -167,6 +169,12 @@ pub fn run() {
             disguise::cmd_get_disguise_status,
             disguise::cmd_set_disguise,
             disguise::cmd_relaunch,
+            // 手机副屏（exam-dual 本地中继）
+            dual_screen::cmd_dual_start,
+            dual_screen::cmd_dual_send,
+            dual_screen::cmd_dual_peer_count,
+            dual_screen::cmd_dual_stop,
+            overlay::cmd_get_overlay_rect,
             // 杂项
             misc::cmd_read_recent_logs,
             misc::cmd_read_native_crash,

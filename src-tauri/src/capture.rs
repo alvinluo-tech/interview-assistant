@@ -43,13 +43,21 @@ pub fn cmd_capture_screen(
     capture_mode: Option<String>,
     _protected_on_top: Option<bool>,
 ) -> Result<String, String> {
-    // 短暂收起以避免在演示模式/系统不支持时截到自身浮窗。
+    // 浮窗已处于捕获排除（WDA）时无需隐藏——隐藏/恢复窗口会让 WebView2 的
+    // 事件队列在副屏接管等场景下丢事件；只有未排除（演示模式/系统不支持）才回退到收起。
     let overlay = app.get_webview_window("overlay");
+    #[cfg(windows)]
+    let already_excluded = crate::protection::window(&app, "overlay")
+        .map(|w| crate::protection::read_affinity(&w).map(|a| a == 0x11).unwrap_or(false))
+        .unwrap_or(false);
+    #[cfg(not(windows))]
+    let already_excluded = false;
     let was_overlay_visible = overlay
         .as_ref()
         .map(|w| w.is_visible().unwrap_or(false))
         .unwrap_or(false);
-    if was_overlay_visible {
+    let need_hide = was_overlay_visible && !already_excluded;
+    if need_hide {
         if let Some(w) = &overlay {
             let _ = w.hide();
         }
@@ -63,7 +71,7 @@ pub fn cmd_capture_screen(
         }
         _ => Err("截图范围无效，请选择屏幕或前台窗口。".into()),
     };
-    if was_overlay_visible {
+    if need_hide {
         if let Some(w) = &overlay {
             let _ = w.show();
         }

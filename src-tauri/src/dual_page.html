@@ -1,0 +1,265 @@
+<!doctype html>
+<!--
+  面灵AI · 手机副屏（本地 exam-dual）
+  由桌面端 dual_screen.rs 托管；token 校验后建立 WebSocket。
+  对齐原版副屏能力：接管显示、光标同步、按钮热区上报、30s 心跳、
+  断线自动重连（期间电脑不弹回浮窗）、iPhone 常亮、光标大小设置（2026-10-28）、
+  禁用双指缩放（2026-10-28）、「切回电脑」。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>笔试副屏</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b1220; --card:#111a2c; --line:#1e293b; --fg:#e2e8f0; --muted:#8fa3bf; --accent:#3b82f6; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    touch-action: none; overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
+  #app { display:flex; flex-direction:column; height:100dvh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  header { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); flex: none; }
+  header .brand { font-weight:600; font-size:14px; }
+  header .dot { width:8px; height:8px; border-radius:99px; background:#64748b; flex:none; }
+  header .dot.on { background:#22c55e; }
+  header .dot.warn { background:#f59e0b; }
+  header .status { font-size:11px; color:var(--muted); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #back { border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:8px; padding:5px 10px; font-size:12px; }
+  #settings-btn { border:none; background:none; color:var(--muted); font-size:16px; padding:4px 6px; }
+  main { flex:1; overflow-y:auto; padding:10px 12px; touch-action: pan-y; }
+  .turn { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .turn .meta { font-size:10px; color:var(--muted); margin-bottom:6px; }
+  .md { font-size:13.5px; word-break: break-word; white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+  .md pre { background:#0a0f1c; border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre; }
+  .empty { color:var(--muted); text-align:center; padding: 32px 12px; font-size:13px; }
+  footer { flex:none; border-top:1px solid var(--line); padding:8px 10px calc(8px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:6px; }
+  .row { display:flex; gap:6px; }
+  button.act { flex:1; min-height:44px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:13px; }
+  button.act.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.act:active { transform: scale(.97); }
+  button.act:disabled { opacity:.4; }
+  #mode { font-size:11px; color:var(--muted); text-align:center; }
+  #sheet { position:fixed; inset:auto 0 0 0; background:var(--card); border-top:1px solid var(--line);
+    border-radius:14px 14px 0 0; padding:14px 16px calc(18px + env(safe-area-inset-bottom)); display:none; }
+  #sheet.open { display:block; }
+  #sheet h3 { margin:0 0 8px; font-size:14px; }
+  #sheet label { font-size:12px; color:var(--muted); display:flex; justify-content:space-between; }
+  #sheet input[type=range] { width:100%; }
+  #cursor { position:fixed; left:-100px; top:-100px; pointer-events:none; z-index:9;
+    width:16px; height:16px; margin: -8px 0 0 -8px; border-radius:99px;
+    border:2px solid #fff; background:rgba(59,130,246,.75); box-shadow:0 0 8px rgba(0,0,0,.5); }
+  #banner { display:none; padding:10px 12px; text-align:center; color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="dot" id="dot"></span>
+    <span class="brand" id="brand">笔试副屏</span>
+    <span class="status" id="status">连接中…</span>
+    <button id="back" data-zone="exit">切回电脑</button>
+    <button id="settings-btn" aria-label="显示设置">⚙</button>
+  </header>
+  <main id="main"></main>
+  <div id="banner">已切回电脑，可以关掉这个页面。</div>
+  <footer>
+    <div class="row">
+      <button class="act primary" data-zone="solve" id="b-solve">解题</button>
+      <button class="act" data-zone="direct">直接答</button>
+      <button class="act" data-zone="add-page" id="b-page">加页</button>
+    </div>
+    <div class="row">
+      <button class="act" data-zone="scroll-up">↑ 上滚</button>
+      <button class="act" data-zone="mode-next" id="b-mode">快速</button>
+      <button class="act" data-zone="scroll-down">下滚 ↓</button>
+    </div>
+    <div class="row" id="followups"></div>
+    <div id="mode">笔试浮窗 · 手机副屏</div>
+  </footer>
+</div>
+<div id="cursor"></div>
+<div id="sheet">
+  <h3>显示设置</h3>
+  <label>光标大小 <span id="cur-size-val">16</span></label>
+  <input type="range" id="cur-size" min="8" max="44" step="2" value="16">
+  <p style="font-size:11px;color:var(--muted);margin:8px 0 0">手机放远了也找得到鼠标在哪。</p>
+</div>
+<script>
+(function () {
+  'use strict';
+  var params = new URLSearchParams(location.search);
+  var token = params.get('token') || (location.hash || '').replace(/^#/, '');
+  var wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?token=' + encodeURIComponent(token);
+  var main = document.getElementById('main');
+  var statusEl = document.getElementById('status');
+  var dot = document.getElementById('dot');
+  var cursor = document.getElementById('cursor');
+  var released = false;
+  var ws = null;
+  var backoff = 800;
+
+  // ---- 光标大小（本地持久化） ----
+  var sizeInput = document.getElementById('cur-size');
+  var sizeVal = document.getElementById('cur-size-val');
+  var saved = localStorage.getItem('ml-dual-cursor-size');
+  if (saved) { sizeInput.value = saved; }
+  function applyCursorSize() {
+    var s = sizeInput.value;
+    sizeVal.textContent = s;
+    cursor.style.width = s + 'px';
+    cursor.style.height = s + 'px';
+    cursor.style.margin = (-s / 2) + 'px 0 0 ' + (-s / 2) + 'px';
+    localStorage.setItem('ml-dual-cursor-size', s);
+  }
+  sizeInput.addEventListener('input', applyCursorSize);
+  applyCursorSize();
+  document.getElementById('settings-btn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    document.getElementById('sheet').classList.toggle('open');
+  });
+  document.getElementById('sheet').addEventListener('click', function (e) { e.stopPropagation(); });
+  document.addEventListener('click', function () { document.getElementById('sheet').classList.remove('open'); });
+
+  // ---- iPhone 常亮：轻触即申请 wake lock，页面恢复时重申请 ----
+  var wakeLock = null;
+  function keepAwake() {
+    if (navigator.wakeLock && !wakeLock) {
+      navigator.wakeLock.request('screen').then(function (l) {
+        wakeLock = l;
+        l.addEventListener('release', function () { wakeLock = null; });
+      }).catch(function () {});
+    }
+  }
+  document.addEventListener('touchstart', keepAwake, { passive: true });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { keepAwake(); sendZones(); } });
+
+  // ---- WebSocket 连接与重连 ----
+  function setStatus(text, cls) { statusEl.textContent = text; dot.className = 'dot ' + (cls || ''); }
+  function send(obj) { if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)); } catch (e) {} } }
+  function connect() {
+    if (released) return;
+    setStatus('连接中…', 'warn');
+    try { ws = new WebSocket(wsUrl); } catch (e) { return scheduleReconnect(); }
+    ws.onopen = function () {
+      backoff = 800;
+      setStatus('已连接', 'on');
+      send({ t: 'hello', w: window.innerWidth, h: window.innerHeight });
+      sendZones();
+    };
+    ws.onmessage = function (ev) {
+      var m;
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.t === 'state') render(m.data || {});
+      else if (m.t === 'cursor') {
+        var s = cursor.offsetWidth || 16;
+        cursor.style.left = (m.x * window.innerWidth) + 'px';
+        cursor.style.top = (m.y * window.innerHeight) + 'px';
+      } else if (m.t === 'ping') send({ t: 'pong', id: m.id });
+      else if (m.t === 'do') {
+        if (m.id === 'scroll-up') main.scrollBy({ top: -main.clientHeight * 0.8, behavior: 'smooth' });
+        else if (m.id === 'scroll-down') main.scrollBy({ top: main.clientHeight * 0.8, behavior: 'smooth' });
+      } else if (m.t === 'released') {
+        released = true;
+        setStatus('已切回电脑', '');
+        document.getElementById('banner').style.display = 'block';
+        try { ws.close(); } catch (e) {}
+      }
+    };
+    ws.onclose = function () {
+      if (released) return;
+      setStatus('重连中…', 'warn');
+      scheduleReconnect();
+    };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+  }
+  function scheduleReconnect() {
+    setTimeout(connect, backoff);
+    backoff = Math.min(5000, backoff * 1.7);
+  }
+  connect();
+
+  // 30s 心跳（对齐原版副屏 ping/pong RTT）
+  setInterval(function () { send({ t: 'ping', id: Date.now() }); }, 30000);
+
+  // ---- 热区上报：按钮/卡片的归一化矩形（电脑鼠标据此命中） ----
+  function sendZones() {
+    var zones = [];
+    document.querySelectorAll('[data-zone]').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      zones.push({
+        id: el.getAttribute('data-zone'),
+        x: r.left / window.innerWidth, y: r.top / window.innerHeight,
+        w: r.width / window.innerWidth, h: r.height / window.innerHeight,
+      });
+    });
+    send({ t: 'zones', zones: zones });
+  }
+  window.addEventListener('resize', sendZones);
+
+  // ---- 动作 ----
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-zone]');
+    if (!el || released) return;
+    var id = el.getAttribute('data-zone');
+    if (id === 'exit') { send({ t: 'exit' }); setStatus('切回电脑中…', 'warn'); return; }
+    if (id === 'scroll-up') { main.scrollBy({ top: -main.clientHeight * 0.8, behavior: 'smooth' }); return; }
+    if (id === 'scroll-down') { main.scrollBy({ top: main.clientHeight * 0.8, behavior: 'smooth' }); return; }
+    if (id.indexOf('turn:') === 0) return; // 题卡仅展示
+    send({ t: 'action', id: id });
+  });
+
+  // ---- 状态渲染 ----
+  var lastState = null;
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function mdLite(src) {
+    var parts = String(src).split(/```/);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (i % 2 === 1) {
+        var code = parts[i].replace(/^[a-zA-Z0-9+#-]*\n/, '');
+        out.push('<pre>' + esc(code) + '</pre>');
+      } else {
+        out.push(esc(parts[i]).replace(/\n/g, '<br>'));
+      }
+    }
+    return out.join('');
+  }
+  function render(st) {
+    lastState = st;
+    document.getElementById('brand').textContent = st.brand || '笔试副屏';
+    document.getElementById('b-mode').textContent = st.modeLabel || '快速';
+    var solveBtn = document.getElementById('b-solve');
+    solveBtn.disabled = !!st.solving;
+    solveBtn.textContent = st.solving ? (st.statusText || '解答中…') : '解题';
+    var pageBtn = document.getElementById('b-page');
+    pageBtn.textContent = st.pendingPages > 0 ? ('加页 ' + st.pendingPages + '/' + (st.maxPages || 6)) : '加页';
+    pageBtn.disabled = st.pendingPages >= (st.maxPages || 6);
+    var fu = document.getElementById('followups');
+    fu.innerHTML = '';
+    (st.followUps || []).forEach(function (f) {
+      var b = document.createElement('button');
+      b.className = 'act';
+      b.setAttribute('data-zone', 'followup:' + f.label);
+      b.textContent = f.label;
+      fu.appendChild(b);
+    });
+    var html = '';
+    var turns = st.turns || [];
+    if (turns.length === 0) {
+      html = '<div class="empty">还没有解答。<br>在电脑上按「解题」或点上面的按钮开始。</div>';
+    } else {
+      turns.forEach(function (t, i) {
+        html += '<div class="turn" data-zone="turn:' + i + '"><div class="meta">第 ' + (i + 1) + ' 题 · ' + (t.tsText || '') + '</div><div class="md">' + mdLite(t.md || '') + '</div></div>';
+      });
+    }
+    main.innerHTML = html;
+    main.scrollTop = main.scrollHeight;
+    sendZones();
+  }
+})();
+</script>
+</body>
+</html>

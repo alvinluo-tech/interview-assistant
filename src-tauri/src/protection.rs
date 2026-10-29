@@ -68,7 +68,7 @@ pub fn initialize(app: &AppHandle) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn read_affinity(window: &Window) -> Result<u32, String> {
+pub(crate) fn read_affinity(window: &Window) -> Result<u32, String> {
     use windows::Win32::UI::WindowsAndMessaging::GetWindowDisplayAffinity;
     let hwnd = window.hwnd().map_err(|e| e.to_string())?;
     let mut affinity = 0;

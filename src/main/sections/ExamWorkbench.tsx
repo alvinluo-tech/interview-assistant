@@ -29,6 +29,8 @@ import {
 } from '@/lib/examEngine';
 import { startOverlayFlow } from '../MainWindow';
 import {CodeVerificationPanel} from '../CodeVerificationPanel';
+import { DualCameraSwitch } from '@/lib/dualCamera';
+import { DualScreenCard } from './DualScreenCard';
 
 export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void }) {
   const goals = useData<Goal[]>('goals', [])[0];
@@ -245,6 +247,12 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
         <SettingRow title="快捷键提示" desc="在浮窗按钮上显示对应键位。">
           <Switch checked={showHints} onCheckedChange={setShowHints} />
         </SettingRow>
+        <SettingRow
+          title="双机位笔试"
+          desc="有第二个摄像头拍你和屏幕时打开。笔试浮窗会换成几乎全透明、只留一圈淡边框，镜头里基本看不出来。"
+        >
+          <DualCameraSwitch scope="exam" />
+        </SettingRow>
         <SettingRow title="截图范围（Windows）" desc="默认截取屏幕；前台窗口模式只捕获当前题目窗口。空白图片会阻止发送。">
           <Select value={captureMode} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">屏幕</option><option value="window">前台窗口</option></Select>
         </SettingRow>
@@ -254,6 +262,8 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
       </Card>
 
       <CodeVerificationPanel />
+
+      <DualScreenCard />
 
       <div className="grid grid-cols-3 gap-3">
         {[

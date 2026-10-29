@@ -71,6 +71,10 @@ html.overlay #root {
 html.ov-palette-capturing body.overlay #root {
   opacity: 0;
 }
+/* 手机副屏接管：本地浮窗整体隐身（保留 hit-test，热区由手机布局映射） */
+html.dual-takeover body.overlay #root {
+  opacity: 0;
+}
 html.ov-palette-fade body.overlay #root,
 html.ov-palette-fade body.overlay #root * {
   transition:

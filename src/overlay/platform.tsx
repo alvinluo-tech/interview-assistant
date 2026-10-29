@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { onEvent, setOverlayInteractive, setOverlayZones, setDragActive } from '@/lib/bridge';
+import { isZonesSuppressed } from '@/lib/dualScreen';
 import { getSetting, setSetting } from '@/lib/store';
 import type { OverlayMode } from '@/lib/overlayStyle';
 
@@ -77,6 +78,7 @@ export function OverlayPlatformProvider({
     let last = '';
     const scan = async () => {
       if (stopped) return;
+      if (isZonesSuppressed()) return; // 副屏接管期间热区由 dualScreen 接管
       try {
         const win = getCurrentWindow();
         const [sf, outer] = await Promise.all([win.scaleFactor(), win.outerPosition()]);

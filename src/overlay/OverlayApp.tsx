@@ -96,6 +96,17 @@ export function OverlayApp() {
     }
   }, [active, style.interviewWidth, style.interviewHeight, style.examWidth, style.examHeight]);
 
+  // 手机副屏接管（exam-dual）：无连接时静默待机，手机上线后隐身本地浮窗
+  useEffect(() => {
+    if (!active) return;
+    if (seqMode() !== 'exam') return;
+    let cleanup: (() => void) | null = null;
+    void import('@/lib/dualScreen').then(({ startDualTakeover }) => {
+      cleanup = startDualTakeover();
+    });
+    return () => cleanup?.();
+  }, [active]);
+
   function seqMode(): ActiveMode {
     return (getSetting('overlay.mode', 'exam') as ActiveMode) ?? 'exam';
   }

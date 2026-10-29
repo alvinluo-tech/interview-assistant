@@ -60,6 +60,8 @@ pub struct OverlayState {
     pub ready_seq: AtomicI64,
     /// 光标轮询线程计数（诊断用）
     pub poll_ticks: std::sync::atomic::AtomicU64,
+    /// 上次 cursor-point 上报位置（只在移动时上报）
+    pub last_cursor_point: Mutex<Option<(i32, i32)>>,
 }
 
 impl Default for OverlayState {
@@ -76,6 +78,7 @@ impl Default for OverlayState {
             last_heartbeat: Mutex::new(Instant::now()),
             ready_seq: AtomicI64::new(0),
             poll_ticks: std::sync::atomic::AtomicU64::new(0),
+            last_cursor_point: Mutex::new(None),
         }
     }
 }
@@ -245,6 +248,17 @@ pub fn cmd_get_cursor_pos() -> Result<(i32, i32), String> {
     }
 }
 
+/// 副屏光标归一化用：浮窗窗口屏幕矩形 (x, y, w, h)
+#[tauri::command]
+pub fn cmd_get_overlay_rect(app: AppHandle) -> Result<(i32, i32, u32, u32), String> {
+    let win = app
+        .get_webview_window("overlay")
+        .ok_or("overlay window not found")?;
+    let pos = win.outer_position().map_err(|e| e.to_string())?;
+    let size = win.outer_size().map_err(|e| e.to_string())?;
+    Ok((pos.x, pos.y, size.width, size.height))
+}
+
 #[tauri::command]
 pub fn cmd_set_cursor_point_feed(state: State<'_, OverlayState>, on: bool) {
     state.cursor_feed.store(on, Ordering::SeqCst);
@@ -382,11 +396,17 @@ pub fn spawn_cursor_poller(app: AppHandle) {
                 }
             }
             if feed {
-                let _ = app.emit_to(
-                    "overlay",
-                    "cursor-point",
-                    CursorPointPayload { x: p.x, y: p.y },
-                );
+                // 仅在移动时上报（原版同样只在变化时喂光标），避免高频事件淹没 WebView2 通道
+                let mut last = state.last_cursor_point.lock().unwrap();
+                if last.map(|(x, y)| x != p.x || y != p.y).unwrap_or(true) {
+                    *last = Some((p.x, p.y));
+                    drop(last);
+                    let _ = app.emit_to(
+                        "overlay",
+                        "cursor-point",
+                        CursorPointPayload { x: p.x, y: p.y },
+                    );
+                }
             }
             if interactive {
                 let mut last = state.last_hit.lock().unwrap();
