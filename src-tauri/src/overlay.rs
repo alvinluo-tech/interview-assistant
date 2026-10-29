@@ -50,6 +50,7 @@ pub struct OverlayState {
     pub zones: Mutex<Vec<ZoneRect>>,
     pub interactive: AtomicBool,
     pub drag_active: AtomicBool,
+    drag_epoch: Mutex<u64>,
     pub cursor_feed: AtomicBool,
     pub overlay_visible: AtomicBool,
     pub session_active: AtomicBool,
@@ -70,6 +71,7 @@ impl Default for OverlayState {
             zones: Mutex::new(Vec::new()),
             interactive: AtomicBool::new(false),
             drag_active: AtomicBool::new(false),
+            drag_epoch: Mutex::new(0),
             cursor_feed: AtomicBool::new(false),
             overlay_visible: AtomicBool::new(false),
             session_active: AtomicBool::new(false),
@@ -80,6 +82,22 @@ impl Default for OverlayState {
             poll_ticks: std::sync::atomic::AtomicU64::new(0),
             last_cursor_point: Mutex::new(None),
         }
+    }
+}
+
+impl OverlayState {
+    fn begin_drag(&self, active: bool) -> Result<Option<u64>, String> {
+        let mut epoch = self.drag_epoch.lock().map_err(|_| "拖动状态不可用")?;
+        if active && self.drag_active.load(Ordering::SeqCst) { return Ok(None); }
+        *epoch = epoch.wrapping_add(1);
+        self.drag_active.store(active, Ordering::SeqCst);
+        Ok(Some(*epoch))
+    }
+    fn finish_drag(&self, epoch: u64) -> bool {
+        let Ok(current) = self.drag_epoch.lock() else { return false; };
+        if *current != epoch { return false; }
+        self.drag_active.store(false, Ordering::SeqCst);
+        true
     }
 }
 
@@ -145,6 +163,7 @@ pub fn cmd_show_overlay(app: AppHandle) -> Result<i64, String> {
 pub fn cmd_hide_overlay(app: AppHandle) -> Result<(), String> {
     let state: State<OverlayState> = app.state();
     state.overlay_visible.store(false, Ordering::SeqCst);
+    let _ = state.begin_drag(false);
     *state.last_hit.lock().unwrap() = None;
     let _ = app.emit_to("overlay", "overlay-hidden", ());
     let _ = app.emit_to("main", "overlay-hidden", ());
@@ -193,19 +212,20 @@ pub fn cmd_set_drag_active(
     state: State<'_, OverlayState>,
     active: bool,
 ) -> Result<(), String> {
-    if state.drag_active.swap(active, Ordering::SeqCst) && active { return Ok(()); }
+    let win = if active { Some(overlay_window(&app).ok_or("overlay window missing")?) } else { None };
+    let Some(epoch) = state.begin_drag(active)? else { return Ok(()); };
     let _ = app.emit_to("overlay", "drag-mode-changed", DragModePayload { active });
     if !active {
         return Ok(());
     }
     // 悬停进入拖动：窗口跟随光标，光标静止 0.8s 即释放（原版语义）
-    let win = overlay_window(&app).ok_or("overlay window missing")?;
+    let win = win.ok_or("overlay window missing")?;
     #[cfg(any(windows, target_os = "macos"))]
     {
         std::thread::spawn(move || {
-            if let Err(error) = follow_cursor(&win) { log::warn!("[overlay-drag] {error}"); }
+            if let Err(error) = follow_cursor(&win, epoch) { log::warn!("[overlay-drag] {error}"); }
             let st: State<OverlayState> = win.app_handle().state();
-            st.drag_active.store(false, Ordering::SeqCst);
+            if !st.finish_drag(epoch) { return; }
             let _ = win.app_handle().emit_to(
                 "overlay",
                 "drag-mode-changed",
@@ -227,7 +247,7 @@ fn drag_cursor(app: &AppHandle) -> Result<(f64, f64), String> {
     Ok((p.x, p.y))
 }
 
-fn follow_cursor(win: &WebviewWindow) -> Result<(), String> {
+fn follow_cursor(win: &WebviewWindow, epoch: u64) -> Result<(), String> {
     let start = win.outer_position().map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     let scale = win.scale_factor().map_err(|e| e.to_string())?;
@@ -240,7 +260,7 @@ fn follow_cursor(win: &WebviewWindow) -> Result<(), String> {
     loop {
         std::thread::sleep(Duration::from_millis(16));
         let state: State<OverlayState> = win.app_handle().state();
-        if !state.drag_active.load(Ordering::SeqCst) || !state.overlay_visible.load(Ordering::SeqCst) { break; }
+        if *state.drag_epoch.lock().map_err(|_| "拖动状态不可用")? != epoch || !state.drag_active.load(Ordering::SeqCst) || !state.overlay_visible.load(Ordering::SeqCst) { break; }
         let current = drag_cursor(win.app_handle())?;
         if current != last {
             last = current;

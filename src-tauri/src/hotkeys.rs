@@ -67,14 +67,7 @@ fn handle_panic(app: &AppHandle) {
     let state = app.state::<crate::overlay::OverlayState>();
     if state.overlay_visible.load(std::sync::atomic::Ordering::SeqCst) {
         // 瞬间隐藏浮窗（无提示）
-        let _ = app.emit_to("overlay", "overlay-hidden", ());
-        let _ = app.emit_to("main", "overlay-hidden", ());
-        state
-            .overlay_visible
-            .store(false, std::sync::atomic::Ordering::SeqCst);
-        if let Some(win) = app.get_webview_window("overlay") {
-            let _ = win.hide();
-        }
+        let _ = crate::overlay::cmd_hide_overlay(app.clone());
     } else if state.session_active.load(std::sync::atomic::Ordering::SeqCst) {
         let _ = crate::overlay::show_overlay_and_emit(app);
     } else {
