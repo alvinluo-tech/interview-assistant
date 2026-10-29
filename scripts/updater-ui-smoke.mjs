@@ -9,7 +9,7 @@ await mkdir('artifacts', { recursive: true });
 await writeFile('artifacts/updater-ui.html', `<!doctype html><html><meta charset="utf-8"><div id="root"></div>
 <script>
 window.__errors=[]; addEventListener('error',e=>__errors.push(e.message)); addEventListener('unhandledrejection',e=>__errors.push(String(e.reason)));
-window.__test={calls:[],callbacks:new Map(),listeners:new Map(),state:{phase:'idle',currentVersion:'0.1.1',version:null,notes:'Synthetic release notes',downloaded:0,busy:false,canInstall:true}};
+window.__test={calls:[],callbacks:new Map(),listeners:new Map(),state:{phase:'idle',currentVersion:'0.1.2',version:null,date:'2026-10-29T08:48:11Z',notes:'# Mianxu\\n\\n更新体验更清晰，安装时间由你决定。\\n\\n## 本次改进\\n- **更新卡片**：更清晰的版本与更新内容\\n- **下载进度**：实时显示文件大小和完成比例\\n- **安装确认**：会话结束后再重启更新',downloaded:0,busy:false,canInstall:true}};
 window.__test.emit = patch => { Object.assign(__test.state,patch); const id=__test.listeners.get('updater-state'); __test.callbacks.get(id)?.({payload:{...__test.state}}); };
 window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:()=>{}};
 window.__TAURI_INTERNALS__={metadata:{currentWindow:{label:'main'},currentWebview:{label:'main'}},
@@ -18,7 +18,7 @@ invoke:async(name,args)=>{
   __test.calls.push(name);
   if(name==='plugin:event|listen'){__test.listeners.set(args.event,args.handler);return args.handler;}
   if(name==='plugin:store|load')return 1;
-  if(name==='cmd_updater_check')Object.assign(__test.state,{phase:'available',version:'0.1.2',error:null});
+  if(name==='cmd_updater_check')Object.assign(__test.state,{phase:'available',version:'0.1.3',error:null});
   if(name==='cmd_updater_download'){
     __test.emit({phase:'downloading',downloaded:524288,total:1048576,error:null});
     await new Promise(resolve=>setTimeout(resolve,400));
@@ -44,11 +44,28 @@ const browser = spawn(executable, ['--headless=new', '--no-first-run', '--no-def
 const cdp = new DesktopCdp(port);
 try {
   await cdp.connect();
+  await cdp.command('Emulation.setDeviceMetricsOverride', { width: 1100, height: 850, deviceScaleFactor: 1, mobile: false });
   try { await cdp.click('检查更新'); }
   catch (error) { console.error(await cdp.evaluate('({errors:__errors,body:document.body.innerText})')); throw error; }
-  await cdp.waitFor("document.body.innerText.includes('发现新版本 0.1.2')");
+  await cdp.waitFor("document.body.innerText.includes('发现新版本 0.1.3')");
+  await cdp.waitFor("!!document.querySelector('[role=dialog]')");
+  assert.equal(await cdp.evaluate("document.querySelector('[role=dialog]').getAttribute('aria-modal')"), 'true');
+  assert.equal(await cdp.evaluate("document.querySelector('.update-notes').open"), false);
+  assert.equal(await cdp.evaluate("document.querySelectorAll('.update-primary').length"), 1);
+  assert.equal(await cdp.evaluate("document.querySelector('.update-highlights').innerText.includes('**')"), false);
+  await delay(300);
+  const saveScreenshot = async name => {
+    const shot = await cdp.command('Page.captureScreenshot', { format: 'png' });
+    await writeFile(`artifacts/${name}.png`, Buffer.from(shot.data, 'base64'));
+  };
+  await saveScreenshot('updater-branded-available');
+  await cdp.command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  await delay(200);
+  assert.equal(await cdp.evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+  await saveScreenshot('updater-branded-narrow');
+  await cdp.command('Emulation.setDeviceMetricsOverride', { width: 1100, height: 850, deviceScaleFactor: 1, mobile: false });
   await cdp.click('下载更新');
-  await cdp.waitFor("!!document.querySelector('progress')");
+  await cdp.waitFor("!!document.querySelector('[role=progressbar]')");
   await cdp.waitFor("document.body.innerText.includes('重启并安装')");
   assert.equal(await cdp.evaluate("__test.calls.includes('cmd_updater_install')"), false);
   await cdp.click('稍后安装');
@@ -61,9 +78,11 @@ try {
   await cdp.evaluate('__test.emit({busy:false})');
   await cdp.click('重启并安装');
   assert.equal(await cdp.evaluate("__test.calls.filter(n=>n==='cmd_updater_install').length"), 1);
-  assert.equal(await cdp.evaluate("!!document.querySelector('button[aria-label=关闭]')"), false);
+  assert.equal(await cdp.evaluate("!!document.querySelector('button[aria-label=关闭更新窗口]')"), false);
   await cdp.evaluate("__test.emit({phase:'error',error:'签名验证失败'})");
   await cdp.waitFor("document.querySelector('[role=alert]')?.textContent.includes('签名验证失败')");
+  assert.equal(await cdp.evaluate("document.querySelector('.update-error details').open"), false);
+  await saveScreenshot('updater-branded-error');
   await cdp.evaluate("__test.emit({phase:'available',canInstall:false,installReason:'免安装版请手动更新',error:null})");
   await cdp.waitFor("document.body.innerText.includes('免安装版请手动更新')");
   assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='下载更新')"), false);

@@ -123,6 +123,9 @@ jobs:
       - name: Test updater consent and state handling
         run: pnpm test:updater
 
+      - name: Test update presentation and installer branding
+        run: node scripts/test-update-design.mjs
+
       # The native tests embed the frontend via generate_context!().
       - name: Typecheck and build frontend
         run: pnpm build

@@ -16,7 +16,7 @@ test('release notes become bounded readable sections with safe text instead of r
   assert.equal(notes.blocks[0].kind, 'heading');
   assert.ok(notes.blocks.some(block => block.kind === 'code' && block.text.includes('<script>')));
   assert.equal(releaseNotes('').blocks.length, 0);
-  assert.ok(releaseNotes('x'.repeat(100_000)).blocks[0].text.length <= 32_000);
+  assert.ok(releaseNotes('x'.repeat(100_000)).summary.length <= 32_000);
 });
 
 test('progress never invents a percentage when the content length is unknown', () => {
