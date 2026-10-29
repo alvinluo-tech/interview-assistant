@@ -106,6 +106,8 @@ let tickTimer: number | null = null;
 let generation = 0;
 let requestController: AbortController | null = null;
 let startingSolve = false;
+let turnSequence = 0;
+function turnId() { return `t${Date.now()}-${++turnSequence}`; }
 function cancelRequest() {
   generation++;
   requestController?.abort();
@@ -144,6 +146,10 @@ export function customizationSummary(): string {
 
 export async function startExamSession(goalId: string | null): Promise<void> {
   cancelRequest();
+  await createSessionForGeneration(goalId, generation);
+}
+
+async function createSessionForGeneration(goalId: string | null, current: number): Promise<void> {
   const mode = getSetting('exam.mode', 'quick') as ExamModeKey;
   const goals = readData<{ id: string; name: string; companyName?: string }[]>('goals', []);
   const goal = goals.find((g) => g.id === goalId);
@@ -152,6 +158,7 @@ export async function startExamSession(goalId: string | null): Promise<void> {
     goalId,
     mode,
   });
+  if (current !== generation) { await completeExamSession(session.id); return; }
   setState({
     sessionId: session.id,
     phase: 'idle',
@@ -186,9 +193,11 @@ async function persistTurns() {
 
 function captureOptions(){return {protectedOnTop:true,compatibilityMode:getSetting('capture.compatibilityMode',false),captureMode:getSetting('capture.mode','screen')};}
 export async function capturePage(): Promise<string> {
+  const current = generation;
   setState({ phase: 'capturing', statusText: '截屏中…' });
   try {
     const dataUrl = await captureScreen(captureOptions());
+    if (current !== generation) return dataUrl;
     setState({
       phase: 'idle',
       statusText: '',
@@ -196,6 +205,7 @@ export async function capturePage(): Promise<string> {
     });
     return dataUrl;
   } catch (e) {
+    if (current !== generation) throw e;
     setState({
       phase: 'error',
       errorMessage: `截屏失败：${String((e as Error).message ?? e)}`,
@@ -211,14 +221,18 @@ export function clearPendingScreenshots() {
 export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   if (startingSolve || requestController || ['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) return;
   startingSolve = true;
-  if (!state.sessionId) {
-    try { await startExamSession(state.goalId); }
-    catch (error) { startingSolve = false; throw error; }
-  }
-  startingSolve = false;
   const current = ++generation;
   const controller = new AbortController();
   requestController = controller;
+  if (!state.sessionId) {
+    try { await createSessionForGeneration(state.goalId, current); }
+    catch (error) {
+      if (current !== generation) return;
+      startingSolve = false; requestController = null; throw error;
+    }
+  }
+  if (current !== generation) return;
+  startingSolve = false;
   const modeInfo = examModeInfo(state.mode);
   const maxPages = modeInfo.maxScreenshotPages;
   let shots = opts?.screenshots ?? state.pendingScreenshots;
@@ -243,7 +257,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     errorMessage: null,
   });
   const turn: SolverTurn = {
-    id: `t${Date.now()}`,
+    id: turnId(),
     reasoning: '',
     reasoningDone: false,
     reasoningDurationMs: 0,
@@ -334,7 +348,7 @@ export async function followUp(opts: {
   requestController = controller;
   const prefix = `> ${opts.message ?? labelOfIntent(opts.intent)}\n\n`;
   const turn: SolverTurn = {
-    id: `t${Date.now()}`,
+    id: turnId(),
     reasoning: '',
     reasoningDone: false,
     reasoningDurationMs: 0,
