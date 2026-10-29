@@ -43,3 +43,14 @@ test('installer and uninstaller use supported 24-bit branding bitmaps', () => {
   }
   assert.ok(nsis.installerHooks && nsis.installerIcon && nsis.uninstallerIcon);
 });
+
+test('interactive installs use branded entry and completion pages around the maintained install engine', () => {
+  assert.equal(config.bundle.windows.nsis.template, 'windows/installer.nsi');
+  const template = readFileSync('src-tauri/windows/installer.nsi', 'utf8');
+  assert.match(template, /Page custom MianxuInstallPage MianxuInstallLeave/);
+  assert.match(template, /Page custom MianxuFinishPage/);
+  assert.doesNotMatch(template, /!insertmacro MUI_PAGE_WELCOME|!insertmacro MUI_PAGE_DIRECTORY|!insertmacro MUI_PAGE_FINISH/);
+  for (const invariant of ['Function PageLeaveReinstall', 'Function RestorePreviousInstallLocation', 'Section WebView2', 'Section Install', 'Function .onInstSuccess', 'Section Uninstall', 'ALLOWDOWNGRADES', 'CheckIfAppIsRunning']) {
+    assert.ok(template.includes(invariant), `Preserve upstream behavior: ${invariant}`);
+  }
+});
