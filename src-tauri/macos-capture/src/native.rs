@@ -1,6 +1,6 @@
 //! ScreenCaptureKit owns its Swift bridge. This module owns each stream and
 //! hands only bounded, owned Rust buffers to consumers, never native pointers.
-use crate::media::{AudioFormat, AudioPlane, PcmChunks, SampleKind, bgra_to_rgba, decode_audio};
+use crate::media::{AudioFormat, AudioPlane, AudioPlayout, PcmChunks, SampleKind, bgra_to_rgba, decode_audio};
 use crate::selection::{WindowCandidate, choose_window};
 use core_graphics::{display::CGDisplay, event::CGEvent, event_source::{CGEventSource, CGEventSourceStateID}, window};
 use screencapturekit::prelude::*;
@@ -28,7 +28,7 @@ fn audio_packet(sample: &CMSampleBuffer) -> Result<Option<AudioPacket>, String> 
     let description = sample.format_description().ok_or("系统收音缺少格式信息")?;
     if description.media_subtype_raw() != u32::from_be_bytes(*b"lpcm") { return Err("系统收音返回了非 PCM 格式".into()); }
     let rate = description.audio_sample_rate().ok_or("系统收音缺少采样率")?;
-    if !rate.is_finite() || rate.fract() != 0.0 || !(16000.0..=192000.0).contains(&rate) || frames > rate as usize / 10 {
+    if !rate.is_finite() || rate.fract() != 0.0 || !(16000.0..=192000.0).contains(&rate) || frames > rate as usize / 4 {
         return Err("系统收音采样率或单包长度不受支持".into());
     }
     let flags = description.audio_format_flags().ok_or("系统收音缺少格式标记")?;
@@ -66,8 +66,8 @@ pub fn capture_audio(stop: Arc<AtomicBool>, ready: impl FnOnce(), mut emit: impl
     let failure: StreamFailure = Arc::new(Mutex::new(None));
     let failed = failure.clone();
     let mut stream = StreamOwner(SCStream::new_with_delegate(&filter, &config, ErrorHandler::new(move |e| fail(&failed, error(e)))).map_err(error)?);
-    // At most two seconds of 100ms packets. Callback never waits for a consumer.
-    let (tx, rx) = mpsc::sync_channel(20);
+    // At most two seconds of 250ms packets. Callback never waits for a consumer.
+    let (tx, rx) = mpsc::sync_channel(8);
     let cancelled = stop.clone();
     let failed = failure.clone();
     stream.0.add_output_handler(move |sample: CMSampleBuffer, ty| {
@@ -83,28 +83,27 @@ pub fn capture_audio(stop: Arc<AtomicBool>, ready: impl FnOnce(), mut emit: impl
     if stop.load(Ordering::Acquire) { return Ok(()); }
     ready();
     let mut converter: Option<(AudioFormat, PcmChunks)> = None;
-    let mut last_packet = Instant::now();
+    let started = Instant::now();
+    let mut playout = AudioPlayout::new();
     while !stop.load(Ordering::Acquire) {
         if let Some(message) = failure.lock().map_err(|_| "系统收音状态不可用")?.take() { return Err(message); }
         match rx.recv_timeout(Duration::from_millis(20)) {
             Ok(packet) => {
-                last_packet = Instant::now();
                 if converter.as_ref().is_none_or(|(format, _)| *format != packet.format) {
                     converter = Some((packet.format, PcmChunks::new(packet.format.rate)?));
                 }
                 let planes: Vec<_> = packet.planes.iter().map(|p| AudioPlane { channels: p.channels, data: &p.data }).collect();
                 let mono = decode_audio(packet.format, &planes, packet.frames)?;
-                for chunk in converter.as_mut().unwrap().1.push(&mono) {
-                    if stop.load(Ordering::Acquire) { return Ok(()); }
-                    emit(&chunk);
-                }
+                playout.push(converter.as_mut().unwrap().1.push(&mono))?;
             },
             Err(mpsc::RecvTimeoutError::Disconnected) => return Err("系统收音数据流已关闭".into()),
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // Do not replay stale speech during stalls. A long silent gap
-                // is surfaced as an interruption rather than endless fake audio.
-                if last_packet.elapsed() > Duration::from_secs(10) { return Err("系统收音超过 10 秒未收到数据，请检查录屏权限或暂停后重试。".into()); }
-            },
+            Err(mpsc::RecvTimeoutError::Timeout) => {},
+        }
+        // ScreenCaptureKit can omit callbacks when no app is playing sound.
+        // Keep the ASR heartbeat with silence, not repeated old speech.
+        if let Some(chunk) = playout.tick(started.elapsed().as_millis() as u64)? {
+            if stop.load(Ordering::Acquire) { return Ok(()); }
+            emit(&chunk);
         }
     }
     Ok(())
