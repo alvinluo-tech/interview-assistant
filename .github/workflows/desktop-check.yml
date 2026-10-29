@@ -118,6 +118,10 @@ jobs:
       - name: Test update presentation and installer branding
         run: node scripts/test-update-design.mjs
 
+      - name: Compile Windows installer skin in isolation
+        if: runner.os == 'Windows'
+        run: node scripts/installer-branding-smoke.mjs
+
       # generate_context!() in native tests embeds dist, so build it first.
       - name: Typecheck and build frontend
         run: pnpm build
