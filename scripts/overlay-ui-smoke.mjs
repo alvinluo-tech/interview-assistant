@@ -47,13 +47,15 @@ try {
   assert.equal(await cdp.evaluate("getComputedStyle(document.getElementById('root')).opacity"), '1');
   assert.deepEqual(await cdp.evaluate('window.__errors'), []);
   // Exercise the actual embedded phone page with a synthetic socket; no LAN or user data.
+  await cdp.command('Page.enable', {});
   await cdp.command('Page.addScriptToEvaluateOnNewDocument', { source: `
     window.confirm = () => true;
     window.__phone = { sent: [] };
     window.WebSocket = class {
-      constructor() { this.readyState = 1; window.__phone.socket = this; setTimeout(() => this.onopen?.(), 0); }
+      constructor(url) { this.readyState = 1; if (url.includes('/ws?')) window.__phone.socket = this; setTimeout(() => this.onopen?.(), 0); }
       send(text) { window.__phone.sent.push(JSON.parse(text)); }
       close() { this.readyState = 3; this.onclose?.(); }
+      addEventListener() {}
     };
   ` });
   const phoneUrl = new URL('/src-tauri/src/dual_page.html?token=synthetic', url).href;

@@ -32,6 +32,7 @@ const STATE_PUSH_MS = 100; // 原版 60ms tick，本地 100ms 足够
 const RECONNECT_GRACE_MS = 15000;
 
 let zonesSuppressed = false;
+let takeoverGeneration = 0;
 export const isZonesSuppressed = () => zonesSuppressed;
 const takeoverListeners = new Set<() => void>();
 export function subscribeDualTakeover(listener: () => void): () => void {
@@ -88,6 +89,7 @@ async function dualSend(obj: unknown): Promise<void> {
 
 /** 接管会话：在浮窗窗口调用；返回清理函数 */
 export function startDualTakeover(): () => void {
+  const owner = ++takeoverGeneration;
   let active = false;
   let disposed = false;
   let revision = 0;
@@ -101,7 +103,7 @@ export function startDualTakeover(): () => void {
   const cleanups: (() => void)[] = [];
 
   const enter = () => {
-    if (disposed || releasing || active) return;
+    if (disposed || releasing || active || owner !== takeoverGeneration) return;
     diag.enter++;
     revision++;
     active = true;
@@ -128,15 +130,15 @@ export function startDualTakeover(): () => void {
     dwellTimer = null;
     dwellZone = null;
     await setCursorPointFeed(false).catch(() => {});
-    if (current !== revision) return;
+    if (current !== revision || owner !== takeoverGeneration) return;
     await setOverlayZones([]).catch(() => {});
-    if (current !== revision) return;
+    if (current !== revision || owner !== takeoverGeneration) return;
     if (originalSize) {
       const size = originalSize;
       originalSize = null;
       await setOverlaySize(size.width, size.height).catch(() => {});
     }
-    if (current !== revision) return;
+    if (current !== revision || owner !== takeoverGeneration) return;
     // Force the desktop scanner to republish even if its rectangles did not move.
     notifyTakeover();
     if (released) await dualSend({ t: 'released' }).catch(() => {});
@@ -294,7 +296,7 @@ export function startDualTakeover(): () => void {
         lastState = '';
         void pushState();
       } else {
-        if (p.reason === 'stopped') { cancelRestore(); void restore(false); }
+        if (p.reason === 'stopped' || p.reason === 'restarted') { cancelRestore(); void restore(false); }
         else scheduleRestore();
       }
     }),

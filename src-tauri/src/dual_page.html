@@ -27,6 +27,7 @@
   header .dot.warn { background:#f59e0b; }
   header .status { font-size:11px; color:var(--muted); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #back { border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:8px; padding:5px 10px; font-size:12px; }
+  #end { border:1px solid #7f1d1d; background:#2c151d; color:#fecaca; border-radius:8px; padding:5px 8px; font-size:12px; }
   #settings-btn { border:none; background:none; color:var(--muted); font-size:16px; padding:4px 6px; }
   main { flex:1; overflow-y:auto; padding:10px 12px; touch-action: pan-y; }
   .turn { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
@@ -60,6 +61,7 @@
     <span class="brand" id="brand">笔试副屏</span>
     <span class="status" id="status">连接中…</span>
     <button id="back" data-zone="exit">切回电脑</button>
+    <button id="end" data-zone="end-session">结束本次笔试</button>
     <button id="settings-btn" aria-label="显示设置">⚙</button>
   </header>
   <main id="main"></main>
@@ -99,11 +101,18 @@
   var released = false;
   var ws = null;
   var backoff = 800;
+  var ready = false;
+  var releaseTimer = null;
+  function enableActions(on) {
+    document.querySelectorAll('button.act, #end').forEach(function (button) { button.disabled = !on; });
+  }
+  enableActions(false);
 
   // ---- 光标大小（本地持久化） ----
   var sizeInput = document.getElementById('cur-size');
   var sizeVal = document.getElementById('cur-size-val');
-  var saved = localStorage.getItem('ml-dual-cursor-size');
+  var saved;
+  try { saved = localStorage.getItem('ml-dual-cursor-size'); } catch (e) {}
   if (saved) { sizeInput.value = saved; }
   function applyCursorSize() {
     var s = sizeInput.value;
@@ -111,7 +120,7 @@
     cursor.style.width = s + 'px';
     cursor.style.height = s + 'px';
     cursor.style.margin = (-s / 2) + 'px 0 0 ' + (-s / 2) + 'px';
-    localStorage.setItem('ml-dual-cursor-size', s);
+    try { localStorage.setItem('ml-dual-cursor-size', s); } catch (e) {}
   }
   sizeInput.addEventListener('input', applyCursorSize);
   applyCursorSize();
@@ -138,19 +147,35 @@
   // ---- WebSocket 连接与重连 ----
   function setStatus(text, cls) { statusEl.textContent = text; dot.className = 'dot ' + (cls || ''); }
   function send(obj) { if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)); } catch (e) {} } }
+  function finish(ended) {
+    released = true; ready = false;
+    clearTimeout(releaseTimer); enableActions(false);
+    main.textContent = '';
+    document.getElementById('followups').textContent = '';
+    cursor.style.display = 'none';
+    setStatus(ended ? '本次笔试已结束' : '已切回电脑', '');
+    var banner = document.getElementById('banner');
+    banner.textContent = ended ? '笔试已结束，电脑已返回主界面。' : '已切回电脑。再次使用副屏时，请在电脑重新生成二维码。';
+    banner.style.display = 'block';
+    try { ws.close(); } catch (e) {}
+    if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+  }
   function connect() {
     if (released) return;
     setStatus('连接中…', 'warn');
     try { ws = new WebSocket(wsUrl); } catch (e) { return scheduleReconnect(); }
     ws.onopen = function () {
       backoff = 800;
-      setStatus('已连接', 'on');
+      setStatus('已连接，等待电脑开始笔试…', 'on');
+      ready = false; enableActions(false);
       send({ t: 'hello', w: window.innerWidth, h: window.innerHeight });
       sendZones();
     };
     ws.onmessage = function (ev) {
+      if (released) return;
       var m;
       try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (!m || typeof m !== 'object') return;
       if (m.t === 'state') render(m.data || {});
       else if (m.t === 'cursor') {
         var s = cursor.offsetWidth || 16;
@@ -160,16 +185,13 @@
       else if (m.t === 'do') {
         if (m.id === 'scroll-up') main.scrollBy({ top: -main.clientHeight * 0.8, behavior: 'smooth' });
         else if (m.id === 'scroll-down') main.scrollBy({ top: main.clientHeight * 0.8, behavior: 'smooth' });
-      } else if (m.t === 'released') {
-        released = true;
-        setStatus('已切回电脑', '');
-        document.getElementById('banner').style.display = 'block';
-        try { ws.close(); } catch (e) {}
-      }
+      } else if (m.t === 'released' || m.t === 'ended') finish(m.t === 'ended');
+      else if (m.t === 'action-error') setStatus(m.message || '操作失败，请重试。', 'warn');
     };
     ws.onclose = function () {
       if (released) return;
-      setStatus('重连中…', 'warn');
+      ready = false; enableActions(false); cursor.style.display = 'none';
+      setStatus('连接中断，正在重连；电脑将在断线宽限后恢复。', 'warn');
       scheduleReconnect();
     };
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
@@ -188,7 +210,7 @@
     var zones = [];
     document.querySelectorAll('[data-zone]').forEach(function (el) {
       var r = el.getBoundingClientRect();
-      if (r.width < 2 || r.height < 2) return;
+      if (r.width < 2 || r.height < 2 || el.disabled) return;
       zones.push({
         id: el.getAttribute('data-zone'),
         x: r.left / window.innerWidth, y: r.top / window.innerHeight,
@@ -204,7 +226,13 @@
     var el = e.target.closest('[data-zone]');
     if (!el || released) return;
     var id = el.getAttribute('data-zone');
-    if (id === 'exit') { send({ t: 'exit' }); setStatus('切回电脑中…', 'warn'); return; }
+    if (id === 'exit') {
+      send({ t: 'exit' }); setStatus('切回电脑中…', 'warn');
+      releaseTimer = setTimeout(function () { finish(false); }, 4000);
+      return;
+    }
+    if (!ready || el.disabled) return;
+    if (id === 'end-session' && !confirm('结束本次笔试并返回电脑主界面？')) return;
     if (id === 'scroll-up') { main.scrollBy({ top: -main.clientHeight * 0.8, behavior: 'smooth' }); return; }
     if (id === 'scroll-down') { main.scrollBy({ top: main.clientHeight * 0.8, behavior: 'smooth' }); return; }
     if (id.indexOf('turn:') === 0) return; // 题卡仅展示
@@ -228,6 +256,8 @@
     return out.join('');
   }
   function render(st) {
+    ready = true; enableActions(true); cursor.style.display = '';
+    setStatus('手机已接管 · 可在这里切回电脑或结束笔试', 'on');
     lastState = st;
     document.getElementById('brand').textContent = st.brand || '笔试副屏';
     document.getElementById('b-mode').textContent = st.modeLabel || '快速';
@@ -242,7 +272,7 @@
     (st.followUps || []).forEach(function (f) {
       var b = document.createElement('button');
       b.className = 'act';
-      b.setAttribute('data-zone', 'followup:' + f.label);
+      b.setAttribute('data-zone', 'followup:' + f.intent);
       b.textContent = f.label;
       fu.appendChild(b);
     });
@@ -255,8 +285,10 @@
         html += '<div class="turn" data-zone="turn:' + i + '"><div class="meta">第 ' + (i + 1) + ' 题 · ' + (t.tsText || '') + '</div><div class="md">' + mdLite(t.md || '') + '</div></div>';
       });
     }
+    var followTail = main.scrollHeight - main.scrollTop - main.clientHeight < 48;
+    var scrollTop = main.scrollTop;
     main.innerHTML = html;
-    main.scrollTop = main.scrollHeight;
+    main.scrollTop = followTail ? main.scrollHeight : scrollTop;
     sendZones();
   }
 })();
