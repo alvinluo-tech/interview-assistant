@@ -61,3 +61,17 @@ test('dates and errors get readable summaries while retaining diagnostic detail'
   assert.equal(updateFailure('Unexpected failure').detail, 'Unexpected failure');
   assert.ok(updateFailure(undefined).description);
 });
+
+test('Windows installer handoff downloads in-app and names the next action truthfully', () => {
+  const { updatePresentation } = load();
+  const available = updatePresentation(state('available', { installMode: 'installer', version: '0.1.2' }));
+  assert.equal(available.action, 'download');
+  assert.equal(available.actionLabel, '下载正式版');
+  const ready = updatePresentation(state('ready', { installMode: 'installer', version: '0.1.2' }));
+  assert.equal(ready.action, 'install');
+  assert.equal(ready.actionLabel, '安装正式版');
+  assert.match(ready.description, /安装向导/);
+  assert.equal(updatePresentation(state('ready', { installMode: 'installer', busy: true })).disabled, true);
+  assert.equal(updatePresentation(state('error', { installMode: 'installer', version: '0.1.2' })).actionLabel, '重新下载');
+  assert.equal(updatePresentation(state('available', { canInstall: false })).actionLabel, '前往发布页');
+});
