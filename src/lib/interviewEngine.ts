@@ -712,13 +712,24 @@ export function beginListening(audioSource: AudioSource): Promise<void> {
           reportInterviewError(new Error(message));
           void stopCapture();
         };
-        const offError = await listenEvent<{ error: string }>('system-audio-error', p => {
-          failCapture(p.error || '系统收音已中断，请暂停后继续以重新连接播放设备。');
-        });
-        if (generation !== captureGeneration) { offError(); return; }
-        engineUnlistenError = offError;
-        const offChunk = await listenEvent<{ volume: number; pcmBase64: string }>('system-audio-chunk', p => {
+        type NativePacket = { captureId?: string; volume: number; pcmBase64: string };
+        type NativeFailure = { captureId?: string; error: string };
+        type NativeInput = { kind: 'chunk'; value: NativePacket } | { kind: 'error'; value: NativeFailure };
+        let captureReady = false;
+        let captureId: string | undefined;
+        const pending: NativeInput[] = [];
+        const consume = (input: NativeInput) => {
           if (generation !== captureGeneration) return;
+          if (!captureReady) {
+            if (pending.length >= 20) { failCapture('系统收音启动数据积压，请暂停后重试。'); return; }
+            pending.push(input);
+            return;
+          }
+          // A queued OS/IPC event can reach a new listener after pause/resume.
+          // Tag comparison supplements the frontend listener generation check.
+          if (input.value.captureId !== captureId) return;
+          if (input.kind === 'error') { failCapture(input.value.error || '系统收音已中断，请暂停后继续以重新连接播放设备。'); return; }
+          const p = input.value;
           try {
             const bin = atob(p.pcmBase64);
             if (!bin.length || bin.length % 2 || bin.length > 64000) throw new Error('Invalid PCM packet');
@@ -734,7 +745,11 @@ export function beginListening(audioSource: AudioSource): Promise<void> {
           } catch {
             failCapture('系统收音数据格式异常，请重启应用后重试。');
           }
-        });
+        };
+        const offError = await listenEvent<NativeFailure>('system-audio-error', p => consume({ kind: 'error', value: p }));
+        if (generation !== captureGeneration) { offError(); return; }
+        engineUnlistenError = offError;
+        const offChunk = await listenEvent<NativePacket>('system-audio-chunk', p => consume({ kind: 'chunk', value: p }));
         if (generation !== captureGeneration) { offChunk(); return; }
         engineUnlistenChunk = offChunk;
         await setSystemAudioExcludedOutputs(getSetting<string[]>('audio.excludedOutputs', []));
@@ -744,6 +759,11 @@ export function beginListening(audioSource: AudioSource): Promise<void> {
         if (!info || info.sampleRate !== 16000 || info.channels !== 1) {
           throw new Error('系统收音组件版本不匹配，请完整重启更新后的桌面应用。');
         }
+        captureId = info.captureId || undefined;
+        captureReady = true;
+        setState({ status: 'listening' });
+        for (const input of pending.splice(0)) consume(input);
+        if (generation !== captureGeneration) return;
         setState({ audio: { ...state.audio, deviceLabel: info.devices.map(device => device.name).join(' / ') || '系统播放声音' } });
       } else {
         const capture = await openMicrophone({

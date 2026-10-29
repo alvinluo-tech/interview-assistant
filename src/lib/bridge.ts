@@ -62,6 +62,7 @@ export const panicHotkeyStatus = () =>
 
 // ---------- 系统音频 ----------
 export interface AudioCaptureInfo {
+  captureId?: string;
   devices: AudioOutputDevice[];
   sampleRate: number;
   channels: number;

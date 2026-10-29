@@ -7,16 +7,22 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Clone, Serialize)]
 pub struct AudioChunkPayload {
+    #[serde(rename = "captureId")]
+    pub capture_id: String,
     pub volume: f64,
     #[serde(rename = "pcmBase64")]
     pub pcm_base64: String,
 }
 #[derive(Clone, Serialize)]
 pub struct AudioLevelPayload {
+    #[serde(rename = "captureId")]
+    pub capture_id: String,
     pub volume: f64,
 }
 #[derive(Clone, Serialize)]
 pub struct AudioErrorPayload {
+    #[serde(rename = "captureId")]
+    pub capture_id: String,
     pub error: String,
 }
 #[derive(serde::Deserialize, Clone, serde::Serialize)]
@@ -28,11 +34,13 @@ pub struct AudioOutputDevice {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioCaptureInfo {
+    pub capture_id: Option<String>,
     pub devices: Vec<AudioOutputDevice>,
     pub sample_rate: u32,
     pub channels: u16,
 }
 struct CaptureSession {
+    id: String,
     stop: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
     info: Option<AudioCaptureInfo>,
@@ -58,9 +66,10 @@ pub struct AudioCaptureState {
     excluded: Mutex<Vec<String>>,
 }
 
-fn publish_ready(state: &AudioCaptureState, stop: &Arc<AtomicBool>, info: AudioCaptureInfo) -> Result<AudioCaptureInfo, String> {
+fn publish_ready(state: &AudioCaptureState, stop: &Arc<AtomicBool>, mut info: AudioCaptureInfo) -> Result<AudioCaptureInfo, String> {
     let mut slot = state.session.lock().map_err(|_| "系统收音状态不可用")?;
     let session = slot.as_mut().filter(|s| Arc::ptr_eq(&s.stop, stop) && !s.stop.load(Ordering::SeqCst)).ok_or("系统收音启动已取消")?;
+    info.capture_id = Some(session.id.clone());
     session.info = Some(info.clone());
     Ok(info)
 }
@@ -96,19 +105,23 @@ impl Resampler {
     }
 }
 
-pub(super) fn emit_chunk(app: &AppHandle, pcm: &[i16]) {
+pub(super) fn emit_chunk(app: &AppHandle, stop: &AtomicBool, pcm: &[i16]) {
+    let state = app.state::<AudioCaptureState>();
+    let Ok(slot) = state.session.lock() else { return; };
+    let Some(session) = slot.as_ref().filter(|s| std::ptr::eq(s.stop.as_ref(), stop) && !stop.load(Ordering::SeqCst)) else { return; };
+    let capture_id = session.id.clone();
     let volume = crate::audio_dsp::input_volume(pcm);
     let bytes: Vec<u8> = pcm.iter().flat_map(|sample| sample.to_le_bytes()).collect();
     let pcm_base64 = base64::engine::general_purpose::STANDARD.encode(bytes);
     let _ = app.emit_to(
         "overlay",
         "system-audio-chunk",
-        AudioChunkPayload { volume, pcm_base64 },
+        AudioChunkPayload { capture_id: capture_id.clone(), volume, pcm_base64 },
     );
     let _ = app.emit_to(
         "overlay",
         "system-audio-level",
-        AudioLevelPayload { volume },
+        AudioLevelPayload { capture_id, volume },
     );
 }
 
@@ -141,6 +154,9 @@ fn start_capture(app: AppHandle) -> Result<AudioCaptureInfo, String> {
             .map_err(|_| "播放设备配置不可用")?
             .clone();
         let stop = Arc::new(AtomicBool::new(false));
+        static NEXT_CAPTURE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let id = format!("{}-{}", std::process::id(), NEXT_CAPTURE.fetch_add(1, Ordering::SeqCst));
+        let worker_id = id.clone();
         let worker_stop = stop.clone();
         let (ready_tx, ready_rx) = mpsc::channel();
         let worker_app = app.clone();
@@ -157,8 +173,8 @@ fn start_capture(app: AppHandle) -> Result<AudioCaptureInfo, String> {
                         Err("请在系统设置的「屏幕与系统音频录制」中允许面序访问，必要时重启应用。".into())
                     } else {
                         mianxu_macos_capture::capture_audio(worker_stop.clone(), || {
-                            if let Some(tx) = ready.take() { let _ = tx.send(Ok(AudioCaptureInfo { devices: vec![], sample_rate: 16000, channels: 1 })); }
-                        }, |pcm| emit_chunk(&worker_app, pcm))
+                            if let Some(tx) = ready.take() { let _ = tx.send(Ok(AudioCaptureInfo { capture_id: None, devices: vec![], sample_rate: 16000, channels: 1 })); }
+                        }, |pcm| emit_chunk(&worker_app, &worker_stop, pcm))
                     }
                 };
                 if let Err(error) =
@@ -171,14 +187,14 @@ fn start_capture(app: AppHandle) -> Result<AudioCaptureInfo, String> {
                         let _ = worker_app.emit_to(
                             "overlay",
                             "system-audio-error",
-                            AudioErrorPayload { error },
+                            AudioErrorPayload { capture_id: worker_id, error },
                         );
                     }
                 }
                 worker_stop.store(true, Ordering::SeqCst);
             })
             .map_err(|error| format!("无法启动系统收音线程：{error}"))?;
-        *slot = Some(CaptureSession { stop: stop.clone(), handle: Some(handle), info: None });
+        *slot = Some(CaptureSession { id, stop: stop.clone(), handle: Some(handle), info: None });
         drop(slot);
         drop(previous);
         let timeout = if cfg!(target_os = "macos") { 65 } else { 5 };
@@ -333,11 +349,12 @@ mod tests {
         let state = AudioCaptureState::default();
         let old = Arc::new(AtomicBool::new(false));
         let current = Arc::new(AtomicBool::new(false));
-        *state.session.lock().unwrap() = Some(CaptureSession { stop: current.clone(), handle: None, info: None });
-        let info = AudioCaptureInfo { devices: vec![], sample_rate: 16000, channels: 1 };
+        *state.session.lock().unwrap() = Some(CaptureSession { id: "current".into(), stop: current.clone(), handle: None, info: None });
+        let info = AudioCaptureInfo { capture_id: None, devices: vec![], sample_rate: 16000, channels: 1 };
         assert!(publish_ready(&state, &old, info.clone()).is_err());
         assert!(state.session.lock().unwrap().as_ref().unwrap().info.is_none());
         assert_eq!(publish_ready(&state, &current, info.clone()).unwrap().sample_rate, 16000);
+        assert_eq!(state.session.lock().unwrap().as_ref().unwrap().info.as_ref().unwrap().capture_id.as_deref(), Some("current"));
         current.store(true, Ordering::SeqCst);
         assert!(publish_ready(&state, &current, info).is_err());
     }

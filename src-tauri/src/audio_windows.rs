@@ -214,6 +214,7 @@ pub(super) fn capture_loop(
         return Err("没有可用的系统播放设备，请连接耳机或扬声器后重试".into());
     }
     let info = AudioCaptureInfo {
+        capture_id: None,
         devices: streams.iter().map(|stream| stream.device.clone()).collect(),
         sample_rate: 16000,
         channels: 1,
@@ -239,7 +240,7 @@ pub(super) fn capture_loop(
         }
         if Instant::now() >= deadline {
             let pcm = crate::audio_dsp::mix_chunk(&mut buffers);
-            crate::audio::emit_chunk(app, &pcm);
+            crate::audio::emit_chunk(app, stop, &pcm);
             deadline += Duration::from_millis(100);
         }
         std::thread::sleep(Duration::from_millis(8));
