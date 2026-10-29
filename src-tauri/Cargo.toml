@@ -7,6 +7,10 @@ edition = "2024"
 # Tauri 用这个字段识别主二进制，保证 macOS .app 里的可执行文件与 CFBundleExecutable 一致。
 default-run = "Mianxu"
 
+[workspace]
+members = ["macos-capture"]
+resolver = "3"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
