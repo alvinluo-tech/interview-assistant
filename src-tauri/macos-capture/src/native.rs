@@ -84,11 +84,13 @@ pub fn capture_audio(stop: Arc<AtomicBool>, ready: impl FnOnce(), mut emit: impl
     ready();
     let mut converter: Option<(AudioFormat, PcmChunks)> = None;
     let started = Instant::now();
+    let mut last_packet = started;
     let mut playout = AudioPlayout::new();
     while !stop.load(Ordering::Acquire) {
         if let Some(message) = failure.lock().map_err(|_| "系统收音状态不可用")?.take() { return Err(message); }
         match rx.recv_timeout(Duration::from_millis(20)) {
             Ok(packet) => {
+                last_packet = Instant::now();
                 if converter.as_ref().is_none_or(|(format, _)| *format != packet.format) {
                     converter = Some((packet.format, PcmChunks::new(packet.format.rate)?));
                 }
@@ -98,6 +100,11 @@ pub fn capture_audio(stop: Arc<AtomicBool>, ready: impl FnOnce(), mut emit: impl
             },
             Err(mpsc::RecvTimeoutError::Disconnected) => return Err("系统收音数据流已关闭".into()),
             Err(mpsc::RecvTimeoutError::Timeout) => {},
+        }
+        if last_packet.elapsed() >= Duration::from_millis(100) {
+            if let Some((_, converter)) = &mut converter {
+                if let Some(tail) = converter.flush() { playout.push(vec![tail])?; }
+            }
         }
         // ScreenCaptureKit can omit callbacks when no app is playing sound.
         // Keep the ASR heartbeat with silence, not repeated old speech.

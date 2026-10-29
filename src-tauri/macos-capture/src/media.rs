@@ -145,6 +145,12 @@ pub struct PcmChunks {
     pending: VecDeque<i16>,
 }
 impl PcmChunks {
+    pub fn flush(&mut self) -> Option<Vec<i16>> {
+        if self.pending.is_empty() { return None; }
+        let mut tail: Vec<i16> = self.pending.drain(..).collect();
+        tail.resize(1600, 0);
+        Some(tail)
+    }
     pub fn new(rate: u32) -> Result<Self, String> {
         if !(16000..=192000).contains(&rate) {
             return Err("系统收音采样率不受支持".into());
