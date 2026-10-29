@@ -8,6 +8,8 @@ mod code_sandbox;
 #[cfg(any(target_os = "macos", test))]
 mod macos_secrets;
 mod capture;
+#[cfg(any(target_os = "macos", test))]
+mod screen_permissions;
 mod disguise;
 mod dual_screen;
 mod hotkeys;

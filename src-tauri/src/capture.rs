@@ -247,15 +247,36 @@ fn capture_image(_window_mode: bool) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 pub fn cmd_check_screen_capture_permission() -> bool {
-    true
+    #[cfg(target_os = "macos")]
+    {
+        crate::screen_permissions::check()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        cfg!(windows)
+    }
 }
 
 #[tauri::command]
 pub fn cmd_request_screen_capture_permission() -> bool {
-    true
+    #[cfg(target_os = "macos")]
+    {
+        crate::screen_permissions::request()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        cfg!(windows)
+    }
 }
 
 #[tauri::command]
 pub fn cmd_open_screen_recording_settings() -> bool {
-    true
+    #[cfg(target_os = "macos")]
+    {
+        crate::screen_permissions::open_settings()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        cfg!(windows)
+    }
 }
