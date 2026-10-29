@@ -4,6 +4,18 @@ import {evaluateFixture} from './compile-fixture.mjs';
 function load() {
   return evaluateFixture('src/lib/updateCheck.ts',{exports:{},URL,AbortSignal,console});
 }
+
+test('displayed app version follows the package version prepared by release tooling', () => {
+  const env = evaluateFixture('src/lib/env.ts', { exports: {}, require: name => {
+    assert.equal(name, '../../package.json'); return { version: '0.8.7' };
+  } });
+  assert.equal(env.APP_VERSION, '0.8.7');
+});
+
+test('unsupported update platforms do not silently select a Mac Intel installer', async () => {
+  const { checkForUpdate } = load();
+  await assert.rejects(checkForUpdate('owner/project', '0.1.0', 'linux-x64', async () => ({ ok: true, json: async () => [] })), /平台|支持/);
+});
 test('release versions compare numerically and stable users skip prereleases',()=>{
   const {compareVersions}=load();
   assert.ok(compareVersions('v0.10.0','0.9.9')>0);
