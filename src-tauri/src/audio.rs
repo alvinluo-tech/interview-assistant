@@ -3,7 +3,7 @@ use base64::Engine;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Clone, Serialize)]
 pub struct AudioChunkPayload {
@@ -35,12 +35,19 @@ pub struct AudioCaptureInfo {
 struct CaptureSession {
     stop: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
-    info: AudioCaptureInfo,
+    info: Option<AudioCaptureInfo>,
 }
 impl Drop for CaptureSession {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
         if let Some(handle) = self.handle.take() {
+            #[cfg(target_os = "macos")]
+            if !handle.is_finished() {
+                // A cancelled native startup may still be waiting for an OS
+                // completion. Retire it off-thread; its stop token gates audio.
+                let _ = std::thread::Builder::new().name("capture-cleanup".into()).spawn(move || { let _ = handle.join(); });
+                return;
+            }
             let _ = handle.join();
         }
     }
@@ -49,6 +56,13 @@ impl Drop for CaptureSession {
 pub struct AudioCaptureState {
     session: Mutex<Option<CaptureSession>>,
     excluded: Mutex<Vec<String>>,
+}
+
+fn publish_ready(state: &AudioCaptureState, stop: &Arc<AtomicBool>, info: AudioCaptureInfo) -> Result<AudioCaptureInfo, String> {
+    let mut slot = state.session.lock().map_err(|_| "系统收音状态不可用")?;
+    let session = slot.as_mut().filter(|s| Arc::ptr_eq(&s.stop, stop) && !s.stop.load(Ordering::SeqCst)).ok_or("系统收音启动已取消")?;
+    session.info = Some(info.clone());
+    Ok(info)
 }
 
 /// 线性插值重采样到 16kHz（mono f32 in → mono i16 out）
@@ -99,26 +113,28 @@ pub(super) fn emit_chunk(app: &AppHandle, pcm: &[i16]) {
 }
 
 #[tauri::command]
-pub fn cmd_start_system_audio_capture(
-    app: AppHandle,
-    state: State<'_, AudioCaptureState>,
-) -> Result<AudioCaptureInfo, String> {
-    #[cfg(not(windows))]
+pub async fn cmd_start_system_audio_capture(app: AppHandle) -> Result<AudioCaptureInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || start_capture(app)).await.map_err(|e| format!("系统收音任务失败：{e}"))?
+}
+
+fn start_capture(app: AppHandle) -> Result<AudioCaptureInfo, String> {
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
-        let _ = (app, state);
-        Err("当前 macOS 构建尚未实现系统声音采集，请使用模拟练习的麦克风输入".into())
+        let _ = app;
+        Err("当前平台尚不支持系统声音采集，请使用麦克风输入".into())
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
-        // Serialize lifecycle transitions; worker never takes this lock.
+        let state = app.state::<AudioCaptureState>();
+        // Publish the pending session before waiting, so stop can cancel startup.
         let mut slot = state.session.lock().map_err(|_| "系统收音状态不可用")?;
         if let Some(session) = slot
             .as_ref()
             .filter(|session| !session.stop.load(Ordering::SeqCst))
         {
-            return Ok(session.info.clone());
+            return session.info.clone().ok_or_else(|| "系统收音正在启动，请稍候。".into());
         }
-        drop(slot.take());
+        let previous = slot.take();
         let excluded = state
             .excluded
             .lock()
@@ -127,18 +143,32 @@ pub fn cmd_start_system_audio_capture(
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = stop.clone();
         let (ready_tx, ready_rx) = mpsc::channel();
+        let worker_app = app.clone();
         let handle = std::thread::Builder::new()
             .name("system-loopback".into())
             .spawn(move || {
                 let mut ready = Some(ready_tx);
+                #[cfg(windows)]
+                let result = crate::audio_windows::capture_loop(&worker_app, &worker_stop, &excluded, &mut ready);
+                #[cfg(target_os = "macos")]
+                let result = {
+                    let _ = excluded; // Output-device exclusion is Windows-only.
+                    if !crate::screen_permissions::check() {
+                        Err("请在系统设置的「屏幕与系统音频录制」中允许面序访问，必要时重启应用。".into())
+                    } else {
+                        mianxu_macos_capture::capture_audio(worker_stop.clone(), || {
+                            if let Some(tx) = ready.take() { let _ = tx.send(Ok(AudioCaptureInfo { devices: vec![], sample_rate: 16000, channels: 1 })); }
+                        }, |pcm| emit_chunk(&worker_app, pcm))
+                    }
+                };
                 if let Err(error) =
-                    crate::audio_windows::capture_loop(&app, &worker_stop, &excluded, &mut ready)
+                    result
                 {
                     log::warn!("[system_audio] {error}");
                     if let Some(sender) = ready.take() {
                         let _ = sender.send(Err(error));
                     } else if !worker_stop.load(Ordering::SeqCst) {
-                        let _ = app.emit_to(
+                        let _ = worker_app.emit_to(
                             "overlay",
                             "system-audio-error",
                             AudioErrorPayload { error },
@@ -148,22 +178,24 @@ pub fn cmd_start_system_audio_capture(
                 worker_stop.store(true, Ordering::SeqCst);
             })
             .map_err(|error| format!("无法启动系统收音线程：{error}"))?;
-        match ready_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        *slot = Some(CaptureSession { stop: stop.clone(), handle: Some(handle), info: None });
+        drop(slot);
+        drop(previous);
+        let timeout = if cfg!(target_os = "macos") { 65 } else { 5 };
+        match ready_rx.recv_timeout(std::time::Duration::from_secs(timeout)) {
             Ok(Ok(info)) if !stop.load(Ordering::SeqCst) => {
                 log::info!(
                     "[system_audio] capturing {} endpoint(s), PCM16/16kHz/mono",
                     info.devices.len()
                 );
-                *slot = Some(CaptureSession {
-                    stop,
-                    handle: Some(handle),
-                    info: info.clone(),
-                });
-                Ok(info)
+                publish_ready(&state, &stop, info)
             }
             result => {
                 stop.store(true, Ordering::SeqCst);
-                let _ = handle.join();
+                let mut slot = state.session.lock().map_err(|_| "系统收音状态不可用")?;
+                let failed = if slot.as_ref().is_some_and(|s| Arc::ptr_eq(&s.stop, &stop)) { slot.take() } else { None };
+                drop(slot);
+                drop(failed);
                 Err(match result {
                     Ok(Err(error)) => error,
                     _ => "系统收音连接超时或已中断，请检查播放设备后重试".into(),
@@ -176,7 +208,11 @@ pub fn cmd_start_system_audio_capture(
 #[tauri::command]
 pub fn cmd_stop_system_audio_capture(state: State<'_, AudioCaptureState>) -> Result<(), String> {
     let mut slot = state.session.lock().map_err(|_| "系统收音状态不可用")?;
-    drop(slot.take());
+    let previous = slot.take();
+    // Invalidate before unlocking, so a concurrent start cannot publish old audio.
+    if let Some(session) = &previous { session.stop.store(true, Ordering::SeqCst); }
+    drop(slot);
+    drop(previous);
     Ok(())
 }
 #[tauri::command]
