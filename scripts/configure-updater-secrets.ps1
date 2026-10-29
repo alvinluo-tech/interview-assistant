@@ -33,7 +33,7 @@ function Set-RepositorySecret([string]$Name, [string]$Value) {
         if ($process.ExitCode -ne 0) { throw "Failed to configure $Name; do not publish a release until both secrets are configured." }
     } finally { $process.Dispose() }
 }
-$secure = Get-Content -LiteralPath $passwordFile -Raw | ConvertTo-SecureString
+$secure = (Get-Content -LiteralPath $passwordFile -Raw).Trim() | ConvertTo-SecureString
 $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
     $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
