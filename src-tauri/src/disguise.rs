@@ -187,6 +187,7 @@ pub fn reapply(window: &Window) -> Result<(), String> {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     supported: bool,
+    process_rename_supported: bool,
     config: Config,
     current_exe: String,
     running_disguised: bool,
@@ -199,14 +200,15 @@ pub fn cmd_get_disguise_status(app: AppHandle) -> Result<Status, String> {
     let state = app.state::<DisguiseState>();
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
     let current = std::env::current_exe().map_err(|e| e.to_string())?;
-    let running_disguised = is_copy(&current, &app.config().identifier);
-    let restart_required = if config.enabled {
+    let running_disguised = cfg!(windows) && is_copy(&current, &app.config().identifier);
+    let restart_required = cfg!(windows) && if config.enabled {
         !running_disguised || !matches_name(&current, &config.process_name)
     } else {
         running_disguised
     };
     Ok(Status {
-        supported: cfg!(windows),
+        supported: cfg!(any(windows, target_os = "macos")),
+        process_rename_supported: cfg!(windows),
         config,
         current_exe: current.display().to_string(),
         running_disguised,
@@ -221,8 +223,8 @@ pub fn cmd_get_disguise_status(app: AppHandle) -> Result<Status, String> {
 
 #[tauri::command]
 pub fn cmd_set_disguise(app: AppHandle, config: Config) -> Result<Status, String> {
-    if !cfg!(windows) {
-        return Err("进程伪装仅支持 Windows".into());
+    if !cfg!(any(windows, target_os = "macos")) {
+        return Err("当前平台不支持窗口身份设置".into());
     }
     let config = config.normalized()?;
     let state = app.state::<DisguiseState>();

@@ -115,9 +115,11 @@ export const setDemoVisibleMode = (enable: boolean) =>
   cmd<void>('cmd_set_demo_visible_mode', { enable });
 export interface CaptureStatus {
   supported: boolean;
+  protectionMode: 'windowsAffinity' | 'bestEffort' | 'unsupported';
+  limitation: string | null;
   demoVisible: boolean;
   devBypass: boolean;
-  windows: { label: string; requested: boolean; affinity: number | null; error: string | null }[];
+  windows: { label: string; requested: boolean; affinity: number | null; sharingRestricted: boolean | null; error: string | null }[];
 }
 export interface DisguiseConfig {
   enabled: boolean;
@@ -126,12 +128,24 @@ export interface DisguiseConfig {
 }
 export interface DisguiseStatus {
   supported: boolean;
+  processRenameSupported: boolean;
   config: DisguiseConfig;
   currentExe: string;
   runningDisguised: boolean;
   restartRequired: boolean;
   startupError: string | null;
 }
+export interface PlatformCapabilities {
+  platform: string;
+  systemAudio: boolean;
+  screenCapture: boolean;
+  cursorZones: boolean;
+  windowTitle: boolean;
+  processRename: boolean;
+  outputDeviceExclusion: boolean;
+  captureProtection: 'windowsAffinity' | 'bestEffort' | 'unsupported';
+}
+export const getPlatformCapabilities = () => cmd<PlatformCapabilities>('cmd_platform_capabilities');
 export const getCaptureStatus = () => cmd<CaptureStatus>('cmd_get_capture_status');
 export const setCaptureExcluded = (enable: boolean, label?: 'main' | 'overlay') =>
   cmd<void>('cmd_set_capture_excluded', { enable, label });

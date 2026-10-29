@@ -95,6 +95,8 @@ pub fn show_overlay_and_emit(app: &AppHandle) -> Result<i64, String> {
         crate::protection::window(app, "overlay").ok_or("overlay native window missing")?;
     crate::protection::reapply(&native)?;
     crate::disguise::reapply(&native)?;
+    #[cfg(target_os = "macos")]
+    crate::window_macos::configure_overlay(&native)?;
     let seq = state.show_seq.fetch_add(1, Ordering::SeqCst) + 1;
     let interactive = state.interactive.load(Ordering::SeqCst);
     let _ = win.set_ignore_cursor_events(!interactive);
@@ -174,52 +176,17 @@ pub fn cmd_set_drag_active(
     state: State<'_, OverlayState>,
     active: bool,
 ) -> Result<(), String> {
-    state.drag_active.store(active, Ordering::SeqCst);
+    if state.drag_active.swap(active, Ordering::SeqCst) && active { return Ok(()); }
     let _ = app.emit_to("overlay", "drag-mode-changed", DragModePayload { active });
     if !active {
         return Ok(());
     }
     // 悬停进入拖动：窗口跟随光标，光标静止 0.8s 即释放（原版语义）
     let win = overlay_window(&app).ok_or("overlay window missing")?;
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
-        use windows::Win32::Foundation::POINT;
-        use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
         std::thread::spawn(move || {
-            let start_win = match win.outer_position() {
-                Ok(p) => p,
-                Err(_) => return,
-            };
-            let mut start_cursor = POINT::default();
-            unsafe {
-                if GetCursorPos(&mut start_cursor).is_err() {
-                    return;
-                }
-            }
-            let mut last_cursor = (start_cursor.x, start_cursor.y);
-            let mut last_move_at = Instant::now();
-            loop {
-                std::thread::sleep(Duration::from_millis(16));
-                let st: State<OverlayState> = win.app_handle().state();
-                if !st.drag_active.load(Ordering::SeqCst) {
-                    break;
-                }
-                let mut cur = POINT::default();
-                unsafe {
-                    if GetCursorPos(&mut cur).is_err() {
-                        break;
-                    }
-                }
-                if (cur.x, cur.y) != last_cursor {
-                    last_cursor = (cur.x, cur.y);
-                    last_move_at = Instant::now();
-                    let nx = start_win.x + (cur.x - start_cursor.x);
-                    let ny = start_win.y + (cur.y - start_cursor.y);
-                    let _ = win.set_position(PhysicalPosition::new(nx, ny));
-                } else if last_move_at.elapsed() > Duration::from_millis(800) {
-                    break;
-                }
-            }
+            if let Err(error) = follow_cursor(&win) { log::warn!("[overlay-drag] {error}"); }
             let st: State<OverlayState> = win.app_handle().state();
             st.drag_active.store(false, Ordering::SeqCst);
             let _ = win.app_handle().emit_to(
@@ -232,8 +199,50 @@ pub fn cmd_set_drag_active(
     Ok(())
 }
 
+fn drag_cursor(app: &AppHandle) -> Result<(f64, f64), String> {
+    let p = app.cursor_position().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        let scale = app.primary_monitor().map_err(|e| e.to_string())?.ok_or("主显示器不可用")?.scale_factor();
+        return Ok((p.x / scale, p.y / scale));
+    }
+    #[cfg(not(target_os = "macos"))]
+    Ok((p.x, p.y))
+}
+
+fn follow_cursor(win: &WebviewWindow) -> Result<(), String> {
+    let start = win.outer_position().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    let scale = win.scale_factor().map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    let scale = 1.0;
+    let origin = (start.x as f64 / scale, start.y as f64 / scale);
+    let cursor = drag_cursor(win.app_handle())?;
+    let mut last = cursor;
+    let mut last_move = Instant::now();
+    loop {
+        std::thread::sleep(Duration::from_millis(16));
+        let state: State<OverlayState> = win.app_handle().state();
+        if !state.drag_active.load(Ordering::SeqCst) || !state.overlay_visible.load(Ordering::SeqCst) { break; }
+        let current = drag_cursor(win.app_handle())?;
+        if current != last {
+            last = current;
+            last_move = Instant::now();
+            let x = origin.0 + current.0 - cursor.0;
+            let y = origin.1 + current.1 - cursor.1;
+            #[cfg(target_os = "macos")]
+            win.set_position(tauri::LogicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+            #[cfg(not(target_os = "macos"))]
+            win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32)).map_err(|e| e.to_string())?;
+        } else if last_move.elapsed() > Duration::from_millis(800) { break; }
+    }
+    Ok(())
+}
+
 #[tauri::command]
-pub fn cmd_get_cursor_pos() -> Result<(i32, i32), String> {
+pub fn cmd_get_cursor_pos(app: AppHandle) -> Result<(i32, i32), String> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = &app;
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::POINT;
@@ -242,7 +251,14 @@ pub fn cmd_get_cursor_pos() -> Result<(i32, i32), String> {
         unsafe { GetCursorPos(&mut p) }.map_err(|e| e.to_string())?;
         Ok((p.x, p.y))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let primary = app.primary_monitor().map_err(|e| e.to_string())?.ok_or("主显示器不可用")?.scale_factor();
+        let scale = overlay_window(&app).ok_or("浮窗不存在")?.scale_factor().map_err(|e| e.to_string())?;
+        let cursor = app.cursor_position().map_err(|e| e.to_string())?;
+        mianxu_macos_capture::selection::cursor_in_window_space((cursor.x, cursor.y), primary, scale)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Err("unsupported platform".into())
     }
@@ -316,6 +332,8 @@ pub fn cmd_apply_overlay_styles(
 ) -> Result<(), String> {
     let _ = styles;
     if let Some(window) = crate::protection::window(&app, "overlay") {
+        #[cfg(target_os = "macos")]
+        crate::window_macos::configure_overlay(&window)?;
         crate::protection::reapply(&window)?;
         crate::disguise::reapply(&window)?;
     }
@@ -373,7 +391,7 @@ pub fn cmd_minimize_main(app: AppHandle) -> Result<(), String> {
 
 pub fn spawn_cursor_poller(app: AppHandle) {
     std::thread::spawn(move || {
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         loop {
             std::thread::sleep(Duration::from_millis(16));
             let state: State<OverlayState> = app.state();
@@ -387,14 +405,8 @@ pub fn spawn_cursor_poller(app: AppHandle) {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let interactive = state.interactive.load(Ordering::SeqCst);
             let feed = state.cursor_feed.load(Ordering::SeqCst);
-            use windows::Win32::Foundation::POINT;
-            use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
-            let mut p = POINT::default();
-            unsafe {
-                if GetCursorPos(&mut p).is_err() {
-                    continue;
-                }
-            }
+            let Ok((x, y)) = cmd_get_cursor_pos(app.clone()) else { continue; };
+            let p = PhysicalPosition::new(x, y);
             if feed {
                 // 仅在移动时上报（原版同样只在变化时喂光标），避免高频事件淹没 WebView2 通道
                 let mut last = state.last_cursor_point.lock().unwrap();

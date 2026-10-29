@@ -27,6 +27,8 @@ jobs:
     name: Compile ${{ matrix.target }}
     runs-on: macos-latest
     timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
     strategy:
       fail-fast: false
       matrix:
@@ -74,7 +76,10 @@ jobs:
           pnpm build
 
       - name: Test native code on the runner architecture
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --workspace --lib
+
+      - name: Test permission and native capture bridge
+        run: pnpm test:platform
 
       # Build, rather than just check, so target-specific bridges and frameworks
       # must link. Intel output must not accidentally contain arm64 bridge code.

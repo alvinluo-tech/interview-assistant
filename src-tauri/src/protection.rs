@@ -95,17 +95,32 @@ fn write_affinity(window: &Window, affinity: u32) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+pub(crate) fn read_affinity(window: &Window) -> Result<u32, String> {
+    crate::window_macos::with_native(window, |raw| {
+        // SAFETY: live Tauri window, main-thread execution guaranteed by with_native.
+        unsafe { mianxu_macos_capture::window::sharing_restricted(raw) }.map(|restricted| if restricted { EXCLUDED } else { 0 })
+    })
+}
+#[cfg(target_os = "macos")]
+fn write_affinity(window: &Window, value: u32) -> Result<(), String> {
+    // Legacy AppKit sharing flag: best effort only. It cannot force third-party
+    // ScreenCaptureKit streams to omit this window on current macOS versions.
+    window.set_content_protected(value != 0).map_err(|e| e.to_string())?;
+    if read_affinity(window)? != value { return Err("Mac 窗口共享限制未应用".into()); }
+    Ok(())
+}
+#[cfg(not(any(windows, target_os = "macos")))]
 fn read_affinity(_: &Window) -> Result<u32, String> {
     Err("捕获排除仅支持 Windows".into())
 }
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn write_affinity(_: &Window, _: u32) -> Result<(), String> {
     Err("捕获排除仅支持 Windows".into())
 }
 
 pub fn reapply(window: &Window) -> Result<(), String> {
-    if !cfg!(windows) || !LABELS.contains(&window.label()) {
+    if !cfg!(any(windows, target_os = "macos")) || !LABELS.contains(&window.label()) {
         return Ok(());
     }
     let Some(state) = window.app_handle().try_state::<CaptureState>() else {
@@ -147,7 +162,7 @@ fn update(
     enable: Option<bool>,
     demo: Option<bool>,
 ) -> Result<(), String> {
-    if !cfg!(windows) {
+    if !cfg!(any(windows, target_os = "macos")) {
         return Err("捕获排除仅支持 Windows".into());
     }
     if label.is_some_and(|label| !LABELS.contains(&label)) {
@@ -224,12 +239,15 @@ pub struct WindowStatus {
     label: String,
     requested: bool,
     affinity: Option<u32>,
+    sharing_restricted: Option<bool>,
     error: Option<String>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureStatus {
     supported: bool,
+    protection_mode: &'static str,
+    limitation: Option<&'static str>,
     demo_visible: bool,
     dev_bypass: bool,
     windows: Vec<WindowStatus>,
@@ -248,13 +266,16 @@ pub fn cmd_get_capture_status(app: AppHandle) -> Result<CaptureStatus, String> {
             WindowStatus {
                 label: label.into(),
                 requested: policy.requested[label],
-                affinity: result.as_ref().ok().copied(),
+                affinity: if cfg!(windows) { result.as_ref().ok().copied() } else { None },
+                sharing_restricted: if cfg!(target_os = "macos") { result.as_ref().ok().map(|value| *value != 0) } else { None },
                 error: result.err(),
             }
         })
         .collect();
     Ok(CaptureStatus {
-        supported: cfg!(windows),
+        supported: cfg!(any(windows, target_os = "macos")),
+        protection_mode: if cfg!(windows) { "windowsAffinity" } else if cfg!(target_os = "macos") { "bestEffort" } else { "unsupported" },
+        limitation: cfg!(target_os = "macos").then_some("macOS 的窗口共享限制只提供尽力保护，无法保证第三方录屏或会议共享不会捕获本应用；请用实际共享软件验证。"),
         demo_visible: policy.demo_visible,
         dev_bypass: dev_bypass(),
         windows,

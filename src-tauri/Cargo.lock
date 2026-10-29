@@ -2420,6 +2420,8 @@ name = "mianxu-macos-capture"
 version = "0.1.0"
 dependencies = [
  "core-graphics",
+ "objc2",
+ "objc2-app-kit",
  "screencapturekit",
 ]
 

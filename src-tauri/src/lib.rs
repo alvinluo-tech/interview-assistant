@@ -8,6 +8,7 @@ mod code_sandbox;
 #[cfg(any(target_os = "macos", test))]
 mod macos_secrets;
 mod capture;
+mod capabilities;
 #[cfg(any(target_os = "macos", test))]
 mod screen_permissions;
 mod disguise;
@@ -17,6 +18,8 @@ mod hotkeys;
 mod identity_resources;
 mod misc;
 mod overlay;
+#[cfg(target_os = "macos")]
+mod window_macos;
 mod protection;
 mod settings;
 
@@ -161,6 +164,7 @@ pub fn run() {
             audio::cmd_set_system_audio_excluded_outputs,
             // 截屏与权限
             capture::cmd_capture_screen,
+            capabilities::cmd_platform_capabilities,
             capture::cmd_check_screen_capture_permission,
             capture::cmd_request_screen_capture_permission,
             capture::cmd_open_screen_recording_settings,
