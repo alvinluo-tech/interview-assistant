@@ -8,7 +8,7 @@
 
 `src-tauri/macos-capture` 是同一 Cargo workspace 中的内部 crate。媒体校验和选择逻辑可在 Windows 测试，Apple 依赖只在 macOS 目标启用。锁定 `screencapturekit = 11.1.1`，锁文件还包含 `apple-cf 0.11.7` 和 `apple-metal 0.10.4`，这些依赖在 Mac 构建时编译各自的 Swift 桥。Windows 依赖树不包含它们，不要求 Windows 安装 Swift 或 Apple SDK。
 
-最低版本统一为 **macOS 13.0**。Mac 配置启用 Tauri 透明窗口所需的 `macOSPrivateApi`，仅在 Mac 目标启用对应 Cargo feature。签名仍为原有 ad-hoc 配置，尚未配置 Developer ID 或公证。
+最低版本统一为 **macOS 13.0**。通用配置及依赖声明启用 Tauri 的 `macOSPrivateApi` / `macos-private-api`，供其构建校验读取；该功能只影响 Mac 透明窗口，Apple 采集依赖仍仅在 macOS 目标启用。签名仍为原有 ad-hoc 配置，尚未配置 Developer ID 或公证。
 
 ## 已写入的功能
 

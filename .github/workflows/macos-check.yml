@@ -69,6 +69,7 @@ jobs:
         with:
           workspaces: src-tauri -> target
           key: macos-check-${{ matrix.target }}
+          cache-on-failure: true
 
       - name: Build frontend for native embedding
         run: |
