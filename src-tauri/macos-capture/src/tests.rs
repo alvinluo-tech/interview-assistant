@@ -1,6 +1,28 @@
 use super::media::{AudioFormat, AudioPlane, PcmChunks, SampleKind, bgra_to_rgba, decode_audio};
 
 #[test]
+fn window_capture_uses_frontmost_eligible_window_and_never_widens_scope() {
+    use super::selection::{WindowCandidate, choose_window};
+    let candidates = [
+        WindowCandidate { id: 1, pid: 10, layer: 0, visible: true, width: 800.0, height: 600.0 },
+        WindowCandidate { id: 2, pid: 20, layer: 25, visible: true, width: 100.0, height: 100.0 },
+        WindowCandidate { id: 3, pid: 20, layer: 0, visible: true, width: 800.0, height: 600.0 },
+        WindowCandidate { id: 4, pid: 30, layer: 0, visible: true, width: 800.0, height: 600.0 },
+    ];
+    assert_eq!(choose_window(&[1, 2, 4, 3], &candidates, 10).unwrap(), 4);
+    assert!(choose_window(&[1, 2], &candidates, 10).is_err());
+}
+
+#[test]
+fn cursor_matches_window_coordinates_on_mixed_scale_and_negative_displays() {
+    use super::selection::cursor_in_window_space;
+    assert_eq!(cursor_in_window_space((-2400.0, 600.0), 2.0, 1.0).unwrap(), (-1200, 300));
+    assert_eq!(cursor_in_window_space((-1200.0, 300.0), 1.0, 2.0).unwrap(), (-2400, 600));
+    assert!(cursor_in_window_space((f64::NAN, 0.0), 2.0, 1.0).is_err());
+    assert!(cursor_in_window_space((0.0, 0.0), 0.0, 1.0).is_err());
+}
+
+#[test]
 fn planar_stereo_float_is_mixed_without_changing_duration() {
     let left: Vec<u8> = [0.5f32, -0.5, 1.0, f32::NAN]
         .into_iter()
