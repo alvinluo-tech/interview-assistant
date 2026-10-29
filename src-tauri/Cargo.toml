@@ -46,6 +46,7 @@ tauri-plugin-websocket = "2.5"
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 log = "0.4"
+getrandom = "0.3"
 dirs = "6"
 tungstenite = "0.24"
 

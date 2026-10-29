@@ -38,7 +38,10 @@ export function DualScreenCard() {
 
   // 组件卸载时停服务（回到工作台不影响已连接会话则保留——原版常驻入口，这里保持运行）
   useEffect(() => {
-    return onEvent<{ count: number }>('dual-peer', (p) => setPeers(p.count));
+    return onEvent<{ count: number; reason?: string }>('dual-peer', (p) => {
+      setPeers(p.count);
+      if (p.reason === 'stopped') { setInfo(null); setQrData(''); }
+    });
   }, []);
 
   useEffect(() => {
@@ -59,7 +62,7 @@ export function DualScreenCard() {
             手机副屏
           </div>
           <p className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
-            答案只显示在手机上，电脑屏幕上什么都不留——二机位拍不到。操作方式不变：电脑上鼠标移到原来的按钮位置，手机上会显示光标。
+            连接后电脑浮窗内容隐藏，答案显示在手机上。可直接在手机操作，也可用电脑鼠标悬停手机映射的按钮；手机可随时切回电脑或结束笔试。
           </p>
         </div>
         <Badge variant={peers > 0 ? 'default' : 'secondary'}>{peers > 0 ? '手机已连接' : '未连接'}</Badge>
@@ -96,19 +99,18 @@ export function DualScreenCard() {
                 </Button>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost" onClick={() => void launch()}>
+                <Button size="sm" variant="ghost" disabled={loading} onClick={() => void launch()}>
                   换一个二维码
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => {
-                    void stopDualScreen();
-                    setInfo(null);
-                    setPeers(0);
+                  onClick={async () => {
+                    try { await stopDualScreen(); setInfo(null); setPeers(0); }
+                    catch { setError('停止副屏失败，请重试。'); }
                   }}
                 >
-                  停止副屏
+                  {peers > 0 ? '切回电脑并停止副屏' : '停止副屏'}
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground">

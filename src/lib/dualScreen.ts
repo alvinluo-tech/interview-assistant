@@ -82,9 +82,9 @@ async function refreshOverlayRect() {
   }
 }
 
-async function dualSend(obj: unknown): Promise<void> {
+async function dualSend(obj: unknown): Promise<boolean> {
   diag.send++;
-  await cmd<boolean>('cmd_dual_send', { text: JSON.stringify(obj) });
+  return cmd<boolean>('cmd_dual_send', { text: JSON.stringify(obj) });
 }
 
 /** 接管会话：在浮窗窗口调用；返回清理函数 */
@@ -214,8 +214,7 @@ export function startDualTakeover(): () => void {
     };
     const key = JSON.stringify(payload);
     if (key === lastState) return;
-    lastState = key;
-    await dualSend(payload).catch(() => {});
+    if (await dualSend(payload).catch(() => false)) lastState = key;
   }
   // The interval bounds streaming updates; subscriptions would send on every token.
   const addOff = (p: Promise<() => void>) => {

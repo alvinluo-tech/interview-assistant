@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 pub struct DualState {
     generation: AtomicU64,
     token: Mutex<String>,
-    peer_tx: Mutex<Option<Arc<mpsc::Sender<String>>>>,
+    peer_tx: Mutex<Option<Arc<mpsc::SyncSender<String>>>>,
     stop_flag: Mutex<Arc<AtomicBool>>,
 }
 
@@ -32,14 +32,10 @@ impl Default for DualState {
 
 const PAGE: &str = include_str!("dual_page.html");
 
-fn random_token() -> String {
-    // RandomState 每进程随机播种，两次 hash 足够做局域网会话令牌
-    use std::hash::{BuildHasher, Hash, Hasher};
-    let mut h1 = std::collections::hash_map::RandomState::new().build_hasher();
-    let mut h2 = std::collections::hash_map::RandomState::new().build_hasher();
-    std::time::Instant::now().hash(&mut h1);
-    std::process::id().hash(&mut h2);
-    format!("{:016x}{:016x}", h1.finish(), h2.finish())
+fn random_token() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(|_| "无法生成安全的副屏连接令牌")?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 /// 局域网 IPv4（UDP connect 8.8.8.8 取本端地址，不真正发包）
@@ -57,17 +53,33 @@ fn lan_ips() -> Vec<String> {
 }
 
 fn emit_peer(app: &AppHandle, count: u32) {
-    let _ = app.emit("dual-peer", serde_json::json!({ "count": count }));
+    emit_peer_reason(app, count, if count > 0 { "connected" } else { "disconnected" });
 }
 
-fn authorized_request(line: &str, token: &str, _websocket: bool) -> bool {
-    line.split_whitespace().nth(1).is_some_and(|path| path.contains(token))
+fn emit_peer_reason(app: &AppHandle, count: u32, reason: &str) {
+    let _ = app.emit("dual-peer", serde_json::json!({ "count": count, "reason": reason }));
+}
+
+fn authorized_request(line: &str, token: &str, websocket: bool) -> bool {
+    if token.is_empty() { return false; }
+    let parts: Vec<_> = line.split_whitespace().collect();
+    if parts.len() != 3 || parts[0] != "GET" || parts[2] != "HTTP/1.1" { return false; }
+    let Some((path, query)) = parts[1].split_once('?') else { return false; };
+    if path != if websocket { "/ws" } else { "/" } { return false; }
+    let mut tokens = query.split('&').filter_map(|pair| pair.strip_prefix("token="));
+    tokens.next() == Some(token) && tokens.next().is_none()
+}
+
+fn current_peer(state: &DualState, generation: u64, tx: &Arc<mpsc::SyncSender<String>>) -> bool {
+    state.generation.load(Ordering::SeqCst) == generation
+        && state.peer_tx.lock().unwrap().as_ref().is_some_and(|current| Arc::ptr_eq(current, tx))
 }
 
 #[tauri::command]
 pub fn cmd_dual_start(app: AppHandle, state: State<'_, DualState>) -> Result<serde_json::Value, String> {
     stop_server(&state);
-    let token = random_token();
+    emit_peer_reason(&app, 0, "restarted");
+    let token = random_token()?;
     let session_gen = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     let listener = TcpListener::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
@@ -139,16 +151,22 @@ fn handle_conn(app: AppHandle, mut stream: TcpStream, session_gen: u64) {
     }
     // WebSocket：tungstenite 接管（回放已读的请求头）
     stream.set_nonblocking(false).ok();
-    stream.set_read_timeout(None).ok();
+    // Keep the handshake timeout and bound writes, including stopped peers.
+    stream.set_write_timeout(Some(std::time::Duration::from_secs(2))).ok();
     let prefixed = PrefixedStream { prefix: buf, pos: 0, inner: stream };
-    let ws = match tungstenite::accept(prefixed) {
+    let config = tungstenite::protocol::WebSocketConfig {
+        max_message_size: Some(64 * 1024),
+        max_frame_size: Some(64 * 1024),
+        ..Default::default()
+    };
+    let ws = match tungstenite::accept_with_config(prefixed, Some(config)) {
         Ok(ws) => ws,
         Err(_) => return,
     };
     if state.generation.load(Ordering::SeqCst) != session_gen {
         return; // 会话已换代，拒绝旧连接
     }
-    serve_peer(app, ws);
+    serve_peer(app, ws, session_gen);
 }
 
 /// 把已读出的请求头字节回放给 tungstenite（其 accept 需要从头读完整握手）
@@ -179,21 +197,29 @@ impl Write for PrefixedStream {
     }
 }
 
-fn serve_peer(app: AppHandle, mut ws: tungstenite::WebSocket<PrefixedStream>) {
+fn serve_peer(app: AppHandle, mut ws: tungstenite::WebSocket<PrefixedStream>, session_gen: u64) {
     let state: State<DualState> = app.state();
-    let (tx, rx) = mpsc::channel::<String>();
+    let (tx, rx) = mpsc::sync_channel::<String>(8);
     let tx = Arc::new(tx);
     {
         let mut guard = state.peer_tx.lock().unwrap();
-        // 顶掉旧连接：旧 sender 的 Arc 计数归零后，其读取循环自然结束
+        if state.generation.load(Ordering::SeqCst) != session_gen { return; }
+        // The old reader checks ownership on every poll and closes its socket.
         *guard = Some(Arc::clone(&tx));
+        emit_peer(&app, 1);
     }
-    emit_peer(&app, 1);
 
     let mut closed = false;
     // 全程阻塞模式：写不会被 WouldBlock 打断；读用 40ms 超时轮询收发两向
     ws.get_mut().inner.set_read_timeout(Some(std::time::Duration::from_millis(40))).ok();
-    while !closed {
+    let mut last_seen = std::time::Instant::now();
+    let mut last_ping = std::time::Instant::now();
+    while !closed && current_peer(&state, session_gen, &tx) {
+        if last_seen.elapsed() > std::time::Duration::from_secs(20) { break; }
+        if last_ping.elapsed() > std::time::Duration::from_secs(5) {
+            if ws.send(tungstenite::Message::Ping(Vec::new())).is_err() { break; }
+            last_ping = std::time::Instant::now();
+        }
         while let Ok(text) = rx.try_recv() {
             if ws.write(tungstenite::Message::Text(text.into())).is_err() {
                 log::warn!("[dual] write failed, closing");
@@ -207,15 +233,18 @@ fn serve_peer(app: AppHandle, mut ws: tungstenite::WebSocket<PrefixedStream>) {
         }
         match ws.read() {
             Ok(tungstenite::Message::Text(text)) => {
-                log::info!("[dual] recv: {}", text.chars().take(120).collect::<String>());
+                if !current_peer(&state, session_gen, &tx) { break; }
+                last_seen = std::time::Instant::now();
                 if let Err(error) = app.emit_to("overlay", "dual-message", text.to_string()) {
                     log::error!("[dual] emit dual-message failed: {error}");
                 }
                 let _ = app.emit_to("main", "dual-message", text.to_string());
             }
             Ok(tungstenite::Message::Ping(p)) => {
-                let _ = ws.write(tungstenite::Message::Pong(p));
+                last_seen = std::time::Instant::now();
+                let _ = ws.send(tungstenite::Message::Pong(p));
             }
+            Ok(tungstenite::Message::Pong(_)) => { last_seen = std::time::Instant::now(); }
             Ok(tungstenite::Message::Close(_))
             | Err(tungstenite::Error::ConnectionClosed)
             | Err(tungstenite::Error::AlreadyClosed) => {
@@ -233,21 +262,31 @@ fn serve_peer(app: AppHandle, mut ws: tungstenite::WebSocket<PrefixedStream>) {
         }
     }
     // 连接结束：仅当注册者仍是自己时清空并广播断开（被新连接顶替则不动）
-    let still_mine = {
-        let guard = state.peer_tx.lock().unwrap();
-        guard.as_ref().map(|cur| Arc::ptr_eq(cur, &tx)).unwrap_or(false)
-    };
-    if still_mine {
-        *state.peer_tx.lock().unwrap() = None;
+    let mut guard = state.peer_tx.lock().unwrap();
+    if state.generation.load(Ordering::SeqCst) == session_gen
+        && guard.as_ref().is_some_and(|cur| Arc::ptr_eq(cur, &tx)) {
+        *guard = None;
         emit_peer(&app, 0);
     }
+    drop(guard);
+    // A control acknowledgement may have been queued just before stop/replacement.
+    // Do not send stale answer snapshots to the retired connection.
+    while let Ok(text) = rx.try_recv() {
+        if serde_json::from_str::<serde_json::Value>(&text).ok()
+            .and_then(|value| value.get("t").and_then(|kind| kind.as_str()).map(str::to_owned))
+            .is_some_and(|kind| kind == "released" || kind == "ended") {
+            let _ = ws.send(tungstenite::Message::Text(text));
+        }
+    }
+    let _ = ws.close(None);
+    let _ = ws.get_mut().inner.shutdown(std::net::Shutdown::Both);
 }
 
 #[tauri::command]
 pub fn cmd_dual_send(state: State<'_, DualState>, text: String) -> Result<bool, String> {
     let guard = state.peer_tx.lock().unwrap();
     match guard.as_ref() {
-        Some(tx) => Ok(tx.send(text).is_ok()),
+        Some(tx) => Ok(tx.try_send(text).is_ok()),
         None => Ok(false),
     }
 }
@@ -261,7 +300,7 @@ pub fn cmd_dual_peer_count(state: State<'_, DualState>) -> u32 {
 #[tauri::command]
 pub fn cmd_dual_stop(app: AppHandle, state: State<'_, DualState>) {
     stop_server(&state);
-    emit_peer(&app, 0);
+    emit_peer_reason(&app, 0, "stopped");
 }
 
 fn stop_server(state: &DualState) {
@@ -290,5 +329,22 @@ mod tests {
             ("GET /ws?token=anything HTTP/1.1".into(), "", true),
             (format!("POST /ws?token={token} HTTP/1.1"), token, true),
         ] { assert!(!authorized_request(&line, expected, ws), "{line}"); }
+    }
+
+    #[test]
+    fn replacement_and_stop_revoke_the_previous_reader() {
+        let state = DualState::default();
+        let (first, _first_rx) = mpsc::sync_channel(8);
+        let first = Arc::new(first);
+        *state.peer_tx.lock().unwrap() = Some(first.clone());
+        assert!(current_peer(&state, 0, &first));
+        let (second, _second_rx) = mpsc::sync_channel(8);
+        let second = Arc::new(second);
+        *state.peer_tx.lock().unwrap() = Some(second.clone());
+        assert!(!current_peer(&state, 0, &first));
+        assert!(current_peer(&state, 0, &second));
+        stop_server(&state);
+        assert!(!current_peer(&state, 0, &second));
+        assert!(!authorized_request("GET /ws?token=old HTTP/1.1", &state.token.lock().unwrap(), true));
     }
 }
