@@ -86,11 +86,13 @@ fn publish_ready(
 }
 
 /// 线性插值重采样到 16kHz（mono f32 in → mono i16 out）
+#[cfg(any(windows, test))]
 pub(super) struct Resampler {
     phase: f64,
     src_rate: f64,
 }
 
+#[cfg(any(windows, test))]
 impl Resampler {
     pub(super) fn new(src_rate: u32) -> Self {
         Self {

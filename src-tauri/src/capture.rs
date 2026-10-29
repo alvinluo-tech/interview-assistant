@@ -3,7 +3,9 @@
  * 窗口捕获策略见 protection；本应用截屏仍短暂收起浮窗，兼容演示模式与旧系统。
  */
 use base64::Engine;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(not(target_os = "macos"))]
+use tauri::Manager;
 fn is_blank(rgba: &[u8]) -> bool {
     if rgba.len() < 4 {
         return true;
@@ -286,7 +288,7 @@ fn capture_image(window_mode: bool) -> Result<Vec<u8>, String> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn capture_image(_window_mode: bool) -> Result<Vec<u8>, String> {
     Err("screen capture is only implemented on Windows in this build".into())
 }

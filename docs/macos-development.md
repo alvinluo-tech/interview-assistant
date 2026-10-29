@@ -67,7 +67,7 @@ pnpm tauri build --target aarch64-apple-darwin --bundles dmg
 pnpm tauri build --target x86_64-apple-darwin --bundles dmg
 ```
 
-`.github/workflows/macos-check.yml` 在相关拉取请求或手动运行时执行原生测试、编译链接、DMG 打包和校验，上传两个架构的验收包，不创建 GitHub Release。实现已合并推送到 main，并执行了上述 Mac CI。现有 release 工作流仍负责标签驱动的正式发布。
+`.github/workflows/desktop-check.yml` 在拉取请求、main 推送或手动运行时执行协议测试、原生测试、编译链接和安装包校验，上传 Windows x64 及 Mac 两个架构的验收包，不创建 GitHub Release。它取代此前的 macos-check 工作流，与标签发布共用 Rust 依赖缓存；详细缓存边界和构建耗时见 [CI 与缓存](ci.md)。现有 release 工作流仍负责标签驱动的正式发布。
 
 ## Mac 真机验收清单
 

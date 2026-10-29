@@ -34,14 +34,17 @@ jobs:
           - platform: windows-x64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
+            bundles: nsis
             shell: pwsh
           - platform: macos-arm64
             runner: macos-latest
             target: aarch64-apple-darwin
+            bundles: dmg
             shell: bash
           - platform: macos-x64
             runner: macos-latest
             target: x86_64-apple-darwin
+            bundles: dmg
             shell: bash
     env:
       RELEASE_TARGET: ${{ matrix.target }}
@@ -83,8 +86,10 @@ jobs:
         uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
           workspaces: src-tauri -> target
-          key: ${{ matrix.target }}
+          shared-key: desktop-${{ matrix.target }}
+          env-vars: MACOSX_DEPLOYMENT_TARGET
           cache-on-failure: true
+          save-if: ${{ github.ref_type == 'tag' || github.ref == 'refs/heads/main' }}
 
       - name: Install locked frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -100,16 +105,14 @@ jobs:
         run: pnpm test:byok
 
       - name: Test microphone and subtitle engine
-        run: |
-          pnpm test:audio
-          pnpm test:platform
+        run: pnpm test:audio
 
-      - name: Test document context and realtime ASR
-        run: |
-          pnpm test:context
-          pnpm test:realtime
-          pnpm test:reliability
-          pnpm test:core-coverage
+      - name: Test permission and native capture bridge
+        run: pnpm test:platform
+
+      # This suite already executes context, realtime and reliability tests.
+      - name: Test core protocols with coverage
+        run: pnpm test:core-coverage
 
       - name: Test development service isolation
         run: pnpm test:dev-services
@@ -123,7 +126,8 @@ jobs:
 
       - name: Build platform installer
         # Call Node directly: Windows package-manager shims can consume the cargo argument separator.
-        run: node scripts/release.mjs build
+        # The frontend was built above for native tests; skip only the duplicate hook.
+        run: node node_modules/@tauri-apps/cli/tauri.js build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.ci.conf.json -- --locked
 
       - name: Verify macOS disk image and permission manifests
         if: runner.os == 'macOS'

@@ -1,14 +1,18 @@
 //! Format conversion and time-aligned mixing shared by the WASAPI worker and regression tests.
+#[cfg(any(windows, test))]
 use std::collections::VecDeque;
 
+#[cfg(any(windows, test))]
 pub const CHUNK_SAMPLES: usize = 1600; // 100 ms of mono PCM16 at 16 kHz.
 
+#[cfg(any(windows, test))]
 #[derive(Clone, Copy)]
 pub enum Encoding {
     Pcm,
     Float,
 }
 
+#[cfg(any(windows, test))]
 pub struct AudioFormat {
     pub rate: u32,
     channels: usize,
@@ -17,6 +21,7 @@ pub struct AudioFormat {
     encoding: Encoding,
 }
 
+#[cfg(any(windows, test))]
 impl AudioFormat {
     pub fn new(
         rate: u32,
@@ -106,6 +111,7 @@ impl AudioFormat {
 }
 
 /// One output sample per instant, regardless of the number of playback devices.
+#[cfg(any(windows, test))]
 pub fn mix_chunk(buffers: &mut [VecDeque<i16>]) -> Vec<i16> {
     (0..CHUNK_SAMPLES)
         .map(|_| {

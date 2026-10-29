@@ -7,7 +7,9 @@ use tauri::{AppHandle, Manager, Window};
 use tauri_plugin_store::StoreExt;
 
 const MARKER: &str = "MIANSHI_DISGUISED";
+#[cfg(windows)]
 const REAL_EXE: &str = "MIANSHI_REAL_EXE";
+#[cfg(windows)]
 pub(crate) const PARENT: &str = "MIANSHI_RELAUNCH_PARENT";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -266,6 +268,7 @@ fn is_copy(path: &Path, identifier: &str) -> bool {
     std::env::var_os(MARKER).is_some()
         || copy_dir(identifier).is_some_and(|dir| path.parent().is_some_and(|parent| parent == dir))
 }
+#[cfg(windows)]
 fn real_exe(current: &Path, identifier: &str) -> Result<PathBuf, String> {
     if !is_copy(current, identifier) {
         return Ok(current.into());
@@ -418,10 +421,10 @@ pub fn cmd_relaunch(app: AppHandle) -> Result<(), String> {
         let original = real_exe(&current, &app.config().identifier)?;
         spawn_handoff(&original, &original, false)?;
         app.exit(0);
+        Ok(())
     }
     #[cfg(not(windows))]
-    app.restart();
-    Ok(())
+    app.restart()
 }
 
 #[cfg(test)]
