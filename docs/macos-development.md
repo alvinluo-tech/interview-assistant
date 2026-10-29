@@ -35,13 +35,15 @@ Mac 收音范围是系统播放声音，`devices` 返回空数组，由既有界
 
 2026-10-29 首轮真实 Mac CI 在原生测试编译阶段失败：[运行记录](https://github.com/alvinluo-tech/interview-assistant/actions/runs/40809364863)。Tauri 构建校验只读取通用 `tauri` dependency，未合并目标条件中的 `macos-private-api` feature，因而报告 feature 与 Mac 配置不匹配。此失败发生在应用测试和 DMG 打包之前，不能视作 Mac 编译通过。
 
+修正后的源码提交 `733cc60` 已通过 [Mac 双架构 CI](https://github.com/alvinluo-tech/interview-assistant/actions/runs/40809987262)：Apple Silicon 和 Intel 两路的原生测试、完整编译链接、DMG 打包、hdiutil 校验及附件上传均成功。这包含真实的 Swift 桥编译和 Apple 框架链接。
+
 Windows 已执行前端构建、现有协议与音频回归、原生 workspace 单测、媒体/坐标/队列/取消测试、权限命令桥测试和依赖审计。额外使用浏览器模拟 Mac 原生命令，验证设置页的拒绝/允许授权、打开设置、标题保存、共享限制开关和说明，未出现页面运行错误。
 
 本轮结果：前端及协议测试 105 项通过；Rust 测试 41 项通过，1 项需要真实 Windows 播放设备的测试跳过；媒体 crate 的 Windows Clippy 检查通过；生产前端依赖审计未发现已知漏洞。原有核心前端覆盖率门槛也通过，此结果不代表 Mac 原生代码的真机覆盖率。
 
 采集 crate 已在 Windows 对两个 Mac 目标做 Rust 类型检查，使用文档构建开关 `DOCS_RS=1` 跳过本机不可执行的 Swift 编译。**这只验证 Rust 类型，未验证 Apple 框架、Swift 桥或完整应用的 Mac 链接；不能用该模式打包或发布。**
 
-尚未在 Mac 执行完整构建、DMG 安装或真实采集。不能把 Windows 通过的结果表述为 Mac 已可用，也不能给出真机稳定性结论。
+Mac CI 已完成完整构建与安装包校验；尚未完成真实 Mac 图形会话中的安装、授权弹窗、会议采集及多屏浮窗验收。不能据此给出真机稳定性结论。
 
 ## 可复现检查
 
@@ -65,7 +67,7 @@ pnpm tauri build --target aarch64-apple-darwin --bundles dmg
 pnpm tauri build --target x86_64-apple-darwin --bundles dmg
 ```
 
-`.github/workflows/macos-check.yml` 在相关拉取请求或手动运行时执行原生测试、编译链接、DMG 打包和校验，上传两个架构的验收包，不创建 GitHub Release。本次只准备工作流，没有推送或触发远端任务。现有 release 工作流仍负责标签驱动的正式发布。
+`.github/workflows/macos-check.yml` 在相关拉取请求或手动运行时执行原生测试、编译链接、DMG 打包和校验，上传两个架构的验收包，不创建 GitHub Release。实现已合并推送到 main，并执行了上述 Mac CI。现有 release 工作流仍负责标签驱动的正式发布。
 
 ## Mac 真机验收清单
 
