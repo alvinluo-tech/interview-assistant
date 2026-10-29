@@ -2,7 +2,7 @@
  * 笔试引擎：截屏 → vision LLM 流式作答 → 本地笔试记录。
  * 替代原版 exam.* websocket 云端管线；计费/额度本地化（本地模式不限制）。
  */
-import { captureScreen } from './bridge';
+import { captureScreen, cmd } from './bridge';
 import { buildExamUserPrompt, chatWithImages, EXAM_SYSTEM_PROMPT } from './ai';
 import { type ExamQuestion, createExamSession, readData, updateExamSession, completeExamSession } from './backend';
 import { getSetting, ExamCustomization, DEFAULT_EXAM_CUSTOMIZATION } from './store';
@@ -53,6 +53,10 @@ export interface SolverTurn {
   reasoningDone: boolean;
   reasoningDurationMs: number;
   body: string;
+  questionText?: string;
+  screenshotRefs?: string[];
+  imageSaveError?: string;
+  parentTurnId?: string;
   /** [[FOLLOWUP: a|b|c]] 服务端建议的追问 */
   followUpOptions: string[];
   createdAt: number;
@@ -179,10 +183,11 @@ async function createSessionForGeneration(goalId: string | null, current: number
 async function persistTurns() {
   if (!state.sessionId) return;
   const questions: ExamQuestion[] = state.turns
-    .filter((t) => t.body.length > 0)
+    .filter((t) => t.body.length > 0 || !!t.questionText || !!t.screenshotRefs?.length)
     .map((t) => ({
       id: t.id,
-      questionText: `第 ${state.turns.indexOf(t) + 1} 题`,
+      questionText: t.questionText || (t.screenshotRefs?.length ? '模型未单独返回题干，请查看原题截图。' : '模型未单独返回题干。'),
+      screenshotRefs: t.screenshotRefs, imageSaveError: t.imageSaveError, parentTurnId: t.parentTurnId,
       answer: t.body,
       createdAt: t.createdAt,
     }));
@@ -268,17 +273,29 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   const turns = [...state.turns, turn];
   setState({ turns, activeTurnId: turn.id });
   const startedAt = Date.now();
+  let raw = '';
   try {
+    try {
+      const refs = await cmd<string[]>('cmd_exam_store_images', {sessionId: state.sessionId, turnId: turn.id, images: shots});
+      if (current !== generation) return;
+      setState({turns: state.turns.map(t => t.id === turn.id ? {...t, screenshotRefs: refs || []} : t)});
+    } catch (error) {
+      if (current !== generation) return;
+      setState({turns: state.turns.map(t => t.id === turn.id ? {...t, imageSaveError: String((error as Error).message || error)} : t)});
+    }
+    await persistTurns();
     const c = customization();
     const answer = await chatWithImages(buildExamUserPrompt(c), shots, {
       signal: controller.signal,
-      system: EXAM_SYSTEM_PROMPT+'\n'+(state.mode==='instant'?'简洁输出结论，避免展开长篇解释。':state.mode==='programming'?'给出完整可运行代码、边界条件与时间空间复杂度。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路，保持简明。'),
+      system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'简洁输出结论，避免展开长篇解释。':state.mode==='programming'?'给出完整可运行代码、边界条件与时间空间复杂度。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路，保持简明。'),
       onDelta: (delta) => {
         if (current !== generation) return;
+        raw += delta;
+        const parsed = splitExamResponse(raw);
         setState({
           phase: 'streaming',
           statusText: 'AI 输出中…',
-          turns: state.turns.map((t) => (t.id === turn.id ? { ...t, body: t.body + delta } : t)),
+          turns: state.turns.map((t) => (t.id === turn.id ? { ...t, body: parsed.answer, questionText: parsed.questionText } : t)),
         });
       },
     });
@@ -287,7 +304,8 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       t.id === turn.id
         ? {
             ...t,
-            body: answer || t.body,
+            body: splitExamResponse(answer || raw).answer || t.body,
+            questionText: splitExamResponse(answer || raw).questionText || t.questionText,
             reasoningDone: true,
             reasoningDurationMs: Date.now() - startedAt,
             followUpOptions: suggestFollowUps(answer),
@@ -353,6 +371,9 @@ export async function followUp(opts: {
     reasoningDone: false,
     reasoningDurationMs: 0,
     body: prefix,
+    questionText: `追问：${opts.message ?? labelOfIntent(opts.intent)}`,
+    screenshotRefs: last.screenshotRefs,
+    parentTurnId: last.parentTurnId || last.id,
     followUpOptions: [],
     createdAt: Date.now(),
   };
@@ -369,7 +390,7 @@ export async function followUp(opts: {
   const startedAt = Date.now();
   try {
     const context = state.turns
-      .map((t) => t.body)
+      .map((t) => [t.questionText, t.body].filter(Boolean).join('\n\n'))
       .join('\n\n---\n\n')
       .slice(-6000);
     const answer = await chatWithImages(
@@ -427,10 +448,10 @@ export function setSolverMode(mode: ExamModeKey) {
 
 export async function abortSolve(): Promise<void> {
   cancelRequest();
+  await persistTurns();
   setState({
     phase: 'idle',
     statusText: '',
-    turns: [],
     activeTurnId: null,
     pendingScreenshots: [],
     elapsedSec: 0,
@@ -448,6 +469,8 @@ export async function endExamSession(relaunch: boolean): Promise<void> {
     if (tickTimer) { window.clearInterval(tickTimer); tickTimer = null; }
     try { await setSessionActive(false); }
     finally {
+      await cmd('cmd_dual_send', {text: JSON.stringify({t:'ended'})}).catch(() => {});
+      await cmd('cmd_dual_stop').catch(() => {});
       try { await hideOverlay(); }
       finally { const { showMain } = await import('./bridge'); void relaunch; await showMain(); }
     }
@@ -469,4 +492,11 @@ export function stripMarkdown(text: string): string {
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\[\[FOLLOWUP:[^\]]*\]\]/g, '')
     .trim();
+}
+
+/** Keep recognized source text separate from the answer, including streaming partial tags. */
+export function splitExamResponse(raw: string): {questionText: string; answer: string} {
+  const question = /<exam-question>([\s\S]*?)(?:<\/exam-question>|$)/.exec(raw);
+  const answer = /<exam-answer>([\s\S]*?)(?:<\/exam-answer>|$)/.exec(raw);
+  return {questionText: question?.[1].trim() || '', answer: answer ? answer[1].trim() : question ? '' : raw.trim()};
 }

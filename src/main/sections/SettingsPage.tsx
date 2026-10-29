@@ -41,8 +41,10 @@ import { InterviewOverlay } from '@/overlay/InterviewOverlay';
 import { StealthTab } from './StealthTab';
 import { backupData, getDataError } from '@/lib/backend';
 import { UpdateStatusButton } from '../UpdateNotice';
+import { DeveloperInfo } from './DeveloperInfo';
+import { StorageSettings } from './StorageSettings';
 
-type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'changelog' | 'about';
+type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'storage' | 'changelog' | 'about';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overlay-style', label: '浮窗样式' },
@@ -51,6 +53,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'stealth', label: '隐蔽' },
   { key: 'ai', label: 'AI 服务' },
   { key: 'changelog', label: '更新日志' },
+  { key: 'storage', label: '存储' },
   { key: 'about', label: '关于' },
 ];
 
@@ -83,6 +86,7 @@ export function SettingsPage() {
         {tab === 'ai' && <AiServicesTab onDirtyChange={setAiDirty} />}
         {tab === 'changelog' && <ChangelogTab />}
         {tab === 'about' && <AboutTab />}
+      {tab === 'storage' && <StorageSettings />}
       </div>
       <ConfirmDialog open={pendingTab !== null} title="放弃未保存的 AI 配置？" body="模型列表、密钥和用途分配的更改还没有保存。" confirmText="放弃修改" onCancel={() => setPendingTab(null)} onConfirm={() => { if (pendingTab) setTab(pendingTab); setPendingTab(null); setAiDirty(false); }} />
     </div>
@@ -870,6 +874,7 @@ function AboutTab() {
           }
         />
       </div>
+      <DeveloperInfo />
       <ConfirmDialog open={confirmRestore} title="恢复手动备份？" body="会用最近一次手动备份替换简历、资料、题库和会话记录。当前文件会另外保留；进行中的会话请先结束。" confirmText="恢复备份" onCancel={()=>setConfirmRestore(false)} onConfirm={()=>void dataAction(true)} />
     </Card>
   );

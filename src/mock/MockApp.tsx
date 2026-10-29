@@ -1,6 +1,6 @@
-import { getAiSettings, useAiReady } from '@/lib/aiSettings';
+import { getAiSettings, useAiReady, useAiSettings } from '@/lib/aiSettings';
 import { openMicrophone, type MicrophoneCapture } from '@/lib/microphone';
-import { getSetting } from '@/lib/store';
+import { getSetting, useSetting } from '@/lib/store';
 import type { RealtimeCapture } from '@/lib/realtimeAsr';
 /*
  * 模拟面试窗口（#mock，对齐原版 LT/NT 的服务端行为）：
@@ -12,9 +12,9 @@ import type { RealtimeCapture } from '@/lib/realtimeAsr';
  * 每次写回都基于本次读到的数组，避免覆盖另一个窗口/协程的追加。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Mic, Sparkles, Square, Send, Volume2, VolumeX } from 'lucide-react';
-import { Button, Textarea, showToast, ToastViewport } from '@/ui/primitives';
-import { encodeWav, synthesizeSpeech, transcribeAudio } from '@/lib/ai';
+import { Mic, Sparkles, Square, Send, Volume2, VolumeX, MessagesSquare, X } from 'lucide-react';
+import { Button, Textarea, showToast, ToastViewport, ConfirmDialog } from '@/ui/primitives';
+import { encodeWav, transcribeAudio } from '@/lib/ai';
 import {
   askedQuestionCount,
   generateHint,
@@ -26,6 +26,8 @@ import {
 } from '@/lib/mock';
 import { updateSession, useData, type ChatMessage, type InterviewSession } from '@/lib/backend';
 import { AvatarMark } from './AvatarMark';
+import { questionSpeaker } from '@/lib/questionSpeech';
+import './room.css';
 
 const SILENCE_HINT_AFTER_MS = 4000;
 interface VoiceRecording { capture:MicrophoneCapture|null; realtime?:RealtimeCapture; controller:AbortController; chunks:Int16Array[]; length:number; voicedMs:number; finals:string[]; stopping:boolean }
@@ -58,7 +60,11 @@ function MockRoom() {
   const [thinking, setThinking] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [silentSince, setSilentSince] = useState<number | null>(null);
-  const [ttsOn, setTtsOn] = useState(true);
+  const [ttsOn, setTtsOn] = useSetting('mock.speechEnabled', true);
+  const [transcriptOpen, setTranscriptOpen] = useState(true);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [assistOverride, setAssistOverride] = useState<boolean | null>(null);
+  const assistEnabled = assistOverride ?? config?.assistMode ?? false;
   const [speaking, setSpeaking] = useState(false);
   const [hints, setHints] = useState<Record<string, string>>({});
   const [report, setReport] = useState<string | null>(null);
@@ -70,85 +76,78 @@ function MockRoom() {
   const recorderRef = useRef<VoiceRecording|null>(null);
   const [voicePreview,setVoicePreview] = useState('');
   const [voiceStatus,setVoiceStatus] = useState('');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const player = useMemo(() => questionSpeaker(setSpeaking, reason => showToast({type:'error', title:'面试官语音暂时不可用', description:String((reason as Error).message || reason)})), []);
   const busyRef = useRef(false);
+  const finishingRef = useRef(false);
+  const requestGeneration = useRef(0);
+  const questionRequest = useRef<AbortController | null>(null);
+  const retryTimer = useRef<number | null>(null);
   const aiReady = useAiReady('chat');
-  const ttsReady = useAiReady('tts');
+  const speechSettings = useAiSettings();
 
   const messages = session?.messages ?? [];
   const asked = askedQuestionCount(messages);
   const currentQuestion = [...messages].reverse().find((m) => m.role === 'INTERVIEWER') ?? null;
   const done = finished || session?.status === 'COMPLETED';
   useEffect(() => () => {
+    requestGeneration.current++; questionRequest.current?.abort();
+    if (retryTimer.current) window.clearTimeout(retryTimer.current);
     const rec=recorderRef.current; recorderRef.current=null;
     rec?.controller.abort();void rec?.capture?.close();void rec?.realtime?.close();
   }, []);
 
-  // 面试官说话：开场 / 续场恢复 / 答完后接问。最后一条已经是问题就说明在等回答。
+  // Opening/resume requests are cancelled when the room ends or unmounts.
   useEffect(() => {
     if (!session || !config || done || busyRef.current) return;
     const msgs = session.messages;
-    const last = msgs[msgs.length - 1];
-    if (last && last.role === 'INTERVIEWER') return;
-    if (!aiReady) return;
-    busyRef.current = true;
-    setThinking(true);
+    if (msgs[msgs.length - 1]?.role === 'INTERVIEWER' || !aiReady) return;
+    const generation = ++requestGeneration.current;
+    const controller = new AbortController(); questionRequest.current = controller;
+    busyRef.current = true; setThinking(true);
     void (async () => {
       try {
-        const question =
-          msgs.length === 0
-            ? await generateOpeningQuestion(config)
-            : (await generateNextQuestion(config, msgs)).question;
-        await updateSession(session.id, { messages: [...msgs, newMessage('INTERVIEWER', question, 'NEW')] });
-      } catch (e) {
-        showToast({ type: 'error', title: '面试官出题失败', description: String((e as Error).message ?? e) });
-        window.setTimeout(() => setRetryTick((t) => t + 1), 1500);
+        const reply = msgs.length === 0
+          ? {question: await generateOpeningQuestion(config, controller.signal), turnKind:'NEW' as const}
+          : await generateNextQuestion(config, msgs, controller.signal);
+        if (controller.signal.aborted || generation !== requestGeneration.current) return;
+        await updateSession(session.id, {messages:[...msgs, newMessage('INTERVIEWER',reply.question,reply.turnKind)]});
+      } catch (error) {
+        if (controller.signal.aborted || generation !== requestGeneration.current) return;
+        showToast({type:'error',title:'面试官出题失败',description:String((error as Error).message || error)});
+        retryTimer.current = window.setTimeout(() => setRetryTick(t => t + 1), 1500);
       } finally {
-        busyRef.current = false;
-        setThinking(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, config, done, aiReady, retryTick]);
-
-  // 朗读当前问题
-  useEffect(() => {
-    if (!currentQuestion || !ttsOn || !ttsReady || done) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const buf = await synthesizeSpeech(currentQuestion.text);
-        if (!buf || cancelled) return;
-        const blob = new Blob([buf], { type: 'audio/mpeg' });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.onplay = () => setSpeaking(true);
-        audio.onended = () => setSpeaking(false);
-        audio.onerror = () => setSpeaking(false);
-        audioRef.current = audio;
-        await audio.play().catch(() => setSpeaking(false));
-      } catch {
-        setSpeaking(false);
+        if (generation === requestGeneration.current) {busyRef.current = false; setThinking(false);}
       }
     })();
     return () => {
-      cancelled = true;
-      setSpeaking(false);
-      audioRef.current?.pause();
+      controller.abort();
+      // A refreshed record may replace this effect while opening is pending.
+      // Release only this request's ownership so its replacement can start.
+      if (questionRequest.current === controller) {
+        questionRequest.current = null;
+        busyRef.current = false;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuestion?.id, ttsOn, ttsReady, done]);
+  }, [session, config, done, aiReady, retryTick]);
+
+  // Route presence chooses configured TTS; otherwise the OS voice is used.
+  useEffect(() => {
+    if (currentQuestion && ttsOn && !done) void player.speak(currentQuestion.text);
+    return () => player.stop();
+  }, [currentQuestion?.id, ttsOn, done, player, speechSettings.routes.tts, speechSettings.ttsVoice]);
 
   // AI 辅助提示（练手用，开始前在工作台开关）
   useEffect(() => {
-    if (!config?.assistMode || !aiReady || done || !currentQuestion) return;
+    if (!config || !assistEnabled || !aiReady || done || !currentQuestion) return;
     if (hints[currentQuestion.id] !== undefined) return;
+    const controller = new AbortController();
     setHints((h) => ({ ...h, [currentQuestion.id]: '' }));
     void (async () => {
       try {
-        const hint = await generateHint(config, currentQuestion.text);
-        setHints((h) => ({ ...h, [currentQuestion.id]: hint }));
+        const hint = await generateHint(config, currentQuestion.text, controller.signal);
+        if (!controller.signal.aborted) setHints((h) => ({ ...h, [currentQuestion.id]: hint }));
       } catch {
+        if (controller.signal.aborted) return;
         setHints((h) => {
           const next = { ...h };
           delete next[currentQuestion.id];
@@ -156,12 +155,14 @@ function MockRoom() {
         });
       }
     })();
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuestion?.id, config?.assistMode, aiReady, done]);
+  }, [currentQuestion?.id, assistEnabled, aiReady, done]);
 
   // 计时器
   useEffect(() => {
     if (!session || done) return;
+    setElapsed(Date.now() - session.createdAt);
     const timer = window.setInterval(() => setElapsed(Date.now() - session.createdAt), 1000);
     return () => window.clearInterval(timer);
   }, [session, done]);
@@ -180,7 +181,7 @@ function MockRoom() {
 
   const startRec = async () => {
     if (recorderRef.current || transcribing || thinking || done) return;
-    audioRef.current?.pause();setSpeaking(false);
+    player.stop();setSpeaking(false);
     const rec: VoiceRecording = {capture:null,controller:new AbortController(),chunks:[],length:0,voicedMs:0,finals:[],stopping:false};
     recorderRef.current=rec;setTranscribing(true);setVoicePreview('');setVoiceStatus('正在连接语音输入…');
     try {
@@ -258,9 +259,9 @@ function MockRoom() {
   // 空格键开关麦克风
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'Space') return;
+      if (e.code !== 'Space' || e.repeat) return;
       const el = e.target as HTMLElement;
-      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return;
+      if (['TEXTAREA','INPUT','BUTTON','SELECT'].includes(el.tagName) || el.isContentEditable) return;
       e.preventDefault();
       if (recording) void stopRec();
       else void startRec();
@@ -272,25 +273,38 @@ function MockRoom() {
 
   const finish = useCallback(
     async (finalMessages: ChatMessage[]) => {
-      if (!session) return;
-      const rec=recorderRef.current;recorderRef.current=null;rec?.controller.abort();await rec?.capture?.close();await rec?.realtime?.close();setRecording(false);
-      setFinished(true);
+      if (!session || finishingRef.current) return;
+      finishingRef.current = true;
+      requestGeneration.current++; questionRequest.current?.abort();
+      if (retryTimer.current) window.clearTimeout(retryTimer.current);
+      player.stop(); setFinished(true); setThinking(false); busyRef.current = false;
+      const rec=recorderRef.current;recorderRef.current=null;rec?.controller.abort();
+      const closing = await Promise.allSettled([rec?.capture?.close(), rec?.realtime?.close()]);
+      setRecording(false);
+      if (closing.some(result => result.status === 'rejected')) showToast({type:'info', title:'音频清理遇到错误，关闭窗口后系统会回收设备。'});
       const answered = finalMessages.filter((m) => m.role === 'ASSISTANT');
-      await updateSession(session.id, {
-        status: 'COMPLETED',
-        endedAt: Date.now(),
-        metadata: { ...(session.metadata ?? {}), reportStatus: 'pending' },
-      });
+      try {
+        await updateSession(session.id, {
+          status: 'COMPLETED', endedAt: Date.now(),
+          metadata: { ...(session.metadata ?? {}), reportStatus: aiReady && answered.length > 0 ? 'pending' : undefined },
+        });
+      } catch (error) {
+        finishingRef.current = false; setFinished(false);
+        showToast({type:'error', title:'结束状态未保存，请重试', description:String((error as Error).message || error)});
+        return;
+      }
       if (!aiReady || answered.length === 0) return;
       setGeneratingReport(true);
+      const reportRequest = new AbortController(); questionRequest.current = reportRequest;
       try {
-        const text = await generateMockReport(finalMessages);
+        const text = await generateMockReport(finalMessages, reportRequest.signal);
+        if (reportRequest.signal.aborted) return;
         await updateSession(session.id, {
           metadata: { ...(session.metadata ?? {}), report: text, reportStatus: 'ready', reportError: undefined },
         });
         setReport(text);
       } catch (e) {
-        const message = String((e as Error).message ?? e);
+        const message = reportRequest.signal.aborted ? '复盘已取消，可在历史记录中重新生成。' : String((e as Error).message ?? e);
         await updateSession(session.id, {
           metadata: { ...(session.metadata ?? {}), reportStatus: 'error', reportError: message },
         });
@@ -306,29 +320,36 @@ function MockRoom() {
     if(recording || transcribing)return;
     const text = draft.trim();
     if (!text || !session || !config || busyRef.current || done) return;
+    const generation = ++requestGeneration.current;
+    const controller = new AbortController(); questionRequest.current = controller;
     setDraft('');
     busyRef.current = true;
     setThinking(true);
+    let answerSaved = false;
     try {
       const base = session.messages;
       const answer = newMessage('ASSISTANT', text);
       await updateSession(session.id, { messages: [...base, answer] });
+      answerSaved = true;
+      if (controller.signal.aborted || generation !== requestGeneration.current) return;
       const withAnswer = [...base, answer];
       if (asked >= config.turnBudget) {
         busyRef.current = false;
         await finish(withAnswer);
         return;
       }
-      const next = await generateNextQuestion(config, withAnswer);
+      const next = await generateNextQuestion(config, withAnswer, controller.signal);
+      if (controller.signal.aborted || generation !== requestGeneration.current) return;
       await updateSession(session.id, {
         messages: [...withAnswer, newMessage('INTERVIEWER', next.question, next.turnKind)],
       });
     } catch (e) {
-      showToast({ type: 'error', title: '提交失败，正在重试出题', description: String((e as Error).message ?? e) });
-      window.setTimeout(() => setRetryTick((t) => t + 1), 1500);
+      if (controller.signal.aborted || generation !== requestGeneration.current) return;
+      if (!answerSaved) setDraft(text);
+      showToast({ type: 'error', title: answerSaved ? '回答已保存，正在重试出题' : '回答未保存，请重试', description: String((e as Error).message ?? e) });
+      if (answerSaved) retryTimer.current = window.setTimeout(() => setRetryTick((t) => t + 1), 1500);
     } finally {
-      busyRef.current = false;
-      setThinking(false);
+      if (generation === requestGeneration.current) {busyRef.current = false; setThinking(false);}
     }
   };
 
@@ -382,49 +403,35 @@ function MockRoom() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
-      <header className="flex items-center gap-3 border-b border-neutral-800 px-5 py-3">
-        <span
-          className={`relative flex size-9 items-center justify-center rounded-full ring-2 transition-all ${
-            speaking ? 'ring-emerald-400 shadow-[0_0_24px_-4px_rgba(52,211,153,0.6)]' : 'ring-neutral-700'
-          }`}
-        >
-          <AvatarMark size={36} />
-        </span>
-        <div>
-          <div className="text-sm font-semibold">AI 面试官</div>
-          <div className="text-[11px] text-neutral-400">
-            {config.goalName}
-            {config.company ? ` · ${config.company}` : ''} · 第 {Math.min(asked, config.turnBudget)}/{config.turnBudget}{' '}
-            题 · {fmtElapsed(elapsed)}
-          </div>
+    <div className="mock-room">
+      <header className="mock-room-header">
+        <div className="mock-room-identity"><span className="mock-live-dot" /><div><h1>模拟面试 <span>· {config.goalName || '综合面试'}</span></h1><p>{config.company || config.difficultyLabel} · 第 {Math.min(asked, config.turnBudget)} / {config.turnBudget} 题</p></div></div>
+        <time className="mock-clock">{fmtElapsed(elapsed)}</time>
+        <div className="mock-room-actions">
+          <button aria-label={transcriptOpen ? '收起对话记录' : '展开对话记录'} aria-pressed={transcriptOpen} title="对话记录" onClick={() => setTranscriptOpen(!transcriptOpen)}><MessagesSquare size={18} /></button>
+          <button aria-label={ttsOn ? '关闭面试官语音' : '开启面试官语音'} aria-pressed={ttsOn} title={speechSettings.routes.tts ? '使用已配置的语音服务' : '使用系统默认语音'} onClick={() => setTtsOn(!ttsOn)}>{ttsOn ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
+          <button className="mock-end" onClick={() => setConfirmEnd(true)}>结束面试</button>
         </div>
-        <div className="flex-1" />
-        <button
-          type="button"
-          className="flex items-center gap-1 rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
-          onClick={() => setTtsOn((v) => !v)}
-        >
-          {ttsOn ? <Volume2 size={13} /> : <VolumeX size={13} />}
-          {ttsOn ? '关掉面试官语音' : '打开面试官语音'}
-        </button>
-        <button
-          type="button"
-          className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
-            config.assistMode
-              ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300'
-              : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
-          }`}
-          onClick={() => {
-            showToast({ type: 'info', title: '辅助模式在开始面试前设置，本场内不切换' });
-          }}
-        >
-          <Sparkles size={13} />
-          AI 辅助{config.assistMode ? '开' : '关'}
-        </button>
       </header>
-
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-6">
+      <div className={`mock-room-workspace ${transcriptOpen ? '' : 'without-transcript'}`}>
+        <section className="mock-stage" aria-label="面试现场">
+          <div className="mock-participants">
+            <div className={`mock-participant ${speaking ? 'is-speaking' : ''}`}>
+              <span className="mock-role">面试官</span><div className="mock-avatar-halo"><AvatarMark size={112} /></div>
+              <div className="mock-participant-caption"><span className={speaking ? 'mock-live-dot' : 'mock-muted-dot'} />{speaking ? '正在提问' : thinking ? '正在思考下一问' : '面试官'}</div>
+            </div>
+            <div className={`mock-participant candidate ${recording ? 'is-speaking' : ''}`}>
+              <span className="mock-role">候选人</span><div className="mock-candidate-avatar">我</div>
+              <div className="mock-participant-caption"><Mic size={13} />{recording ? '正在听你回答' : '文字或语音作答'}</div>
+            </div>
+          </div>
+          <div className="mock-question" aria-live="polite"><span className="mock-question-label">{thinking ? '面试官正在思考' : '当前问题'}</span><p>{currentQuestion?.text || (thinking ? '面试官正在准备开场问题…' : '准备好后开始对话。')}</p>
+            {currentQuestion && <button title="重新朗读当前问题" aria-label="朗读当前问题" onClick={() => {if (!ttsOn) setTtsOn(true); else void player.speak(currentQuestion.text);}}><Volume2 size={16} /></button>}
+          </div>
+          {assistEnabled && currentQuestion && hints[currentQuestion.id] && <div className="mock-hint"><Sparkles size={14} /><p>{hints[currentQuestion.id]}</p></div>}
+          <button className={`mock-assist-toggle ${assistEnabled ? 'enabled' : ''}`} aria-pressed={assistEnabled} onClick={() => setAssistOverride(!assistEnabled)}><Sparkles size={14} /> AI 辅助 {assistEnabled ? '已开启' : '已关闭'}</button>
+        </section>
+        {transcriptOpen && (<aside className="mock-transcript" aria-label="对话记录"><div className="mock-transcript-heading"><span>对话记录</span><button aria-label="收起对话记录" onClick={() => setTranscriptOpen(false)}><X size={15} /></button></div>
         {!aiReady && (
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12.5px] text-amber-300">
             还没有配置 AI 接口，面试官无法出题。回到主窗口「设置 → AI 服务」配置后重新打开这场面试。
@@ -442,7 +449,7 @@ function MockRoom() {
             </div>
           </div>
         ))}
-        {config.assistMode && currentQuestion && hints[currentQuestion.id] && (
+        {assistEnabled && currentQuestion && hints[currentQuestion.id] && (
           <div className="ml-9 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-[12.5px] leading-relaxed text-emerald-200">
             <div className="mb-0.5 text-[11px] font-medium opacity-70">提示</div>
             <pre className="whitespace-pre-wrap font-sans">{hints[currentQuestion.id]}</pre>
@@ -454,10 +461,10 @@ function MockRoom() {
             <div className="rounded-lg rounded-tl-sm bg-neutral-800 px-3.5 py-2.5 text-[13px]">面试官正在考虑下一个问题…</div>
           </div>
         )}
-      </main>
-
-      <footer className="border-t border-neutral-800 p-4">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
+      </aside>)}
+      </div>
+      <footer className="mock-response">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2">
           <Textarea
             className="border-neutral-700 bg-neutral-900 text-neutral-100"
             rows={3}
@@ -492,9 +499,6 @@ function MockRoom() {
               </span>
             )}
             <div className="flex-1 text-[11px] text-neutral-500">Ctrl/⌘ + Enter 提交，面试官会接着追问或换题</div>
-            <Button size="sm" variant="ghost" onClick={() => void finish(session.messages)}>
-              提前结束
-            </Button>
             <Button size="sm" onClick={() => void submit()} disabled={!draft.trim() || thinking || recording || transcribing}>
               <Send size={12} />
               提交回答
@@ -502,6 +506,7 @@ function MockRoom() {
           </div>
         </div>
       </footer>
+      <ConfirmDialog open={confirmEnd} title="结束本场模拟面试？" body="已提交的问答会保留，并生成本场复盘。未提交的文字请先作答。" confirmText="结束并复盘" onCancel={() => setConfirmEnd(false)} onConfirm={() => {setConfirmEnd(false); void finish(session.messages);}} />
     </div>
   );
 }

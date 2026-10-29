@@ -6,7 +6,7 @@
  *   电脑鼠标在浮窗范围内悬停手机按钮（cursor-point 归一化回传手机画光标）；
  * - 断线 15s 宽限内不弹回本地浮窗（原版 KG 语义）；「切回电脑」= exit → released。
  */
-import { cmd, listenEvent, setOverlaySize, setOverlayZones, setCursorPointFeed } from './bridge';
+import { cmd, listenEvent, emitTo, setOverlaySize, setOverlayZones, setCursorPointFeed } from './bridge';
 import {
   answerNow,
   capturePage,
@@ -48,6 +48,7 @@ export async function startDualScreen(): Promise<DualStartInfo> {
 export async function stopDualScreen(): Promise<void> {
   await cmd<void>('cmd_dual_stop');
 }
+export function requestDualView(mode: 'desktop' | 'phone') { return emitTo('overlay', 'dual-control', {mode}); }
 
 export function dualUrlWithToken(info: DualStartInfo): string {
   const url = info.urls[0] ?? `http://127.0.0.1:${info.port}`;
@@ -94,13 +95,24 @@ export function startDualTakeover(): () => void {
   let disposed = false;
   let revision = 0;
   let releasing = false;
+  let desktopPaused = false;
   let originalSize: { width: number; height: number } | null = null;
   let restoreTimer: number | null = null;
   let pushTimer: number | null = null;
   let dwellTimer: number | null = null;
   let dwellZone: string | null = null;
   let lastState = '';
+  let phoneZones: PhoneZone[] = [];
   const cleanups: (() => void)[] = [];
+
+  async function applyPhoneZones() {
+    if (!active || disposed || !phoneZones.length) return;
+    const current = revision;
+    await refreshOverlayRect();
+    if (!active || disposed || current !== revision || !overlayRect) return;
+    await setOverlayZones(phoneZones.map(z => ({id:`dual:${z.id}`, x:Math.round(overlayRect!.x + z.x * overlayRect!.w),
+      y:Math.round(overlayRect!.y + z.y * overlayRect!.h), width:Math.round(z.w * overlayRect!.w), height:Math.round(z.h * overlayRect!.h)}))).catch(() => {});
+  }
 
   const enter = () => {
     if (disposed || releasing || active || owner !== takeoverGeneration) return;
@@ -113,7 +125,7 @@ export function startDualTakeover(): () => void {
     document.documentElement.classList.add('dual-takeover');
     notifyTakeover();
     void setCursorPointFeed(true).catch(() => {});
-    pushTimer = window.setInterval(pushState, STATE_PUSH_MS);
+    pushTimer = window.setInterval(() => {void pushState(); if (Date.now() - overlayRectAt >= 800) void applyPhoneZones();}, STATE_PUSH_MS);
     void pushState();
   };
 
@@ -141,16 +153,17 @@ export function startDualTakeover(): () => void {
     if (current !== revision || owner !== takeoverGeneration) return;
     // Force the desktop scanner to republish even if its rectangles did not move.
     notifyTakeover();
-    if (released) await dualSend({ t: 'released' }).catch(() => {});
+    if (released) await dualSend({ t: 'desktop' }).catch(() => {});
   };
 
   const release = async (endSession = false) => {
-    if (disposed || releasing || !active) return;
+    if (disposed || releasing || (!active && !endSession)) return;
     releasing = true;
     cancelRestore();
     if (endSession) await dualSend({ t: 'ended' }).catch(() => {});
+    desktopPaused = !endSession;
     await restore(!endSession);
-    await stopDualScreen().catch(() => {});
+    if (endSession) await stopDualScreen().catch(() => {});
     if (endSession) await endExamSession(false).catch(error => {
       console.error('[dual] ending session failed', error);
     });
@@ -158,9 +171,10 @@ export function startDualTakeover(): () => void {
   };
 
   const performAction = async (id: string) => {
-    if (disposed || !active || releasing) return;
-    if (id === 'exit') return release();
+    if (disposed || releasing) return;
     if (id === 'end-session') return release(true);
+    if (!active) return;
+    if (id === 'exit') return release();
     try { await dispatchAction(id); }
     catch { await dualSend({ t: 'action-error', message: '操作失败，请重试或切回电脑查看。' }).catch(() => {}); }
   };
@@ -191,7 +205,8 @@ export function startDualTakeover(): () => void {
     if (!active || disposed || releasing) return;
     const s: SolverState = getSolverState();
     const info = examModeInfo(s.mode);
-    const turns = s.turns.slice(-3).map((t, i) => ({
+    const turns = s.turns.map((t, i) => ({
+      id: t.id,
       md: t.body,
       tsText: new Date(t.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
       idx: i,
@@ -220,6 +235,13 @@ export function startDualTakeover(): () => void {
   const addOff = (p: Promise<() => void>) => {
     void p.then((off) => { if (disposed) off(); else cleanups.push(off); }).catch(() => {});
   };
+  addOff(listenEvent<{mode: 'desktop' | 'phone'}>('dual-control', message => {
+    if (disposed) return;
+    if (message.mode === 'desktop') void release();
+    else void cmd<number>('cmd_dual_peer_count').then(count => {
+      if (!disposed && count > 0) {desktopPaused = false; enter(); void pushState();}
+    }).catch(() => {});
+  }));
 
   // ---- 手机消息 ----
   addOff(
@@ -232,7 +254,10 @@ export function startDualTakeover(): () => void {
         return;
       }
       if (disposed || !m || typeof m !== 'object' || Array.isArray(m)) return;
-      if (!active && m.t !== 'ping') return;
+      if (m.t === 'resume') { desktopPaused = false; enter(); lastState = ''; void pushState(); return; }
+      if (m.t === 'action' && m.id === 'end-session' && desktopPaused) {void performAction('end-session'); return;}
+      if (!active && !['ping', 'hello'].includes(m.t || '')) return;
+      if (!active && desktopPaused) { void dualSend({t:'desktop'}); return; }
       switch (m.t) {
         case 'hello': {
           const w = Number(m.w), h = Number(m.h);
@@ -242,7 +267,7 @@ export function startDualTakeover(): () => void {
             if (disposed || !active || current !== revision) return;
             const aspect = Math.max(0.3, Math.min(3, w / h));
             // Native rects use physical pixels, while setOverlaySize expects logical pixels.
-            void setOverlaySize(Math.round(window.innerHeight * aspect), window.innerHeight).then(() => { overlayRectAt = 0; }).catch(() => {});
+            void setOverlaySize(Math.round(window.innerHeight * aspect), window.innerHeight).then(() => { overlayRectAt = 0; void applyPhoneZones(); }).catch(() => {});
           });
           break;
         }
@@ -253,6 +278,7 @@ export function startDualTakeover(): () => void {
           const zones = (m.zones as PhoneZone[]).filter(z => z && allowed.has(z.id)
             && [z.x, z.y, z.w, z.h].every(Number.isFinite)
             && z.x >= 0 && z.y >= 0 && z.w > 0 && z.h > 0 && z.x + z.w <= 1.01 && z.y + z.h <= 1.01);
+          phoneZones = zones;
           const current = revision;
           void refreshOverlayRect().then(() => {
             if (!overlayRect || disposed || !active || current !== revision) return;
@@ -291,11 +317,12 @@ export function startDualTakeover(): () => void {
       diag.peer++;
       if (p.count > 0) {
         cancelRestore();
+        if (desktopPaused) { void dualSend({t:'desktop'}); return; }
         void enter();
         lastState = '';
         void pushState();
       } else {
-        if (p.reason === 'stopped' || p.reason === 'restarted') { cancelRestore(); void restore(false); }
+        if (p.reason === 'stopped' || p.reason === 'restarted') { desktopPaused = false; cancelRestore(); void restore(false); }
         else scheduleRestore();
       }
     }),
@@ -329,8 +356,10 @@ export function startDualTakeover(): () => void {
       dwellZone = id;
       if (dwellTimer) window.clearTimeout(dwellTimer);
       dwellTimer = null;
+      void dualSend({t:'hover', id, duration:DUAL_DWELL_MS}).catch(() => {});
       if (id) {
         dwellTimer = window.setTimeout(() => {
+          void dualSend({t:'hover', id:null}).catch(() => {});
           if (active && !disposed && dwellZone === id) void performAction(id);
         }, DUAL_DWELL_MS);
       }
@@ -348,7 +377,7 @@ export function startDualTakeover(): () => void {
   }).catch(() => {});
 
   return () => {
-    const hadPhone = active && !releasing;
+    const hadPhone = (active || desktopPaused) && !releasing;
     disposed = true;
     cancelRestore();
     void restore(false);

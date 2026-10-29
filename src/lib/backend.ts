@@ -178,6 +178,9 @@ export interface InterviewSession {
 }
 
 export interface ExamQuestion {
+  screenshotRefs?: string[];
+  imageSaveError?: string;
+  parentTurnId?: string;
   id: string;
   questionText: string;
   answer: string;

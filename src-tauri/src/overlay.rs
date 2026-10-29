@@ -115,6 +115,12 @@ fn overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
 mod drag_tests {
     use super::*;
     #[test]
+    fn phone_cursor_feed_enables_dwell_even_in_interactive_mode() {
+        assert!(super::cursor_zones_enabled(true, true));
+        assert!(super::cursor_zones_enabled(false, false));
+        assert!(!super::cursor_zones_enabled(true, false));
+    }
+    #[test]
     fn ending_an_old_drag_cannot_cancel_its_replacement() {
         let state = OverlayState::default();
         let first = state.begin_drag(true).unwrap().unwrap();
@@ -495,6 +501,8 @@ pub fn cmd_minimize_main(app: AppHandle) -> Result<(), String> {
 
 // ---------- 后台线程 ----------
 
+fn cursor_zones_enabled(interactive: bool, phone_feed: bool) -> bool { !interactive || phone_feed }
+
 pub fn spawn_cursor_poller(app: AppHandle) {
     std::thread::spawn(move || {
         #[cfg(any(windows, target_os = "macos"))]
@@ -512,7 +520,7 @@ pub fn spawn_cursor_poller(app: AppHandle) {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let interactive = state.interactive.load(Ordering::SeqCst);
             let feed = state.cursor_feed.load(Ordering::SeqCst);
-            if interactive && !feed {
+            if !cursor_zones_enabled(interactive, feed) {
                 if state.last_hit.lock().unwrap().take().is_some() {
                     let _ = app.emit_to(
                         "overlay",
@@ -539,17 +547,6 @@ pub fn spawn_cursor_poller(app: AppHandle) {
                         CursorPointPayload { x: p.x, y: p.y },
                     );
                 }
-            }
-            if interactive {
-                let mut last = state.last_hit.lock().unwrap();
-                if last.take().is_some() {
-                    let _ = app.emit_to(
-                        "overlay",
-                        "cursor-zone",
-                        CursorZonePayload { zone_id: None },
-                    );
-                }
-                continue;
             }
             // 命中检测
             let zones = state.zones.lock().unwrap();

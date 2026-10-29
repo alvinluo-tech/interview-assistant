@@ -126,10 +126,75 @@ fn atomic_write(path: &Path, value: &Map<String, Value>) -> Result<(), String> {
 fn snapshot(data: &Map<String, Value>) -> Value {
     json!({"revision":data.get("__revision").and_then(Value::as_u64).unwrap_or(0), "data":data})
 }
+fn migrate_folder(legacy: &Path, path: &Path) -> Result<(), String> {
+    fs::create_dir_all(path.join("backups")).map_err(|e| e.to_string())?;
+    if !path.join("data.json").exists() && legacy.join("data.json").exists() {
+        let document = read_document(&legacy.join("data.json"))?;
+        for name in ["data.previous.json", "data.manual-backup.json"] {
+            if legacy.join(name).exists() && !path.join("backups").join(name).exists() {
+                match read_document(&legacy.join(name)) {
+                    Ok(backup) => atomic_write(&path.join("backups").join(name), &backup)?,
+                    Err(_) => log::warn!("[storage] legacy backup {name} is invalid; original file preserved"),
+                }
+            }
+        }
+        atomic_write(&path.join("data.json"), &document)?;
+    }
+    Ok(())
+}
 fn folder(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let path = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    static MIGRATION: Mutex<()> = Mutex::new(());
+    let _lock = MIGRATION.lock().map_err(|_| "存储迁移锁异常")?;
+    let path = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("data");
+    let legacy = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    migrate_folder(&legacy, &path)?;
     Ok(path)
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+    fn temporary() -> std::path::PathBuf {
+        let mut random = [0u8; 8]; getrandom::fill(&mut random).unwrap();
+        std::env::temp_dir().join(format!("mianxu-storage-{:x}", u64::from_le_bytes(random)))
+    }
+    #[test]
+    fn migration_preserves_legacy_data_and_never_overwrites_newer_records() {
+        let root = temporary(); let legacy = root.join("legacy"); let local = root.join("local");
+        fs::create_dir_all(&legacy).unwrap();
+        let document = serde_json::from_value(json!({"examSessions":[{"id":"old"}]})).unwrap();
+        atomic_write(&legacy.join("data.json"), &document).unwrap();
+        atomic_write(&legacy.join("data.manual-backup.json"), &document).unwrap();
+        migrate_folder(&legacy, &local).unwrap();
+        assert_eq!(read_document(&local.join("data.json")).unwrap(), document);
+        assert!(legacy.join("data.json").is_file());
+        assert!(local.join("backups/data.manual-backup.json").is_file());
+        let new = serde_json::from_value(json!({"examSessions":[{"id":"new"}]})).unwrap();
+        atomic_write(&local.join("data.json"), &new).unwrap();
+        migrate_folder(&legacy, &local).unwrap();
+        assert_eq!(read_document(&local.join("data.json")).unwrap(), new);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn corrupt_legacy_data_is_not_marked_as_migrated() {
+        let root = temporary(); let legacy = root.join("legacy"); let local = root.join("local");
+        fs::create_dir_all(&legacy).unwrap(); fs::write(legacy.join("data.json"), "broken").unwrap();
+        assert!(migrate_folder(&legacy, &local).is_err()); assert!(!local.join("data.json").exists());
+        assert_eq!(fs::read_to_string(legacy.join("data.json")).unwrap(), "broken");
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn a_corrupt_old_backup_does_not_block_migration_of_valid_records() {
+        let root = temporary(); let legacy = root.join("legacy"); let local = root.join("local");
+        fs::create_dir_all(&legacy).unwrap();
+        let data = serde_json::from_value(json!({"examSessions":[{"id":"valid"}]})).unwrap();
+        atomic_write(&legacy.join("data.json"), &data).unwrap();
+        fs::write(legacy.join("data.manual-backup.json"), "broken backup").unwrap();
+        migrate_folder(&legacy, &local).unwrap();
+        assert_eq!(read_document(&local.join("data.json")).unwrap(), data);
+        assert_eq!(fs::read_to_string(legacy.join("data.manual-backup.json")).unwrap(), "broken backup");
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 #[tauri::command]
 pub fn cmd_data_read(app: AppHandle, state: tauri::State<DataState>) -> Result<Value, String> {
@@ -194,7 +259,7 @@ pub fn cmd_data_commit(
             + 1)
         .into(),
     );
-    atomic_write(&dir.join("data.previous.json"), current)?;
+    atomic_write(&dir.join("backups/data.previous.json"), current)?;
     atomic_write(&dir.join("data.json"), &next)?;
     let result = snapshot(&next);
     *state = Some(next);
@@ -209,7 +274,7 @@ pub fn cmd_data_backup(
 ) -> Result<Value, String> {
     let mut state = state.0.lock().map_err(|_| "数据锁异常")?;
     let dir = folder(&app)?;
-    let path = dir.join("data.manual-backup.json");
+    let path = dir.join("backups/data.manual-backup.json");
     if restore {
         if !path.is_file() {
             return Err("还没有手动备份。".into());

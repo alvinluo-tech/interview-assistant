@@ -2,13 +2,15 @@
  * 历史记录（对齐原版 TV）：面试问答记录 + 笔试题目答案，支持展开、
  * 重命名、删除、导出 markdown；模拟面试附复盘报告（查看/重新生成）。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Download, FileSearch, Pencil, Trash2 } from 'lucide-react';
 import {
   Badge,
   Button,
   Card,
   ConfirmDialog,
+  Dialog,
+  DialogTitle,
   Input,
   SectionHeader,
   showToast,
@@ -23,22 +25,22 @@ import { generateMockReport, mockMeta } from '@/lib/mock';
 import { useAiReady } from '@/lib/aiSettings';
 import { mdToPlain, Md } from '@/overlay/Md';
 import { MockReportDialog } from './MockReportDialog';
-import { JobProgressCards } from './JobProgressCards';
+import { cmd } from '@/lib/bridge';
 
 export function RecordsPage() {
-  const [tab, setTab] = useState<'interview' | 'exam'>('interview');
+  const [tab, setTab] = useState<'interview' | 'mock' | 'exam'>('interview');
   return (
     <div className="flex flex-col gap-4">
-      <JobProgressCards />
       <div className="flex gap-1.5">
         {[
           { key: 'interview', label: '面试记录' },
           { key: 'exam', label: '笔试记录' },
+          { key: 'mock', label: '模拟面试' },
         ].map((t) => (
           <button
             key={t.key}
             type="button"
-            onClick={() => setTab(t.key as 'interview' | 'exam')}
+            onClick={() => setTab(t.key as 'interview' | 'mock' | 'exam')}
             className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
               tab === t.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent'
             }`}
@@ -47,18 +49,19 @@ export function RecordsPage() {
           </button>
         ))}
       </div>
-      {tab === 'interview' ? <InterviewRecords /> : <ExamRecords />}
+      {tab === 'exam' ? <ExamRecords /> : <InterviewRecords key={tab} kind={tab} />}
     </div>
   );
 }
 
-function InterviewRecords() {
-  const [sessions, setSessions] = useData<InterviewSession[]>('interviewSessions', []);
+function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
+  const [allSessions, setSessions] = useData<InterviewSession[]>('interviewSessions', []);
   const [openId, setOpenId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState<InterviewSession | null>(null);
   const [reportViewingId, setReportViewingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const sessions = allSessions.filter(s => kind === 'mock' ? s.type === 'MOCK_INTERVIEW' : s.type !== 'MOCK_INTERVIEW');
   const aiReady = useAiReady('chat');
   const reportViewing = sessions.find((s) => s.id === reportViewingId) ?? null;
 
@@ -71,7 +74,7 @@ function InterviewRecords() {
       `- 消息数：${s.messages.length}`,
       '',
       ...s.messages.map((m) =>
-        `**${m.role === 'INTERVIEWER' ? '面试官' : 'AI 回答'}**\n\n${mdToPlain(m.text)}\n`,
+        `**${m.role === 'INTERVIEWER' ? '面试官' : s.type === 'MOCK_INTERVIEW' ? '我' : 'AI 回答'}**\n\n${mdToPlain(m.text)}\n`,
       ),
       ...(meta?.report ? [`## 复盘报告\n\n${meta.report}\n`] : []),
     ].join('\n');
@@ -109,7 +112,7 @@ function InterviewRecords() {
   if (sessions.length === 0) {
     return (
       <Card className="p-8 text-center text-sm text-muted-foreground">
-        还没有面试记录。用面试助手聊过的每一场都会出现在这里。
+        {kind === 'mock' ? '还没有模拟面试记录。完成练习后可在这里查看对话与复盘。' : '还没有面试记录。用面试助手聊过的每一场都会出现在这里。'}
       </Card>
     );
   }
@@ -187,7 +190,7 @@ function InterviewRecords() {
                     {s.messages.map((m) => (
                       <div key={m.id}>
                         <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">
-                          {m.role === 'INTERVIEWER' ? '面试官' : 'AI 回答'}
+                          {m.role === 'INTERVIEWER' ? '面试官' : s.type === 'MOCK_INTERVIEW' ? '我' : 'AI 回答'}
                         </div>
                         <div
                           className={`records-md whitespace-pre-wrap rounded-md border px-2.5 py-2 ${
@@ -231,7 +234,7 @@ function InterviewRecords() {
                 size="sm"
                 onClick={() => {
                   setSessions(
-                    sessions.map((x) => (x.id === renaming.id ? { ...x, title: renaming.title.trim() } : x)),
+                    allSessions.map((x) => (x.id === renaming.id ? { ...x, title: renaming.title.trim() } : x)),
                   );
                   setRenaming(null);
                 }}
@@ -249,7 +252,7 @@ function InterviewRecords() {
         body={`删除后无法恢复，确定删除「${deleting?.title ?? ''}」吗？`}
         onCancel={() => setDeleting(null)}
         onConfirm={() => {
-          if (deleting) setSessions(sessions.filter((x) => x.id !== deleting.id));
+          if (deleting) setSessions(allSessions.filter((x) => x.id !== deleting.id));
           setDeleting(null);
         }}
       />
@@ -262,6 +265,7 @@ function ExamRecords() {
   const [records, setRecords] = useData<ExamSessionRecord[]>('examSessions', []);
   const [openId, setOpenId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<ExamSessionRecord | null>(null);
+  const [images, setImages] = useState<string[] | null>(null);
 
   if (records.length === 0) {
     return (
@@ -324,10 +328,14 @@ function ExamRecords() {
                     {r.questions.map((q, i) => (
                       <div key={q.id}>
                         <div className="mb-1 text-[11px] font-medium text-muted-foreground">
-                          第 {i + 1} 题 · {new Date(q.createdAt).toLocaleTimeString('zh-CN')}
+                          {q.parentTurnId ? '追问' : `第 ${i + 1} 题`} · {new Date(q.createdAt).toLocaleTimeString('zh-CN')}
+                          {!!q.screenshotRefs?.length && <Button size="sm" variant="ghost" className="ml-2" onClick={() => setImages(q.screenshotRefs!)}>查看原图 · {q.screenshotRefs.length} 张</Button>}
                         </div>
                         <div className="records-md whitespace-pre-wrap rounded-md border bg-background px-2.5 py-2">
-                          {q.answer ? mdToPlain(q.answer) : '这道题没有答案记录。'}
+                          <div className="mb-2 border-b pb-2"><p className="mb-1 text-xs text-muted-foreground">原题</p>{q.questionText && !/^第\s*\d+\s*题$/.test(q.questionText) ? <Md text={q.questionText} /> : '旧记录未保存题干。'}</div>
+                          <p className="mb-1 text-xs text-muted-foreground">答案</p>
+                          {q.answer ? <Md text={q.answer} /> : '这道题没有答案记录。'}
+                          {q.imageSaveError && <p role="alert" className="mt-2 text-xs text-amber-700">截图未能保存：{q.imageSaveError}</p>}
                         </div>
                       </div>
                     ))}
@@ -338,6 +346,7 @@ function ExamRecords() {
           </Card>
         );
       })}
+      <ExamImageViewer references={images} onClose={() => setImages(null)} />
       <ConfirmDialog
         open={deleting != null}
         title="删除记录"
@@ -353,3 +362,26 @@ function ExamRecords() {
 }
 
 void SectionHeader;
+
+function ExamImageViewer({references, onClose}: {references: string[] | null; onClose: () => void}) {
+  const [index, setIndex] = useState(0), [url, setUrl] = useState(''), [error, setError] = useState('');
+  const [zoom, setZoom] = useState(false);
+  useEffect(() => {setIndex(0); setZoom(false);}, [references]);
+  useEffect(() => {
+    let disposed = false; setUrl(''); setError('');
+    if (references?.[index]) void cmd<string>('cmd_exam_read_image', {reference: references[index]})
+      .then(value => {if (!disposed) setUrl(value);}).catch(error => {if (!disposed) setError(String(error));});
+    return () => {disposed = true;};
+  }, [references, index]);
+  return <Dialog open={!!references} onClose={onClose} className="max-w-[92vw]">
+    <DialogTitle>原题截图</DialogTitle>
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">第 {index + 1} / {references?.length || 0} 张 · 已压缩保存</span>
+      <Button size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)}>上一张</Button>
+      <Button size="sm" variant="outline" disabled={index >= (references?.length || 0) - 1} onClick={() => setIndex(index + 1)}>下一张</Button>
+      <Button size="sm" variant="ghost" onClick={() => setZoom(!zoom)}>{zoom ? '适应窗口' : '放大查看'}</Button>
+    </div>
+    {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : !url ? <p className="text-sm">读取截图中…</p> :
+      <div className="max-h-[72vh] overflow-auto rounded border bg-neutral-900 p-2"><img alt={`原题截图 ${index + 1}`} src={url} className={zoom ? 'max-w-none' : 'mx-auto max-h-[68vh] max-w-full object-contain'} /></div>}
+  </Dialog>;
+}

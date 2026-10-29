@@ -42,6 +42,10 @@
   button.act.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
   button.act:active { transform: scale(.97); }
   button.act:disabled { opacity:.4; }
+  button.dwell-target { position:relative; outline:2px solid #93c5fd; outline-offset:2px; overflow:hidden; }
+  button.dwell-target:after { content:''; position:absolute; left:0; bottom:0; height:3px; background:#fff; animation:dwell-progress 1200ms linear forwards; pointer-events:none; }
+  @keyframes dwell-progress { from {width:0} to {width:100%} }
+  @media(prefers-reduced-motion:reduce) { button.dwell-target:after {animation:none;width:100%} }
   #mode { font-size:11px; color:var(--muted); text-align:center; }
   #sheet { position:fixed; inset:auto 0 0 0; background:var(--card); border-top:1px solid var(--line);
     border-radius:14px 14px 0 0; padding:14px 16px calc(18px + env(safe-area-inset-bottom)); display:none; }
@@ -183,10 +187,16 @@
         var s = cursor.offsetWidth || 16;
         cursor.style.left = (m.x * window.innerWidth) + 'px';
         cursor.style.top = (m.y * window.innerHeight) + 'px';
+      } else if (m.t === 'hover') {
+        document.querySelectorAll('[data-zone]').forEach(function(el) {el.classList.toggle('dwell-target', el.getAttribute('data-zone') === m.id);});
       } else if (m.t === 'ping') send({ t: 'pong', id: m.id });
       else if (m.t === 'do') {
         if (m.id === 'scroll-up') main.scrollBy({ top: -main.clientHeight * 0.8, behavior: 'smooth' });
         else if (m.id === 'scroll-down') main.scrollBy({ top: main.clientHeight * 0.8, behavior: 'smooth' });
+      } else if (m.t === 'desktop') {
+        clearTimeout(releaseTimer); ready = false; enableActions(false); cursor.style.display = 'none';
+        document.getElementById('back').disabled = false; document.getElementById('back').textContent = '继续副屏'; document.getElementById('end').disabled = false;
+        setStatus('电脑操作中 · 连接已保留', 'on');
       } else if (m.t === 'released' || m.t === 'ended') finish(m.t === 'ended');
       else if (m.t === 'action-error') setStatus(m.message || '操作失败，请重试。', 'warn');
     };
@@ -228,13 +238,14 @@
     var el = e.target.closest('[data-zone]');
     if (!el || released) return;
     var id = el.getAttribute('data-zone');
+    if (id === 'exit' && !ready && document.getElementById('back').textContent === '继续副屏') { send({t:'resume'}); return; }
     if (id === 'exit') {
       ready = false; enableActions(false); document.getElementById('back').disabled = true;
       send({ t: 'exit' }); setStatus('切回电脑中…', 'warn');
-      releaseTimer = setTimeout(function () { finish(false); }, 4000);
+      releaseTimer = setTimeout(function () { document.getElementById('back').disabled = false; setStatus('切换未确认，请重试', 'warn'); }, 4000);
       return;
     }
-    if (!ready || el.disabled) return;
+    if ((!ready && id !== 'end-session') || el.disabled) return;
     if (id === 'end-session' && !confirm('结束本次笔试并返回电脑主界面？')) return;
     if (id === 'scroll-up') { main.scrollBy({ top: -main.clientHeight * 0.8, behavior: 'smooth' }); return; }
     if (id === 'scroll-down') { main.scrollBy({ top: main.clientHeight * 0.8, behavior: 'smooth' }); return; }
@@ -259,7 +270,10 @@
     return out.join('');
   }
   function render(st) {
+    var resuming = !ready && document.getElementById('back').textContent === '继续副屏';
     ready = true; enableActions(true); cursor.style.display = '';
+    if (resuming) send({t:'hello',w:window.innerWidth,h:window.innerHeight});
+    document.getElementById('back').textContent = '切回电脑'; document.getElementById('back').disabled = false;
     setStatus('手机已接管 · 可在这里切回电脑或结束笔试', 'on');
     lastState = st;
     document.getElementById('brand').textContent = st.brand || '笔试副屏';

@@ -8,6 +8,7 @@ function harness({ deferredListeners = false, deferredCount = false } = {}) {
   let nextTimer = 1, countResolve, stopped = 0;
   const state = { mode: 'quick', phase: 'idle', turns: [], pendingScreenshots: [], elapsedSec: 0 };
   const bridge = {
+    emitTo: async () => {},
     listenEvent: (name, fn) => {
       const register = () => { listeners.set(name, fn); return () => { if (listeners.get(name) === fn) listeners.delete(name); }; };
       return deferredListeners ? new Promise(resolve => pending.push(() => resolve(register()))) : Promise.resolve(register());
@@ -45,7 +46,7 @@ function harness({ deferredListeners = false, deferredCount = false } = {}) {
       throw new Error(`Unexpected dependency ${name}`);
     },
   });
-  return { api, calls, classes, timers, listeners,
+  return { api, calls, classes, timers, listeners, state,
     register: () => pending.splice(0).forEach(fn => fn()),
     resolveCount: n => countResolve?.(n),
     emit: (name, payload) => listeners.get(name)?.(payload),
@@ -73,14 +74,39 @@ test('a disposed overlay cannot be taken over by a late peer query or leaked lis
   assert.equal(h.timers.size, 0);
 });
 
-test('phone return-to-computer closes its session and ignores subsequent actions', async () => {
+test('return-to-computer retains pairing and explicit resume reuses the connection', async () => {
   const h = harness(), stop = h.api.startDualTakeover(); await flush();
   h.emit('dual-peer', { count: 1 }); await flush();
   h.message({ t: 'exit' }); await flush();
-  assert.equal(h.stopped(), 1);
+  assert.equal(h.stopped(), 0);
   assert.equal(h.api.isZonesSuppressed(), false);
   h.message({ t: 'action', id: 'solve' }); await flush();
   assert.equal(h.solved(), 0);
+  h.message({ t: 'resume' }); await flush();
+  assert.equal(h.api.isZonesSuppressed(), true);
+  h.message({ t: 'action', id: 'solve' }); await flush();
+  assert.equal(h.solved(), 1);
+  stop();
+});
+
+test('phone state retains every question and stable identifiers beyond three turns', async () => {
+  const h = harness();
+  h.state.turns = Array.from({ length: 7 }, (_, i) => ({ id: `q${i}`, body: `answer${i}`, createdAt: 1000 + i }));
+  const stop = h.api.startDualTakeover(); await flush();
+  h.emit('dual-peer', { count: 1 }); await flush();
+  const payload = h.calls.filter(([name]) => name === 'cmd_dual_send').map(([, args]) => JSON.parse(args.text)).find(m => m.t === 'state');
+  assert.equal(payload.data.turns.length, 7);
+  assert.equal(payload.data.turns[0].id, 'q0');
+  stop();
+});
+
+test('computer dwell triggers solve only after the dwell interval', async () => {
+  const h = harness(), stop = h.api.startDualTakeover(); await flush();
+  h.emit('dual-peer', { count: 1 }); await flush();
+  h.emit('cursor-zone', { zoneId: 'dual:solve' }); await flush();
+  assert.equal(h.solved(), 0);
+  [...h.timers.values()].at(-1)(); await flush();
+  assert.equal(h.solved(), 1);
   stop();
 });
 

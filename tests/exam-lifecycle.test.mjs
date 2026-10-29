@@ -6,8 +6,9 @@ const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve()
 function engine({ completionFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false } = {}) {
   let resolveRequest, options, requests = 0;
   let resolveSession, resolveCapture, created = 0;
-  const calls = [];
+  const calls = [], saved = [];
   const bridge = {
+    cmd: async () => ['synthetic/turn/image.png'],
     captureScreen: async () => deferredCapture ? new Promise(resolve => { resolveCapture = resolve; }) : 'data:image/png;base64,synthetic',
     hideOverlay: async () => calls.push('hide'),
     showMain: async () => calls.push('main'),
@@ -22,7 +23,7 @@ function engine({ completionFails = false, deferred = true, deferredSession = fa
       if (name === './backend') return {
         readData: (_key, fallback) => fallback,
         createExamSession: async () => { created++; return deferredSession ? new Promise(resolve => { resolveSession = resolve; }) : { id: 'synthetic-session' }; },
-        updateExamSession: async () => calls.push('persist'),
+        updateExamSession: async (_id, record) => { calls.push('persist'); saved.push(record); },
         completeExamSession: async () => { if (completionFails) throw new Error('Disk unavailable'); calls.push('complete'); },
       };
       if (name === './ai') return { EXAM_SYSTEM_PROMPT: '', buildExamUserPrompt: () => 'test', chatWithImages: async (_prompt, _images, opts) => {
@@ -33,7 +34,7 @@ function engine({ completionFails = false, deferred = true, deferredSession = fa
       throw new Error(`Unexpected dependency ${name}`);
     },
   });
-  return { api, calls, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
+  return { api, calls, saved, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
     created: () => created, resolveSession: () => resolveSession?.({ id: 'synthetic-session' }), resolveCapture: () => resolveCapture?.('synthetic') };
 }
 
@@ -100,4 +101,18 @@ test('a record-save failure cannot trap the user in an unclosable exam overlay',
   await assert.rejects(h.api.endExamSession(false), /Disk unavailable/);
   assert.ok(h.calls.includes('hide') && h.calls.includes('main'));
   assert.equal(h.api.getSolverState().sessionId, null);
+});
+
+test('exam records retain recognized question text separately from the answer', async () => {
+  const h = engine();
+  const pending = h.api.solve({ screenshots: ['synthetic'] }); await flush();
+  h.resolve('<exam-question>计算 1 + 2 的结果。</exam-question><exam-answer>3</exam-answer>'); await pending;
+  assert.equal(h.saved.at(-1).questions[0].questionText, '计算 1 + 2 的结果。');
+  assert.equal(h.saved.at(-1).questions[0].answer, '3');
+});
+
+test('clearing a capture does not erase completed questions from the session', async () => {
+  const h = engine({ deferred: false });
+  await h.api.solve({ screenshots: ['synthetic'] }); await h.api.abortSolve();
+  assert.equal(h.api.getSolverState().turns.length, 1);
 });

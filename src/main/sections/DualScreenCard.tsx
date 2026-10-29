@@ -12,6 +12,7 @@ import {
   dualUrlWithToken,
   startDualScreen,
   stopDualScreen,
+  requestDualView,
   type DualStartInfo,
 } from '@/lib/dualScreen';
 
@@ -107,6 +108,8 @@ export function DualScreenCard() {
                 </Button>
               </div>
               <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled={peers === 0} onClick={() => void requestDualView('desktop').catch(() => setError('切换失败，请重试。'))}>切回电脑</Button>
+                <Button size="sm" variant="outline" disabled={peers === 0} onClick={() => void requestDualView('phone').catch(() => setError('切换失败，请重试。'))}>继续副屏</Button>
                 <Button size="sm" variant="ghost" disabled={loading} onClick={() => void launch()}>
                   换一个二维码
                 </Button>
@@ -115,11 +118,11 @@ export function DualScreenCard() {
                   variant="ghost"
                   onClick={() => void stop()}
                 >
-                  {peers > 0 ? '切回电脑并停止副屏' : '停止副屏'}
+                  断开手机连接
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                须先「开始笔试」启动浮窗；扫码后电脑浮窗自动隐身，断开 15 秒内手机重连不弹回。
+                同一场笔试切换显示端会保留连接；手机可点“继续副屏”，无需重扫。结束笔试、更换二维码或主动断开连接后，需要重新扫码。
               </p>
             </div>
           </>

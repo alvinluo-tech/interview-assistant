@@ -1,4 +1,5 @@
 mod ai_settings;
+mod attachments;
 mod audio;
 mod audio_dsp;
 #[cfg(windows)]
@@ -20,6 +21,7 @@ mod protection;
 #[cfg(any(target_os = "macos", test))]
 mod screen_permissions;
 mod settings;
+mod speech;
 mod updater;
 #[cfg(target_os = "macos")]
 mod window_macos;
@@ -111,6 +113,7 @@ pub fn run() {
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::UpdateState::default())
+        .manage(speech::SpeechState::default())
         .manage(ai_settings::AiSettingsLock::default())
         .manage(data_store::DataState::default())
         .manage(OverlayState::default())
@@ -128,6 +131,12 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            speech::cmd_system_speech,
+            speech::cmd_system_speech_stop,
+            attachments::cmd_exam_store_images,
+            attachments::cmd_exam_read_image,
+            attachments::cmd_storage_layout,
+            attachments::cmd_storage_open,
             overlay::cmd_open_mock,
             updater::cmd_updater_status,
             updater::cmd_updater_check,
@@ -201,6 +210,9 @@ pub fn run() {
             misc::cmd_pending_newer_version,
             misc::cmd_os_version,
         ])
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {speech::cancel_window(window.app_handle(), window.label());}
+        })
         .setup(|app| {
             if let Err(error) = protection::initialize(app.handle()) {
                 log::error!("[capture] initialization: {error}");
@@ -224,6 +236,9 @@ pub fn run() {
             misc::guardian::spawn_guardian(app.handle().clone());
             Ok(())
         })
-        .run(context)
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {speech::cancel_all(app);}
+        });
 }

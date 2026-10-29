@@ -49,11 +49,13 @@ export async function transcribeAudio(wav: Blob, opts: TranscriptionOptions = {}
   const { settings, provider, modelId } = route('stt');
   return recognizeSpeech(provider, modelId, wav, opts, aiFetch, settings.timeoutMs);
 }
-export async function synthesizeSpeech(text: string): Promise<ArrayBuffer | null> {
+export async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<ArrayBuffer | null> {
   // TTS is explicitly optional; configured-but-failed requests still surface errors.
   if (!getAiSettings().routes.tts) return null;
   const { settings, provider, modelId } = route('tts');
   return withAiRequest(provider, 'audio/speech', { method: 'POST', headers: aiHeaders(provider, true),
     body: JSON.stringify({ model: modelId, input: text, voice: settings.ttsVoice }),
-  }, settings.timeoutMs, r => r.arrayBuffer(), aiFetch);
+  }, settings.timeoutMs, r => r.arrayBuffer(), aiFetch, signal);
 }
+
+export { createQuestionSpeaker } from './questionSpeaker';

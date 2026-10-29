@@ -77,8 +77,9 @@ function dialogueTranscript(messages: ChatMessage[]): string {
 }
 
 /** 开场第一问 */
-export async function generateOpeningQuestion(config: MockConfig): Promise<string> {
+export async function generateOpeningQuestion(config: MockConfig, signal?: AbortSignal): Promise<string> {
   const text = await chatStream({
+    signal,
     messages: [
       { role: 'system', content: personaParts(config).join('\n') },
       {
@@ -95,10 +96,12 @@ export async function generateOpeningQuestion(config: MockConfig): Promise<strin
 export async function generateNextQuestion(
   config: MockConfig,
   messages: ChatMessage[],
+  signal?: AbortSignal,
 ): Promise<{ question: string; turnKind: 'NEW' | 'CONT' }> {
   const asked = askedQuestionCount(messages);
   const remaining = config.turnBudget - asked;
   const text = await chatStream({
+    signal,
     messages: [
       { role: 'system', content: personaParts(config).join('\n') },
       {
@@ -152,8 +155,9 @@ function cleanQuestion(raw: string): string {
 
 // ---------------- 辅助提示（练手用） ----------------
 
-export async function generateHint(config: MockConfig, question: string): Promise<string> {
+export async function generateHint(config: MockConfig, question: string, signal?: AbortSignal): Promise<string> {
   return chatStream({
+    signal,
     messages: [
       {
         role: 'system',
@@ -170,12 +174,13 @@ export async function generateHint(config: MockConfig, question: string): Promis
 
 // ---------------- 复盘报告 ----------------
 
-export async function generateMockReport(messages: ChatMessage[]): Promise<string> {
+export async function generateMockReport(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
   const transcript = messages
     .filter((m) => m.role === 'INTERVIEWER' || m.role === 'ASSISTANT')
     .map((m) => `${m.role === 'INTERVIEWER' ? 'Q' : 'A'}：${m.text}`)
     .join('\n\n');
   return chatStream({
+    signal,
     messages: [
       {
         role: 'system',
