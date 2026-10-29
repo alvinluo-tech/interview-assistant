@@ -28,6 +28,7 @@
   header .status { font-size:11px; color:var(--muted); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #back { border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:8px; padding:5px 10px; font-size:12px; }
   #end { border:1px solid #7f1d1d; background:#2c151d; color:#fecaca; border-radius:8px; padding:5px 8px; font-size:12px; }
+  #back, #end { min-height:44px; flex-shrink:0; }
   #settings-btn { border:none; background:none; color:var(--muted); font-size:16px; padding:4px 6px; }
   main { flex:1; overflow-y:auto; padding:10px 12px; touch-action: pan-y; }
   .turn { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
@@ -150,6 +151,7 @@
   function finish(ended) {
     released = true; ready = false;
     clearTimeout(releaseTimer); enableActions(false);
+    document.getElementById('back').disabled = true;
     main.textContent = '';
     document.getElementById('followups').textContent = '';
     cursor.style.display = 'none';
@@ -227,6 +229,7 @@
     if (!el || released) return;
     var id = el.getAttribute('data-zone');
     if (id === 'exit') {
+      ready = false; enableActions(false); document.getElementById('back').disabled = true;
       send({ t: 'exit' }); setStatus('切回电脑中…', 'warn');
       releaseTimer = setTimeout(function () { finish(false); }, 4000);
       return;

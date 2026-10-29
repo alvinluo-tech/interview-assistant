@@ -248,7 +248,7 @@ export function startDualTakeover(): () => void {
         }
         case 'zones': {
           if (!Array.isArray(m.zones) || m.zones.length > 128) return;
-          const allowed = new Set(['solve', 'direct', 'add-page', 'reset', 'mode-next', 'scroll-up', 'scroll-down', 'exit', 'end-session',
+          const allowed = new Set(['solve', 'direct', 'add-page', 'reset', 'mode-next', 'scroll-up', 'scroll-down', 'exit',
             'followup:simplify', 'followup:brute-force', 'followup:code-review', 'followup:partial-pass']);
           const zones = (m.zones as PhoneZone[]).filter(z => z && allowed.has(z.id)
             && [z.x, z.y, z.w, z.h].every(Number.isFinite)

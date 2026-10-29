@@ -166,10 +166,13 @@ export async function listenEvent<T>(event: string, handler: (payload: T) => voi
 export function onEvent<T>(event: string, handler: (payload: T) => void) {
   if (!isTauri()) return () => {};
   let un: (() => void) | null = null;
-  listen<T>(event, (e) => handler(e.payload)).then((u) => {
-    un = u;
-  });
+  let disposed = false;
+  listen<T>(event, (e) => { if (!disposed) handler(e.payload); }).then((u) => {
+    if (disposed) u(); else un = u;
+  }).catch(() => {});
   return () => {
+    disposed = true;
     un?.();
+    un = null;
   };
 }

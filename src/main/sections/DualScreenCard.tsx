@@ -36,6 +36,11 @@ export function DualScreenCard() {
     }
   };
 
+  const stop = async () => {
+    try { await stopDualScreen(); setInfo(null); setPeers(0); setError(''); }
+    catch { setError('停止副屏失败，请重试。'); }
+  };
+
   // 组件卸载时停服务（回到工作台不影响已连接会话则保留——原版常驻入口，这里保持运行）
   useEffect(() => {
     return onEvent<{ count: number; reason?: string }>('dual-peer', (p) => {
@@ -70,10 +75,13 @@ export function DualScreenCard() {
 
       <div className="mt-3 flex flex-wrap items-center gap-4">
         {!info ? (
-          <Button size="sm" onClick={() => void launch()} disabled={loading}>
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-            {loading ? '启动中…' : '生成连接二维码'}
-          </Button>
+          <>
+            <Button size="sm" onClick={() => void launch()} disabled={loading}>
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+              {loading ? '启动中…' : '生成连接二维码'}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={loading} onClick={() => void stop()}>停止副屏并切回电脑</Button>
+          </>
         ) : (
           <>
             <canvas ref={canvasRef} className="rounded-md border bg-white p-1" width={168} height={168} />
@@ -105,10 +113,7 @@ export function DualScreenCard() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={async () => {
-                    try { await stopDualScreen(); setInfo(null); setPeers(0); }
-                    catch { setError('停止副屏失败，请重试。'); }
-                  }}
+                  onClick={() => void stop()}
                 >
                   {peers > 0 ? '切回电脑并停止副屏' : '停止副屏'}
                 </Button>

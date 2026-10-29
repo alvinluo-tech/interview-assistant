@@ -82,6 +82,7 @@ export function OverlayPlatformProvider({
       try {
         const win = getCurrentWindow();
         const [sf, outer] = await Promise.all([win.scaleFactor(), win.outerPosition()]);
+        if (stopped || isZonesSuppressed()) return;
         const list: { id: string; x: number; y: number; width: number; height: number }[] = [];
         for (const [id, el] of zonesRef.current) {
           if (!el.isConnected) continue;
