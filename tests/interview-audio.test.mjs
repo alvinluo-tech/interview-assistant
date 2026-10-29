@@ -157,6 +157,37 @@ test('queued system audio from an old capture cannot enter the resumed session',
   await h.engine.endInterview(false);
 });
 
+test('queued old native events delivered to the new listener are rejected by capture ID', async () => {
+  let sequence = 0;
+  const h = harness({ nativeStart: async () => ({ captureId: `capture-${++sequence}`, sampleRate: 16000, channels: 1, devices: [] }) });
+  await h.start('SPEAKER');
+  await h.engine.pauseListening();
+  await h.engine.resumeListening();
+  const pcmBase64 = Buffer.from(new Int16Array(1600).fill(3277).buffer).toString('base64');
+  h.emitNative('system-audio-chunk', { captureId: 'capture-1', pcmBase64, volume: 80 });
+  h.emitNative('system-audio-error', { captureId: 'capture-1', error: 'old stream stopped' });
+  assert.equal(h.sandbox.window.__ml_audio().buffered, 0);
+  assert.equal(h.engine.getInterviewEngineState().status, 'listening');
+  h.emitNative('system-audio-chunk', { captureId: 'capture-2', pcmBase64, volume: 80 });
+  assert.ok(h.sandbox.window.__ml_audio().buffered > 0);
+  await h.engine.endInterview(false);
+});
+
+test('current tagged audio arriving before the start reply is buffered until identity is known', async () => {
+  let ready;
+  const pending = new Promise(resolve => { ready = resolve; });
+  const h = harness({ nativeStart: () => pending });
+  const start = h.start('SPEAKER');
+  for (let i = 0; i < 100 && h.nativeListenerCount < 2; i++) await Promise.resolve();
+  const pcmBase64 = Buffer.from(new Int16Array(1600).fill(3277).buffer).toString('base64');
+  h.emitNative('system-audio-chunk', { captureId: 'stale', pcmBase64, volume: 80 });
+  h.emitNative('system-audio-chunk', { captureId: 'current', pcmBase64, volume: 80 });
+  ready({ captureId: 'current', sampleRate: 16000, channels: 1, devices: [] });
+  await start;
+  assert.equal(h.sandbox.window.__ml_audio().buffered, 1600);
+  await h.engine.endInterview(false);
+});
+
 test('silent system packets never invoke ASR even if the reported native volume is wrong', async () => {
   const h = harness(); await h.start('SPEAKER');
   for (let i = 0; i < 20; i++) {
