@@ -125,3 +125,12 @@ test('missing or invalid build outputs prevent staging assets', t => {
   writeFileSync(path.join(target, 'Mianxu.exe'), 'MZfixture-app');
   assert.throws(() => collectRelease(root, 'v0.1.1'), /Invalid Windows executable/);
 });
+
+test('a release requiring updater support cannot collect an unsigned installer', t => {
+  const root = fixture(t); prepareRelease(root, 'v0.1.2');
+  const target = path.join(root, 'src-tauri/target/x86_64-pc-windows-msvc/release');
+  mkdirSync(path.join(target, 'bundle/nsis'), { recursive: true });
+  writeFileSync(path.join(target, 'bundle/nsis/setup.exe'), 'MZsynthetic-installer');
+  writeFileSync(path.join(target, 'Mianxu.exe'), 'MZsynthetic-app');
+  assert.throws(() => collectRelease(root, 'v0.1.2', 'x86_64-pc-windows-msvc', { updater: true }), /signature|签名|\.sig/);
+});
