@@ -66,7 +66,21 @@ export interface AudioCaptureInfo {
   sampleRate: number;
   channels: number;
 }
-export const startSystemAudioCapture = () => cmd<AudioCaptureInfo>('cmd_start_system_audio_capture');
+export const checkScreenCapturePermission = () => cmd<boolean>('cmd_check_screen_capture_permission');
+export const requestScreenCapturePermission = () => cmd<boolean>('cmd_request_screen_capture_permission');
+export const openScreenRecordingSettings = () => cmd<boolean>('cmd_open_screen_recording_settings');
+async function ensureScreenCapturePermission(): Promise<void> {
+  if (!isTauri()) throw new Error('请在桌面应用中使用截图或系统收音。');
+  if (await checkScreenCapturePermission()) return;
+  await requestScreenCapturePermission();
+  if (!await checkScreenCapturePermission()) {
+    throw new Error('尚未获得屏幕与系统音频录制权限。请前往「设置 → 隐蔽 → 录屏与系统收音权限」打开系统设置并允许面序访问，必要时重启应用。');
+  }
+}
+export const startSystemAudioCapture = async () => {
+  await ensureScreenCapturePermission();
+  return cmd<AudioCaptureInfo>('cmd_start_system_audio_capture');
+};
 export const stopSystemAudioCapture = () => cmd<void>('cmd_stop_system_audio_capture');
 export interface AudioOutputDevice {
   id: string;
@@ -78,16 +92,18 @@ export const setSystemAudioExcludedOutputs = (ids: string[]) =>
   cmd<void>('cmd_set_system_audio_excluded_outputs', { ids });
 
 // ---------- 截屏 ----------
-export const captureScreen = (opts?: {
+export const captureScreen = async (opts?: {
   compatibilityMode?: boolean;
   captureMode?: string;
   protectedOnTop?: boolean;
-}) =>
-  cmd<string>('cmd_capture_screen', {
+}) => {
+  await ensureScreenCapturePermission();
+  return cmd<string>('cmd_capture_screen', {
     compatibilityMode: opts?.compatibilityMode || undefined,
     captureMode: opts?.captureMode || undefined,
     protectedOnTop: opts?.protectedOnTop === true ? true : undefined,
   });
+};
 
 // ---------- 杂项 ----------
 export const readRecentLogs = (limit?: number) =>
