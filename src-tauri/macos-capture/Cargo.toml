@@ -6,3 +6,7 @@ publish = false
 
 [lib]
 path = "src/lib.rs"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+screencapturekit = { version = "=11.1.1", features = ["macos_13_0"] }
+core-graphics = "0.25"
