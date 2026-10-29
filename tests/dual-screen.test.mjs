@@ -103,3 +103,27 @@ test('malformed phone messages cannot escape the event handler or write zones', 
   assert.ok(!h.calls.some(([name, zones]) => name === 'zones' && zones.some(z => !Number.isFinite(z.x))));
   stop();
 });
+
+test('cleanup of a replaced takeover cannot clear the new session zones or cursor feed', async () => {
+  const h = harness(), oldStop = h.api.startDualTakeover(); await flush();
+  h.emit('dual-peer', { count: 1 }); await flush();
+  oldStop();
+  const newStop = h.api.startDualTakeover(); await flush();
+  h.emit('dual-peer', { count: 1 }); await flush();
+  assert.equal(h.api.isZonesSuppressed(), true);
+  assert.equal(h.calls.filter(([name]) => name === 'zones').length, 0, 'Obsolete async restore must not clear zones after the next owner starts');
+  newStop(); await flush();
+});
+
+test('zero and near-zero background opacity also apply to nested buttons', () => {
+  const { computeSkin, normalizeStyle } = evaluateFixture('src/lib/overlayStyle.ts', { exports: {} });
+  const alpha = color => Number(/,\s*([\d.]+)\)$/.exec(color)?.[1]);
+  for (const mode of ['exam', 'interview']) {
+    for (const opacity of [0, 0.03]) {
+      const skin = computeSkin(normalizeStyle({ [`${mode}BgOpacity`]: opacity }), mode);
+      for (const key of ['--ov-chip-bg', '--ov-chip-active-bg', '--ov-pill-bg']) {
+        assert.ok(alpha(skin.vars[key]) <= (opacity === 0 ? 0 : 0.15), `${mode} ${key} must follow the transparent surface`);
+      }
+    }
+  }
+});

@@ -46,8 +46,31 @@ try {
   await cdp.evaluate("document.documentElement.classList.remove('ov-palette-capturing')");
   assert.equal(await cdp.evaluate("getComputedStyle(document.getElementById('root')).opacity"), '1');
   assert.deepEqual(await cdp.evaluate('window.__errors'), []);
+  // Exercise the actual embedded phone page with a synthetic socket; no LAN or user data.
+  await cdp.command('Page.addScriptToEvaluateOnNewDocument', { source: `
+    window.confirm = () => true;
+    window.__phone = { sent: [] };
+    window.WebSocket = class {
+      constructor() { this.readyState = 1; window.__phone.socket = this; setTimeout(() => this.onopen?.(), 0); }
+      send(text) { window.__phone.sent.push(JSON.parse(text)); }
+      close() { this.readyState = 3; this.onclose?.(); }
+    };
+  ` });
+  const phoneUrl = new URL('/src-tauri/src/dual_page.html?token=synthetic', url).href;
+  await cdp.command('Page.navigate', { url: phoneUrl });
+  await cdp.waitFor('!!window.__phone?.socket');
+  assert.ok(await cdp.evaluate("!!document.querySelector('[data-zone=end-session]')"), 'Phone needs a separate end-session control');
+  assert.equal(await cdp.evaluate("document.getElementById('b-solve').disabled"), true, 'Do not enable actions before a desktop state snapshot arrives');
+  await cdp.evaluate(`window.__phone.socket.onmessage({data:JSON.stringify({t:'state',data:{modeLabel:'快速',turns:[{md:'Synthetic answer',tsText:'12:00'}],followUps:[{intent:'simplify',label:'继续简化'}]}})})`);
+  await cdp.evaluate("document.querySelector('#followups button').click()");
+  assert.equal(await cdp.evaluate('window.__phone.sent.at(-1).id'), 'followup:simplify', 'Transmit stable action IDs rather than display labels');
+  await cdp.evaluate("document.querySelector('[data-zone=end-session]').click()");
+  assert.equal(await cdp.evaluate('window.__phone.sent.at(-1).id'), 'end-session');
+  await cdp.evaluate("window.__phone.socket.onmessage({data:JSON.stringify({t:'ended'})})");
+  assert.equal(await cdp.evaluate("document.getElementById('main').innerText.includes('Synthetic answer')"), false, 'Clear answer content after ending or releasing the session');
+  assert.equal(await cdp.evaluate('window.__phone.socket.readyState'), 3);
   await writeFile('artifacts/overlay-ui-results.json', JSON.stringify({ passed: true, backgrounds, takeoverHidden: true, paletteCaptureHidden: true }, null, 2));
-  console.log('PASS: real overlay entry has transparent document layers; phone takeover and palette capture hide the UI.');
+  console.log('PASS: overlay transparency, takeover hiding, phone waiting state, end-session control, stable action IDs and answer cleanup.');
 } finally {
   if (cdp.socket) { await cdp.command('Browser.close', {}).catch(() => {}); cdp.close(); }
   browser.kill();
