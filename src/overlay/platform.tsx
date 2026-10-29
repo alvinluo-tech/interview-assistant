@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { onEvent, setOverlayInteractive, setOverlayZones, setDragActive } from '@/lib/bridge';
-import { isZonesSuppressed } from '@/lib/dualScreen';
+import { isZonesSuppressed, subscribeDualTakeover } from '@/lib/dualScreen';
 import { getSetting, setSetting } from '@/lib/store';
 import type { OverlayMode } from '@/lib/overlayStyle';
 
@@ -105,9 +105,11 @@ export function OverlayPlatformProvider({
       }
     };
     scan();
+    const offTakeover = subscribeDualTakeover(() => { last = ''; void scan(); });
     const timer = window.setInterval(scan, ZONE_SCAN_MS);
     return () => {
       stopped = true;
+      offTakeover();
       window.clearInterval(timer);
       setOverlayZones([]).catch(() => {});
     };

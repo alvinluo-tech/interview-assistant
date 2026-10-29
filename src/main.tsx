@@ -11,6 +11,10 @@ import { isTauri } from './lib/bridge';
 import { initializeAiSettings } from './lib/aiSettings';
 
 applyDocumentLang();
+// Every document layer must be transparent before the overlay can render.
+const scene = windowScene();
+document.documentElement.classList.toggle('overlay', scene === 'overlay');
+document.body.classList.toggle('overlay', scene === 'overlay');
 
 void (async () => {
   if (isTauri()) {
@@ -21,7 +25,6 @@ void (async () => {
     await initDataSync();
     if(!getDataError())await ensureDefaultData();
   }
-  const scene = windowScene();
   const { App } = await import('./App');
   createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

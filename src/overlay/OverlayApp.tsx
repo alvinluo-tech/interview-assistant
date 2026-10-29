@@ -100,12 +100,13 @@ export function OverlayApp() {
   useEffect(() => {
     if (!active) return;
     if (seqMode() !== 'exam') return;
+    let disposed = false;
     let cleanup: (() => void) | null = null;
     void import('@/lib/dualScreen').then(({ startDualTakeover }) => {
-      cleanup = startDualTakeover();
+      if (!disposed) cleanup = startDualTakeover();
     });
-    return () => cleanup?.();
-  }, [active]);
+    return () => { disposed = true; cleanup?.(); };
+  }, [active, seq]);
 
   function seqMode(): ActiveMode {
     return (getSetting('overlay.mode', 'exam') as ActiveMode) ?? 'exam';

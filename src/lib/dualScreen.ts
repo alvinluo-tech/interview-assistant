@@ -13,11 +13,11 @@ import {
   clearPendingScreenshots,
   examModeInfo,
   followUp,
+  endExamSession,
   getSolverState,
   nextExamMode,
   setSolverMode,
   solve,
-  subscribeSolver,
   type SolverState,
 } from './examEngine';
 
@@ -33,6 +33,12 @@ const RECONNECT_GRACE_MS = 15000;
 
 let zonesSuppressed = false;
 export const isZonesSuppressed = () => zonesSuppressed;
+const takeoverListeners = new Set<() => void>();
+export function subscribeDualTakeover(listener: () => void): () => void {
+  takeoverListeners.add(listener);
+  return () => { takeoverListeners.delete(listener); };
+}
+function notifyTakeover() { takeoverListeners.forEach(listener => listener()); }
 
 export async function startDualScreen(): Promise<DualStartInfo> {
   return cmd<DualStartInfo>('cmd_dual_start');
@@ -83,6 +89,10 @@ async function dualSend(obj: unknown): Promise<void> {
 /** 接管会话：在浮窗窗口调用；返回清理函数 */
 export function startDualTakeover(): () => void {
   let active = false;
+  let disposed = false;
+  let revision = 0;
+  let releasing = false;
+  let originalSize: { width: number; height: number } | null = null;
   let restoreTimer: number | null = null;
   let pushTimer: number | null = null;
   let dwellTimer: number | null = null;
@@ -90,13 +100,17 @@ export function startDualTakeover(): () => void {
   let lastState = '';
   const cleanups: (() => void)[] = [];
 
-  const enter = async () => {
+  const enter = () => {
+    if (disposed || releasing || active) return;
     diag.enter++;
-    if (active) return;
+    revision++;
     active = true;
     zonesSuppressed = true;
+    originalSize = { width: window.innerWidth, height: window.innerHeight };
+    lastState = '';
     document.documentElement.classList.add('dual-takeover');
-    await setCursorPointFeed(true).catch(() => {});
+    notifyTakeover();
+    void setCursorPointFeed(true).catch(() => {});
     pushTimer = window.setInterval(pushState, STATE_PUSH_MS);
     void pushState();
   };
@@ -104,6 +118,7 @@ export function startDualTakeover(): () => void {
   const restore = async (released: boolean) => {
     diag.restore++;
     if (!active) return;
+    const current = ++revision;
     active = false;
     zonesSuppressed = false;
     document.documentElement.classList.remove('dual-takeover');
@@ -113,8 +128,39 @@ export function startDualTakeover(): () => void {
     dwellTimer = null;
     dwellZone = null;
     await setCursorPointFeed(false).catch(() => {});
+    if (current !== revision) return;
     await setOverlayZones([]).catch(() => {});
+    if (current !== revision) return;
+    if (originalSize) {
+      const size = originalSize;
+      originalSize = null;
+      await setOverlaySize(size.width, size.height).catch(() => {});
+    }
+    if (current !== revision) return;
+    // Force the desktop scanner to republish even if its rectangles did not move.
+    notifyTakeover();
     if (released) await dualSend({ t: 'released' }).catch(() => {});
+  };
+
+  const release = async (endSession = false) => {
+    if (disposed || releasing || !active) return;
+    releasing = true;
+    cancelRestore();
+    if (endSession) await dualSend({ t: 'ended' }).catch(() => {});
+    await restore(!endSession);
+    await stopDualScreen().catch(() => {});
+    if (endSession) await endExamSession(false).catch(error => {
+      console.error('[dual] ending session failed', error);
+    });
+    releasing = false;
+  };
+
+  const performAction = async (id: string) => {
+    if (disposed || !active || releasing) return;
+    if (id === 'exit') return release();
+    if (id === 'end-session') return release(true);
+    try { await dispatchAction(id); }
+    catch { await dualSend({ t: 'action-error', message: '操作失败，请重试或切回电脑查看。' }).catch(() => {}); }
   };
 
   const scheduleRestore = () => {
@@ -140,6 +186,7 @@ export function startDualTakeover(): () => void {
     { intent: 'partial-pass', label: '降通过率' },
   ];
   async function pushState() {
+    if (!active || disposed || releasing) return;
     const s: SolverState = getSolverState();
     const info = examModeInfo(s.mode);
     const turns = s.turns.slice(-3).map((t, i) => ({
@@ -150,7 +197,7 @@ export function startDualTakeover(): () => void {
     const payload = {
       t: 'state',
       data: {
-        brand: '面灵AI',
+        brand: '面绪',
         mode: s.mode,
         modeLabel: info.label,
         statusText: s.statusText,
@@ -168,9 +215,9 @@ export function startDualTakeover(): () => void {
     lastState = key;
     await dualSend(payload).catch(() => {});
   }
-  cleanups.push(subscribeSolver(() => void pushState()));
+  // The interval bounds streaming updates; subscriptions would send on every token.
   const addOff = (p: Promise<() => void>) => {
-    void p.then((off) => cleanups.push(off));
+    void p.then((off) => { if (disposed) off(); else cleanups.push(off); }).catch(() => {});
   };
 
   // ---- 手机消息 ----
@@ -183,21 +230,31 @@ export function startDualTakeover(): () => void {
       } catch {
         return;
       }
+      if (disposed || !m || typeof m !== 'object' || Array.isArray(m)) return;
+      if (!active && m.t !== 'ping') return;
       switch (m.t) {
         case 'hello': {
-          const w = Number(m.w) || 9;
-          const h = Number(m.h) || 16;
+          const w = Number(m.w), h = Number(m.h);
+          if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
+          const current = revision;
           void refreshOverlayRect().then(() => {
-            if (!overlayRect) return;
+            if (disposed || !active || current !== revision) return;
             const aspect = Math.max(0.3, Math.min(3, w / h));
-            void setOverlaySize(Math.round(overlayRect.h * aspect), overlayRect.h).catch(() => {});
+            // Native rects use physical pixels, while setOverlaySize expects logical pixels.
+            void setOverlaySize(Math.round(window.innerHeight * aspect), window.innerHeight).then(() => { overlayRectAt = 0; }).catch(() => {});
           });
           break;
         }
         case 'zones': {
-          const zones = (m.zones as PhoneZone[]) || [];
+          if (!Array.isArray(m.zones) || m.zones.length > 128) return;
+          const allowed = new Set(['solve', 'direct', 'add-page', 'reset', 'mode-next', 'scroll-up', 'scroll-down', 'exit', 'end-session',
+            'followup:simplify', 'followup:brute-force', 'followup:code-review', 'followup:partial-pass']);
+          const zones = (m.zones as PhoneZone[]).filter(z => z && allowed.has(z.id)
+            && [z.x, z.y, z.w, z.h].every(Number.isFinite)
+            && z.x >= 0 && z.y >= 0 && z.w > 0 && z.h > 0 && z.x + z.w <= 1.01 && z.y + z.h <= 1.01);
+          const current = revision;
           void refreshOverlayRect().then(() => {
-            if (!overlayRect) return;
+            if (!overlayRect || disposed || !active || current !== revision) return;
             void setOverlayZones(
               zones.map((z) => ({
                 id: `dual:${z.id}`,
@@ -211,11 +268,11 @@ export function startDualTakeover(): () => void {
           break;
         }
         case 'action':
-          void dispatchAction(String(m.id ?? ''));
+          void performAction(String(m.id ?? ''));
           break;
         case 'exit':
           cancelRestore();
-          void restore(true);
+          void release();
           break;
         case 'ping':
           void dualSend({ t: 'pong', id: m.id });
@@ -228,7 +285,8 @@ export function startDualTakeover(): () => void {
 
   // ---- 对端连接状态 ----
   addOff(
-    listenEvent<{ count: number }>('dual-peer', (p) => {
+    listenEvent<{ count: number; reason?: string }>('dual-peer', (p) => {
+      if (disposed) return;
       diag.peer++;
       if (p.count > 0) {
         cancelRestore();
@@ -236,7 +294,8 @@ export function startDualTakeover(): () => void {
         lastState = '';
         void pushState();
       } else {
-        scheduleRestore();
+        if (p.reason === 'stopped') { cancelRestore(); void restore(false); }
+        else scheduleRestore();
       }
     }),
   );
@@ -245,12 +304,13 @@ export function startDualTakeover(): () => void {
   let lastCursorAt = 0;
   addOff(
     listenEvent<{ x: number; y: number }>('cursor-point', (p) => {
-      if (!active) return;
+      if (!active || disposed) return;
+      const current = revision;
       const now = Date.now();
       if (now - lastCursorAt < 60) return;
       lastCursorAt = now;
       void refreshOverlayRect().then(() => {
-        if (!overlayRect || overlayRect.w <= 0 || overlayRect.h <= 0) return;
+        if (!active || disposed || current !== revision || !overlayRect || overlayRect.w <= 0 || overlayRect.h <= 0) return;
         const nx = (p.x - overlayRect.x) / overlayRect.w;
         const ny = (p.y - overlayRect.y) / overlayRect.h;
         if (nx < -0.05 || nx > 1.05 || ny < -0.05 || ny > 1.05) return;
@@ -262,6 +322,7 @@ export function startDualTakeover(): () => void {
   // ---- 电脑鼠标悬停手机热区 → 驻留触发 ----
   addOff(
     listenEvent<{ zoneId: string | null }>('cursor-zone', (p) => {
+      if (!active || disposed) return;
       const id = p.zoneId?.startsWith('dual:') ? p.zoneId.slice(5) : null;
       if (id === dwellZone) return;
       dwellZone = id;
@@ -269,7 +330,7 @@ export function startDualTakeover(): () => void {
       dwellTimer = null;
       if (id) {
         dwellTimer = window.setTimeout(() => {
-          if (dwellZone === id) void dispatchAction(id);
+          if (active && !disposed && dwellZone === id) void performAction(id);
         }, DUAL_DWELL_MS);
       }
     }),
@@ -277,15 +338,16 @@ export function startDualTakeover(): () => void {
 
   // 挂载时补查：监听器是异步注册的，手机可能已在线（dual-peer 事件已错过）
   void cmd<number>('cmd_dual_peer_count').then((count) => {
-    if (count > 0) {
+    if (!disposed && count > 0) {
       cancelRestore();
       void enter();
       lastState = '';
       void pushState();
     }
-  });
+  }).catch(() => {});
 
   return () => {
+    disposed = true;
     cancelRestore();
     void restore(false);
     cleanups.forEach((c) => c());
