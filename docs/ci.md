@@ -32,4 +32,10 @@ Node 缓存由 `setup-node` 管理 pnpm store，以锁文件参与生成缓存�
 
 本次保留 `lto = true`、`codegen-units = 1` 等现有发布优化参数；先验证共享缓存收益。Thin LTO 或 sccache 应单独对照测量冷启动、命中构建、二进制大小与运行性能，再决定是否启用，不能用一次不同 runner 的快慢直接推断效果。
 
+## 共享缓存首次验证
+
+2026-10-29，提交 `aa45759` 的 [main 三平台检查](https://github.com/alvinluo-tech/interview-assistant/actions/runs/40815837573) 全部通过，三路完整原生测试与安装包构建日志均无 Rust 编译警告。新键首次运行未命中，随后在 `refs/heads/main` 成功保存了三份缓存：Windows 约 1.10 GB、Mac ARM64 约 1.12 GB、Mac Intel 约 1.12 GB。
+
+首次任务时长：Windows 14:50、Mac ARM64 11:31、Mac Intel 12:31，整个工作流 14:53。该工作流不含正式发布任务，不能直接与 v0.1.1 发布总耗时作为同口径加速对比；需要以后续缓存命中后的同类任务衡量收益。
+
 参考：[GitHub 缓存访问边界](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)、[Rust cache 配置](https://github.com/Swatinem/rust-cache)、[pnpm store 缓存](https://github.com/actions/setup-node#caching-global-packages-data)、[Cargo LTO](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)。

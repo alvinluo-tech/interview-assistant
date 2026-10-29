@@ -124,6 +124,11 @@ jobs:
       - name: Test native code with locked dependencies
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --workspace --lib
 
+      # Manual dispatch can check out an older tag without the CI-only overlay.
+      - name: Prepare prebuilt frontend configuration for older tags
+        if: hashFiles('src-tauri/tauri.ci.conf.json') == ''
+        run: node -e "require('node:fs').writeFileSync('src-tauri/tauri.ci.conf.json', JSON.stringify({build:{beforeBuildCommand:''}}))"
+
       - name: Build platform installer
         # Call Node directly: Windows package-manager shims can consume the cargo argument separator.
         # The frontend was built above for native tests; skip only the duplicate hook.
