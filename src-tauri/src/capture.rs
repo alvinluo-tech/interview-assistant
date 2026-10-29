@@ -44,7 +44,11 @@ pub async fn cmd_capture_screen(
     _protected_on_top: Option<bool>,
 ) -> Result<String, String> {
     // ScreenCaptureKit completions must be free to run on the UI thread.
-    tauri::async_runtime::spawn_blocking(move || capture_screen(app, compatibility_mode, capture_mode)).await.map_err(|e| format!("截图任务失败：{e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        capture_screen(app, compatibility_mode, capture_mode)
+    })
+    .await
+    .map_err(|e| format!("截图任务失败：{e}"))?
 }
 
 fn capture_screen(
@@ -58,54 +62,70 @@ fn capture_screen(
     #[cfg(target_os = "macos")]
     {
         let _ = (app, compatibility_mode);
-        if !crate::screen_permissions::check() { return Err("请在系统设置中允许面序录制屏幕，必要时重启应用后重试。".into()); }
+        if !crate::screen_permissions::check() {
+            return Err("请在系统设置中允许本应用录制屏幕，必要时重启应用后重试。".into());
+        }
         static CAPTURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _capture = CAPTURE.try_lock().map_err(|_| "上一张截图仍在处理中，请稍候。")?;
+        let _capture = CAPTURE
+            .try_lock()
+            .map_err(|_| "上一张截图仍在处理中，请稍候。")?;
         let frame = mianxu_macos_capture::capture_image(capture_mode.as_deref() == Some("window"))?;
-        if is_blank(&frame.rgba) { return Err("截图为空白或内容受保护，请检查权限并切换题目窗口后重试。".into()); }
-        let image = image::RgbaImage::from_raw(frame.width, frame.height, frame.rgba).ok_or("截图像素尺寸不匹配")?;
+        if is_blank(&frame.rgba) {
+            return Err("截图为空白或内容受保护，请检查权限并切换题目窗口后重试。".into());
+        }
+        let image = image::RgbaImage::from_raw(frame.width, frame.height, frame.rgba)
+            .ok_or("截图像素尺寸不匹配")?;
         let mut png = Vec::new();
-        image::DynamicImage::ImageRgba8(image).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).map_err(|e| format!("截图编码失败：{e}"))?;
-        return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png)));
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(|e| format!("截图编码失败：{e}"))?;
+        return Ok(format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(png)
+        ));
     }
     #[cfg(not(target_os = "macos"))]
     {
-    // 浮窗已处于捕获排除（WDA）时无需隐藏——隐藏/恢复窗口会让 WebView2 的
-    // 事件队列在副屏接管等场景下丢事件；只有未排除（演示模式/系统不支持）才回退到收起。
-    let overlay = app.get_webview_window("overlay");
-    #[cfg(windows)]
-    let already_excluded = crate::protection::window(&app, "overlay")
-        .map(|w| crate::protection::read_affinity(&w).map(|a| a == 0x11).unwrap_or(false))
-        .unwrap_or(false);
-    #[cfg(not(windows))]
-    let already_excluded = false;
-    let was_overlay_visible = overlay
-        .as_ref()
-        .map(|w| w.is_visible().unwrap_or(false))
-        .unwrap_or(false);
-    let need_hide = was_overlay_visible && !already_excluded;
-    if need_hide {
-        if let Some(w) = &overlay {
-            let _ = w.hide();
+        // 浮窗已处于捕获排除（WDA）时无需隐藏——隐藏/恢复窗口会让 WebView2 的
+        // 事件队列在副屏接管等场景下丢事件；只有未排除（演示模式/系统不支持）才回退到收起。
+        let overlay = app.get_webview_window("overlay");
+        #[cfg(windows)]
+        let already_excluded = crate::protection::window(&app, "overlay")
+            .map(|w| {
+                crate::protection::read_affinity(&w)
+                    .map(|a| a == 0x11)
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false);
+        #[cfg(not(windows))]
+        let already_excluded = false;
+        let was_overlay_visible = overlay
+            .as_ref()
+            .map(|w| w.is_visible().unwrap_or(false))
+            .unwrap_or(false);
+        let need_hide = was_overlay_visible && !already_excluded;
+        if need_hide {
+            if let Some(w) = &overlay {
+                let _ = w.hide();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(350));
         }
-        std::thread::sleep(std::time::Duration::from_millis(350));
-    }
-    let result = match capture_mode.as_deref() {
-        Some("window") => capture_image(true),
-        None | Some("screen") => {
-            let prefer_window = compatibility_mode.unwrap_or(false);
-            capture_image(prefer_window).or_else(|_| capture_image(!prefer_window))
+        let result = match capture_mode.as_deref() {
+            Some("window") => capture_image(true),
+            None | Some("screen") => {
+                let prefer_window = compatibility_mode.unwrap_or(false);
+                capture_image(prefer_window).or_else(|_| capture_image(!prefer_window))
+            }
+            _ => Err("截图范围无效，请选择屏幕或前台窗口。".into()),
+        };
+        if need_hide {
+            if let Some(w) = &overlay {
+                let _ = w.show();
+            }
         }
-        _ => Err("截图范围无效，请选择屏幕或前台窗口。".into()),
-    };
-    if need_hide {
-        if let Some(w) = &overlay {
-            let _ = w.show();
-        }
-    }
-    let png = result?;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(png);
-    Ok(format!("data:image/png;base64,{b64}"))
+        let png = result?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(png);
+        Ok(format!("data:image/png;base64,{b64}"))
     }
 }
 

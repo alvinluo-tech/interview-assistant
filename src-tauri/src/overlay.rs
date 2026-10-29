@@ -88,14 +88,20 @@ impl Default for OverlayState {
 impl OverlayState {
     fn begin_drag(&self, active: bool) -> Result<Option<u64>, String> {
         let mut epoch = self.drag_epoch.lock().map_err(|_| "拖动状态不可用")?;
-        if active && self.drag_active.load(Ordering::SeqCst) { return Ok(None); }
+        if active && self.drag_active.load(Ordering::SeqCst) {
+            return Ok(None);
+        }
         *epoch = epoch.wrapping_add(1);
         self.drag_active.store(active, Ordering::SeqCst);
         Ok(Some(*epoch))
     }
     fn finish_drag(&self, epoch: u64) -> bool {
-        let Ok(current) = self.drag_epoch.lock() else { return false; };
-        if *current != epoch { return false; }
+        let Ok(current) = self.drag_epoch.lock() else {
+            return false;
+        };
+        if *current != epoch {
+            return false;
+        }
         self.drag_active.store(false, Ordering::SeqCst);
         true
     }
@@ -164,6 +170,11 @@ pub fn cmd_hide_overlay(app: AppHandle) -> Result<(), String> {
     let state: State<OverlayState> = app.state();
     state.overlay_visible.store(false, Ordering::SeqCst);
     let _ = state.begin_drag(false);
+    let _ = app.emit_to(
+        "overlay",
+        "drag-mode-changed",
+        DragModePayload { active: false },
+    );
     *state.last_hit.lock().unwrap() = None;
     let _ = app.emit_to("overlay", "overlay-hidden", ());
     let _ = app.emit_to("main", "overlay-hidden", ());
@@ -212,8 +223,14 @@ pub fn cmd_set_drag_active(
     state: State<'_, OverlayState>,
     active: bool,
 ) -> Result<(), String> {
-    let win = if active { Some(overlay_window(&app).ok_or("overlay window missing")?) } else { None };
-    let Some(epoch) = state.begin_drag(active)? else { return Ok(()); };
+    let win = if active {
+        Some(overlay_window(&app).ok_or("overlay window missing")?)
+    } else {
+        None
+    };
+    let Some(epoch) = state.begin_drag(active)? else {
+        return Ok(());
+    };
     let _ = app.emit_to("overlay", "drag-mode-changed", DragModePayload { active });
     if !active {
         return Ok(());
@@ -223,9 +240,13 @@ pub fn cmd_set_drag_active(
     #[cfg(any(windows, target_os = "macos"))]
     {
         std::thread::spawn(move || {
-            if let Err(error) = follow_cursor(&win, epoch) { log::warn!("[overlay-drag] {error}"); }
+            if let Err(error) = follow_cursor(&win, epoch) {
+                log::warn!("[overlay-drag] {error}");
+            }
             let st: State<OverlayState> = win.app_handle().state();
-            if !st.finish_drag(epoch) { return; }
+            if !st.finish_drag(epoch) {
+                return;
+            }
             let _ = win.app_handle().emit_to(
                 "overlay",
                 "drag-mode-changed",
@@ -240,7 +261,11 @@ fn drag_cursor(app: &AppHandle) -> Result<(f64, f64), String> {
     let p = app.cursor_position().map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     {
-        let scale = app.primary_monitor().map_err(|e| e.to_string())?.ok_or("主显示器不可用")?.scale_factor();
+        let scale = app
+            .primary_monitor()
+            .map_err(|e| e.to_string())?
+            .ok_or("主显示器不可用")?
+            .scale_factor();
         return Ok((p.x / scale, p.y / scale));
     }
     #[cfg(not(target_os = "macos"))]
@@ -260,7 +285,12 @@ fn follow_cursor(win: &WebviewWindow, epoch: u64) -> Result<(), String> {
     loop {
         std::thread::sleep(Duration::from_millis(16));
         let state: State<OverlayState> = win.app_handle().state();
-        if *state.drag_epoch.lock().map_err(|_| "拖动状态不可用")? != epoch || !state.drag_active.load(Ordering::SeqCst) || !state.overlay_visible.load(Ordering::SeqCst) { break; }
+        if *state.drag_epoch.lock().map_err(|_| "拖动状态不可用")? != epoch
+            || !state.drag_active.load(Ordering::SeqCst)
+            || !state.overlay_visible.load(Ordering::SeqCst)
+        {
+            break;
+        }
         let current = drag_cursor(win.app_handle())?;
         if current != last {
             last = current;
@@ -268,10 +298,14 @@ fn follow_cursor(win: &WebviewWindow, epoch: u64) -> Result<(), String> {
             let x = origin.0 + current.0 - cursor.0;
             let y = origin.1 + current.1 - cursor.1;
             #[cfg(target_os = "macos")]
-            win.set_position(tauri::LogicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+            win.set_position(tauri::LogicalPosition::new(x, y))
+                .map_err(|e| e.to_string())?;
             #[cfg(not(target_os = "macos"))]
-            win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32)).map_err(|e| e.to_string())?;
-        } else if last_move.elapsed() > Duration::from_millis(800) { break; }
+            win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32))
+                .map_err(|e| e.to_string())?;
+        } else if last_move.elapsed() > Duration::from_millis(800) {
+            break;
+        }
     }
     Ok(())
 }
@@ -290,10 +324,21 @@ pub fn cmd_get_cursor_pos(app: AppHandle) -> Result<(i32, i32), String> {
     }
     #[cfg(target_os = "macos")]
     {
-        let primary = app.primary_monitor().map_err(|e| e.to_string())?.ok_or("主显示器不可用")?.scale_factor();
-        let scale = overlay_window(&app).ok_or("浮窗不存在")?.scale_factor().map_err(|e| e.to_string())?;
+        let primary = app
+            .primary_monitor()
+            .map_err(|e| e.to_string())?
+            .ok_or("主显示器不可用")?
+            .scale_factor();
+        let scale = overlay_window(&app)
+            .ok_or("浮窗不存在")?
+            .scale_factor()
+            .map_err(|e| e.to_string())?;
         let cursor = app.cursor_position().map_err(|e| e.to_string())?;
-        mianxu_macos_capture::selection::cursor_in_window_space((cursor.x, cursor.y), primary, scale)
+        mianxu_macos_capture::selection::cursor_in_window_space(
+            (cursor.x, cursor.y),
+            primary,
+            scale,
+        )
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
@@ -435,6 +480,7 @@ pub fn spawn_cursor_poller(app: AppHandle) {
             if !state.overlay_visible.load(Ordering::SeqCst)
                 || state.drag_active.load(Ordering::SeqCst)
             {
+                std::thread::sleep(Duration::from_millis(100));
                 continue;
             }
             state
@@ -442,7 +488,20 @@ pub fn spawn_cursor_poller(app: AppHandle) {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let interactive = state.interactive.load(Ordering::SeqCst);
             let feed = state.cursor_feed.load(Ordering::SeqCst);
-            let Ok((x, y)) = cmd_get_cursor_pos(app.clone()) else { continue; };
+            if interactive && !feed {
+                if state.last_hit.lock().unwrap().take().is_some() {
+                    let _ = app.emit_to(
+                        "overlay",
+                        "cursor-zone",
+                        CursorZonePayload { zone_id: None },
+                    );
+                }
+                std::thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+            let Ok((x, y)) = cmd_get_cursor_pos(app.clone()) else {
+                continue;
+            };
             let p = PhysicalPosition::new(x, y);
             if feed {
                 // 仅在移动时上报（原版同样只在变化时喂光标），避免高频事件淹没 WebView2 通道

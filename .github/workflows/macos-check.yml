@@ -26,7 +26,7 @@ jobs:
   native:
     name: Compile ${{ matrix.target }}
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       MACOSX_DEPLOYMENT_TARGET: '13.0'
     strategy:
@@ -83,8 +83,18 @@ jobs:
 
       # Build, rather than just check, so target-specific bridges and frameworks
       # must link. Intel output must not accidentally contain arm64 bridge code.
-      - name: Compile and link the requested architecture
-        run: cargo build --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+      - name: Compile, link and package the requested architecture
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg --ci -- --locked
 
       - name: Check permission manifests
-        run: plutil -lint src-tauri/Info.plist src-tauri/Entitlements.plist
+        run: |
+          plutil -lint src-tauri/Info.plist src-tauri/Entitlements.plist
+          hdiutil verify src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+
+      - name: Upload macOS test installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: macos-test-${{ matrix.target }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7

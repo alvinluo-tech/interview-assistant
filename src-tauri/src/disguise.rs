@@ -201,11 +201,12 @@ pub fn cmd_get_disguise_status(app: AppHandle) -> Result<Status, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
     let current = std::env::current_exe().map_err(|e| e.to_string())?;
     let running_disguised = cfg!(windows) && is_copy(&current, &app.config().identifier);
-    let restart_required = cfg!(windows) && if config.enabled {
-        !running_disguised || !matches_name(&current, &config.process_name)
-    } else {
-        running_disguised
-    };
+    let restart_required = cfg!(windows)
+        && if config.enabled {
+            !running_disguised || !matches_name(&current, &config.process_name)
+        } else {
+            running_disguised
+        };
     Ok(Status {
         supported: cfg!(any(windows, target_os = "macos")),
         process_rename_supported: cfg!(windows),

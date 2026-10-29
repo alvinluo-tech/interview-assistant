@@ -2,6 +2,8 @@
 
 日期：2026-10-29。依据 `docs/macos-implementation.md`、当前工作区实现、原版 DMG 提取物和 Apple/Tauri 官方资料。本文件是实现分析，未将以下计划标记为已开发或已通过 Mac 实测。
 
+实现状态更新：Rust 采集、权限、浮窗与平台界面已经写入 `feat/macos-rust`；我们维护 Rust，依赖内部允许 Swift。实际实现、Windows 验证范围和待完成的 Mac 验收见 [macos-development.md](macos-development.md)。下文保留为实施前分析，不能当作当前代码状态。
+
 ## 1. 结论与平台范围
 
 继续使用一个项目：React 界面、会话、BYOK、实时 ASR、作答和资料管理共用；Rust 命令保持统一，在原生层增加 macOS 实现。必要的 Swift 源码也放在本仓库，由 Mac 构建流程编译，不另开一个 Mac 应用项目。

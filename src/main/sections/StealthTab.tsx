@@ -89,7 +89,7 @@ export function StealthTab() {
           <Button size="sm" variant="ghost" disabled={!isTauri() || busy} onClick={() => void act(refresh)}>刷新状态</Button>
         } />
         <SettingRow title={bestEffort ? '限制窗口共享（尽力）' : '反屏幕捕获'} desc={bestEffort ? '请求系统限制其他进程读取窗口；无法保证会议共享或录屏中不可见，设置会保存。' : '默认开启。由 Windows 将主窗口和浮窗排除在支持此功能的屏幕捕获画面之外，设置会保存。'}>
-          <Switch ariaLabel="反屏幕捕获" checked={enabled} disabled={captureDisabled} onCheckedChange={(v) => void act(() => setCaptureExcluded(v))} />
+          <Switch ariaLabel={bestEffort ? '限制窗口共享' : '反屏幕捕获'} checked={enabled} disabled={captureDisabled} onCheckedChange={(v) => void act(() => setCaptureExcluded(v))} />
         </SettingRow>
         <SettingRow title="演示可见模式" desc="临时允许主窗口和浮窗出现在共享与录屏中；关闭后恢复捕获设置，重启后自动关闭。">
           <Switch ariaLabel="演示可见模式" checked={capture?.demoVisible ?? false} disabled={captureDisabled} onCheckedChange={(v) => void act(() => setDemoVisibleMode(v))} />
@@ -110,7 +110,7 @@ export function StealthTab() {
         {identity?.startupError && <p role="alert" className="mb-3 text-xs text-destructive">上次启动未完成伪装：{identity.startupError}</p>}
         {draft && <>
           <SettingRow title={processRename ? '启用进程伪装' : '自定义窗口标题'} desc={processRename ? '以指定文件名的独立副本运行，使用通用程序图标；关闭并重启可恢复原程序。' : '开启后将主窗口和浮窗标题替换为下方内容。关闭可恢复默认标题。'}>
-            <Switch ariaLabel="启用进程伪装" checked={draft.enabled} disabled={identityDisabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
+            <Switch ariaLabel={processRename ? '启用进程伪装' : '自定义窗口标题'} checked={draft.enabled} disabled={identityDisabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
           </SettingRow>
           <div className={`grid ${processRename ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
             {processRename && <label className="text-xs text-muted-foreground">进程文件名

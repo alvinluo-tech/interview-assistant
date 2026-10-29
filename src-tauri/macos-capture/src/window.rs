@@ -10,8 +10,11 @@ pub unsafe fn configure_overlay(raw: *mut c_void) -> Result<(), String> {
     // SAFETY: the caller keeps its Tauri Window alive throughout this call.
     let window = unsafe { raw.cast::<NSWindow>().as_ref() }.ok_or("Mac 窗口不存在")?;
     let behavior = window.collectionBehavior();
-    let behavior = behavior.difference(Behavior::FullScreenPrimary | Behavior::FullScreenNone | Behavior::MoveToActiveSpace)
-        | Behavior::CanJoinAllSpaces | Behavior::FullScreenAuxiliary | Behavior::IgnoresCycle;
+    let behavior = behavior.difference(
+        Behavior::FullScreenPrimary | Behavior::FullScreenNone | Behavior::MoveToActiveSpace,
+    ) | Behavior::CanJoinAllSpaces
+        | Behavior::FullScreenAuxiliary
+        | Behavior::IgnoresCycle;
     window.setCollectionBehavior(behavior);
     window.setHidesOnDeactivate(false);
     Ok(())

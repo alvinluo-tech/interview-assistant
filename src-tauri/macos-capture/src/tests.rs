@@ -1,6 +1,129 @@
 use super::media::{AudioFormat, AudioPlane, PcmChunks, SampleKind, bgra_to_rgba, decode_audio};
 
 #[test]
+fn pcm24_pcm32_and_float64_are_decoded_with_explicit_endianness() {
+    let cases = [
+        (
+            SampleKind::Signed24,
+            false,
+            vec![0, 0, 64, 0, 0, 128],
+            3,
+            vec![0.5, -1.0],
+        ),
+        (
+            SampleKind::Signed24,
+            true,
+            vec![64, 0, 0, 128, 0, 0],
+            3,
+            vec![0.5, -1.0],
+        ),
+        (
+            SampleKind::Signed32,
+            false,
+            [1073741824i32, i32::MIN]
+                .into_iter()
+                .flat_map(i32::to_le_bytes)
+                .collect(),
+            4,
+            vec![0.5, -1.0],
+        ),
+        (
+            SampleKind::Signed32,
+            true,
+            [1073741824i32, i32::MIN]
+                .into_iter()
+                .flat_map(i32::to_be_bytes)
+                .collect(),
+            4,
+            vec![0.5, -1.0],
+        ),
+        (
+            SampleKind::Float64,
+            false,
+            [0.25f64, -0.75, f64::INFINITY]
+                .into_iter()
+                .flat_map(f64::to_le_bytes)
+                .collect(),
+            8,
+            vec![0.25, -0.75, 0.0],
+        ),
+        (
+            SampleKind::Float64,
+            true,
+            [0.25f64, -0.75, f64::INFINITY]
+                .into_iter()
+                .flat_map(f64::to_be_bytes)
+                .collect(),
+            8,
+            vec![0.25, -0.75, 0.0],
+        ),
+    ];
+    for (kind, big_endian, bytes, size, expected) in cases {
+        let format = AudioFormat {
+            rate: 16000,
+            channels: 1,
+            kind,
+            big_endian,
+            planar: false,
+            bytes_per_frame: size,
+        };
+        assert_eq!(
+            decode_audio(
+                format,
+                &[AudioPlane {
+                    channels: 1,
+                    data: &bytes
+                }],
+                expected.len()
+            )
+            .unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn invalid_audio_shapes_and_rates_are_rejected_without_allocation() {
+    let valid = AudioFormat {
+        rate: 16000,
+        channels: 1,
+        kind: SampleKind::Signed16,
+        big_endian: false,
+        planar: false,
+        bytes_per_frame: 2,
+    };
+    for invalid in [
+        AudioFormat { rate: 0, ..valid },
+        AudioFormat {
+            channels: 0,
+            ..valid
+        },
+        AudioFormat {
+            channels: 9,
+            ..valid
+        },
+        AudioFormat {
+            bytes_per_frame: 0,
+            ..valid
+        },
+    ] {
+        assert!(
+            decode_audio(
+                invalid,
+                &[AudioPlane {
+                    channels: 1,
+                    data: &[0, 0]
+                }],
+                1
+            )
+            .is_err()
+        );
+    }
+    assert!(decode_audio(valid, &[], usize::MAX).is_err());
+    assert!(decode_audio(valid, &[], 1).is_err());
+}
+
+#[test]
 fn idle_flush_pads_the_speech_tail_and_does_not_replay_it_later() {
     let mut converter = PcmChunks::new(16000).unwrap();
     assert!(converter.push(&vec![0.5; 640]).is_empty());
@@ -33,10 +156,38 @@ fn audio_playout_sends_silence_on_idle_and_rejects_stale_or_overflowed_audio() {
 fn window_capture_uses_frontmost_eligible_window_and_never_widens_scope() {
     use super::selection::{WindowCandidate, choose_window};
     let candidates = [
-        WindowCandidate { id: 1, pid: 10, layer: 0, visible: true, width: 800.0, height: 600.0 },
-        WindowCandidate { id: 2, pid: 20, layer: 25, visible: true, width: 100.0, height: 100.0 },
-        WindowCandidate { id: 3, pid: 20, layer: 0, visible: true, width: 800.0, height: 600.0 },
-        WindowCandidate { id: 4, pid: 30, layer: 0, visible: true, width: 800.0, height: 600.0 },
+        WindowCandidate {
+            id: 1,
+            pid: 10,
+            layer: 0,
+            visible: true,
+            width: 800.0,
+            height: 600.0,
+        },
+        WindowCandidate {
+            id: 2,
+            pid: 20,
+            layer: 25,
+            visible: true,
+            width: 100.0,
+            height: 100.0,
+        },
+        WindowCandidate {
+            id: 3,
+            pid: 20,
+            layer: 0,
+            visible: true,
+            width: 800.0,
+            height: 600.0,
+        },
+        WindowCandidate {
+            id: 4,
+            pid: 30,
+            layer: 0,
+            visible: true,
+            width: 800.0,
+            height: 600.0,
+        },
     ];
     assert_eq!(choose_window(&[1, 2, 4, 3], &candidates, 10).unwrap(), 4);
     assert!(choose_window(&[1, 2], &candidates, 10).is_err());
@@ -45,8 +196,14 @@ fn window_capture_uses_frontmost_eligible_window_and_never_widens_scope() {
 #[test]
 fn cursor_matches_window_coordinates_on_mixed_scale_and_negative_displays() {
     use super::selection::cursor_in_window_space;
-    assert_eq!(cursor_in_window_space((-2400.0, 600.0), 2.0, 1.0).unwrap(), (-1200, 300));
-    assert_eq!(cursor_in_window_space((-1200.0, 300.0), 1.0, 2.0).unwrap(), (-2400, 600));
+    assert_eq!(
+        cursor_in_window_space((-2400.0, 600.0), 2.0, 1.0).unwrap(),
+        (-1200, 300)
+    );
+    assert_eq!(
+        cursor_in_window_space((-1200.0, 300.0), 1.0, 2.0).unwrap(),
+        (-2400, 600)
+    );
     assert!(cursor_in_window_space((f64::NAN, 0.0), 2.0, 1.0).is_err());
     assert!(cursor_in_window_space((0.0, 0.0), 0.0, 1.0).is_err());
 }

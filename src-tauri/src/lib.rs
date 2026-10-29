@@ -1,27 +1,27 @@
+mod ai_settings;
 mod audio;
 mod audio_dsp;
 #[cfg(windows)]
 mod audio_windows;
-mod ai_settings;
-mod data_store;
-mod code_sandbox;
-#[cfg(any(target_os = "macos", test))]
-mod macos_secrets;
-mod capture;
 mod capabilities;
-#[cfg(any(target_os = "macos", test))]
-mod screen_permissions;
+mod capture;
+mod code_sandbox;
+mod data_store;
 mod disguise;
 mod dual_screen;
 mod hotkeys;
 #[cfg(windows)]
 mod identity_resources;
+#[cfg(any(target_os = "macos", test))]
+mod macos_secrets;
 mod misc;
 mod overlay;
+mod protection;
+#[cfg(any(target_os = "macos", test))]
+mod screen_permissions;
+mod settings;
 #[cfg(target_os = "macos")]
 mod window_macos;
-mod protection;
-mod settings;
 
 use hotkeys::HotkeyRouting;
 use overlay::OverlayState;

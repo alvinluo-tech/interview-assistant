@@ -283,8 +283,10 @@ mod tests {
             unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }.unwrap();
         let devices = crate::audio::enumerate_render_devices().unwrap();
         assert!(!devices.is_empty(), "No playback endpoint");
-        let mut streams: Vec<_> = devices.into_iter()
-            .map(|device| LoopbackStream::open(&enumerator, device).unwrap()).collect();
+        let mut streams: Vec<_> = devices
+            .into_iter()
+            .map(|device| LoopbackStream::open(&enumerator, device).unwrap())
+            .collect();
         let mut buffers = vec![VecDeque::new(); streams.len()];
         let mut wav = Vec::new();
         let count = 48000u32;
@@ -316,7 +318,9 @@ mod tests {
         let mut pcm = Vec::new();
         let mut deadline = start + Duration::from_millis(100);
         while start.elapsed() < Duration::from_millis(1500) {
-            for (stream, buffer) in streams.iter_mut().zip(&mut buffers) { stream.read_pending(buffer).unwrap(); }
+            for (stream, buffer) in streams.iter_mut().zip(&mut buffers) {
+                stream.read_pending(buffer).unwrap();
+            }
             if Instant::now() >= deadline {
                 pcm.extend(crate::audio_dsp::mix_chunk(&mut buffers));
                 deadline += Duration::from_millis(100);
@@ -346,7 +350,8 @@ mod tests {
         );
         println!(
             "Windows hardware loopback: {} endpoint(s), {} samples, 440Hz power / stretched-frequency power = {:.1}",
-            streams.len(), pcm.len(),
+            streams.len(),
+            pcm.len(),
             expected / stretched.max(1.0)
         );
     }

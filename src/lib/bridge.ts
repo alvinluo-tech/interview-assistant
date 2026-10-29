@@ -75,7 +75,7 @@ async function ensureScreenCapturePermission(): Promise<void> {
   if (await checkScreenCapturePermission()) return;
   await requestScreenCapturePermission();
   if (!await checkScreenCapturePermission()) {
-    throw new Error('尚未获得屏幕与系统音频录制权限。请前往「设置 → 隐蔽 → 录屏与系统收音权限」打开系统设置并允许面序访问，必要时重启应用。');
+    throw new Error('尚未获得屏幕与系统音频录制权限。请前往「设置 → 隐蔽 → 录屏与系统收音权限」打开系统设置并允许本应用访问，必要时重启应用。');
   }
 }
 export const startSystemAudioCapture = async () => {

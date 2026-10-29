@@ -1,41 +1,88 @@
-# 在 Windows 上开发 macOS 适配
+# macOS 适配实现与验收
 
-## 实现边界（2026-10-29）
+更新日期：2026-10-29。开发主机为 Windows；下面区分已写入的实现、本机验证和仍待完成的 Mac 验收。
 
-我们维护的应用代码使用 Rust 和现有 TypeScript。允许选用内部编译 Swift 的 Rust 依赖，不要求整个依赖树都没有 Swift。应用继续共用一个仓库和业务层，平台实现由 Cargo 目标条件隔离。
+## 语言与项目边界
 
-系统音频优先评估 `screencapturekit` 的 Rust 接口，由依赖管理 ScreenCaptureKit 桥接；窗口操作和权限按需要直接调用系统接口。选依赖时仍需检查版本、最低系统版本、回调所有权、启动/停止超时以及两个架构的构建，不能因为提供 Rust 接口就假定可靠性已验证。
+业务共用 React / TypeScript 和 Rust。我们维护的原生源码使用 Rust；允许依赖内部编译 Swift，不自行维护 Swift 桥或另建 Mac 应用。应用标识、用户设置及 Keychain 密钥存储保持原有方案。
 
-该库已下载检查的版本为 11.1.1，尚未加入应用依赖。其 `build.rs` 会调用 Apple 的构建工具，并依据 Cargo 目标架构选择 Swift triple。在线主分支文档与该版本的最低部署目标描述存在差异，实施采集时必须以锁定版本的源码和两架构构建结果为准。不能只根据在线 README 推断打包要求。
+`src-tauri/macos-capture` 是同一 Cargo workspace 中的内部 crate。媒体校验和选择逻辑可在 Windows 测试，Apple 依赖只在 macOS 目标启用。锁定 `screencapturekit = 11.1.1`，锁文件还包含 `apple-cf 0.11.7` 和 `apple-metal 0.10.4`，这些依赖在 Mac 构建时编译各自的 Swift 桥。Windows 依赖树不包含它们，不要求 Windows 安装 Swift 或 Apple SDK。
 
-## 当前已经接入
+最低版本统一为 **macOS 13.0**。Mac 配置启用 Tauri 透明窗口所需的 `macOSPrivateApi`，仅在 Mac 目标启用对应 Cargo feature。签名仍为原有 ad-hoc 配置，尚未配置 Developer ID 或公证。
 
-- Mac 的录屏权限查询调用 `CGPreflightScreenCaptureAccess`。
-- 用户主动申请时才调用 `CGRequestScreenCaptureAccess`，随后重新检查实际权限；拒绝、仍待授权或需重启时不返回成功。
-- 打开录屏设置使用固定的系统设置地址，只表示设置入口是否成功打开，不代表授权完成。
-- Windows 保留原有无需逐应用录屏授权的行为。其他尚未适配的平台不再默认报告已授权。
-- Info.plist 增加屏幕与系统音频采集用途说明。用途说明本身不授予权限。
+## 已写入的功能
 
-这里只完成权限命令和验证底座。Mac 系统收音、截图、浮窗交互尚不能据此视为已实现；前端也尚未接入这三条权限命令。下一步在接入采集时完成权限提示和失败恢复流程。
+| 功能 | 实现与行为 |
+| --- | --- |
+| 系统播放收音 | ScreenCaptureKit 独立音频流，请求 16kHz / 单声道，排除本进程产生的声音；不需要虚拟声卡 |
+| 音频格式处理 | 读取实际采样率、声道、位深、大小端和交错布局；支持 float32/64、signed PCM16/24/32；输出 PCM16 / 16kHz / 单声道，每包 1600 点 |
+| 静音和错误 | 静音送零采样心跳，不重放旧声音；队列有上限，溢出、异常中断和无效格式会报错；语音尾包在空闲后补零送出 |
+| 启动、取消和恢复 | 后台启动；启动中可取消；停止使旧令牌失效；音频和错误事件携带 captureId，旧事件即使到达新监听器也会被过滤 |
+| 屏幕截图 | 截取鼠标所在显示器，按当前进程过滤本应用窗口；输出 PNG data URL；校验尺寸、行跨度、像素和空白画面 |
+| 窗口截图 | 按系统前后顺序选择最靠前、可见、普通层级的其他应用窗口；失败不会扩大成整屏截图 |
+| 截图会话 | 单独的短时 SCStream 获取首个完整 BGRA 帧，兼容 macOS 13；不停止持续音频流；同时只处理一张截图 |
+| 录屏权限 | 真实查询、主动申请、申请后重新确认、打开系统设置；启动采集前检查；拒绝授权不会报告就绪 |
+| 权限界面 | 申请、打开设置、重新检查；窗口重新获得焦点时更新状态；用途文案不被当成授权依据 |
+| 浮窗 | 透明、置顶、穿透、交互和聚焦切换；主线程配置跨 Space 和全屏辅助行为；隐藏或无需光标时降低轮询开销 |
+| 悬停和拖动 | 复用 zones / cursor-zone / cursor-point；修正全局光标与窗口在混合缩放下的坐标差异；拖动代次隔离，应急隐藏取消拖动 |
+| 窗口标题 | Mac 即时保存和恢复标题；不显示 Windows 进程副本改名及重启入口 |
+| 共享限制 | 设置并读取 AppKit 旧窗口共享限制；界面标为尽力保护，不声称防止所有第三方录屏 |
+| 构建 | 两架构分别编译打包；检查工作流准备 DMG 验收附件；正式发布仍由标签驱动 |
 
-## 验证分工
+Mac 收音范围是系统播放声音，`devices` 返回空数组，由既有界面显示“系统播放声音”。播放设备排除列表属于 Windows 功能，不把显示器或应用采集范围伪装成声卡。麦克风继续使用既有 WebAudio 流程。
 
-| 环境 | 验证内容 | 结果的边界 |
-| --- | --- | --- |
-| 当前 Windows 工作区 | 公共逻辑、权限流程单测、前端构建、Windows 原生回归 | 不执行 Apple API，不证明 Mac 采集可用 |
-| Windows 上的 Mac Rust 目标检查 | 不依赖 Apple SDK 的独立模块可生成两架构 metadata | 只检查 Rust 类型，不完成 Apple 框架/Swift 链接 |
-| macOS 构建环境 | Apple Silicon / Intel 的原生编译与链接、plist 检查、DMG 打包 | 无图形会话的构建不代替录屏授权和真实会议测试 |
-| 真实 Mac | 首次允许/拒绝授权、系统收音、截图、多屏、浮窗、休眠与恢复 | 按实际设备和系统版本记录结果 |
+## 已验证与未验证
 
-只安装 `aarch64-apple-darwin` / `x86_64-apple-darwin` Rust 标准库，不会让 Windows 自动拥有 Xcode、Apple SDK 或 Swift 的 macOS 构建环境。日常 Windows 开发不要求安装 Swift；将来采集依赖只放入 macOS 的 target dependencies，相关模块也用 `#[cfg(target_os = "macos")]` 隔离。
+Windows 已执行前端构建、现有协议与音频回归、原生 workspace 单测、媒体/坐标/队列/取消测试、权限命令桥测试和依赖审计。额外使用浏览器模拟 Mac 原生命令，验证设置页的拒绝/允许授权、打开设置、标题保存、共享限制开关和说明，未出现页面运行错误。
 
-新增 `.github/workflows/macos-check.yml`，在拉取请求或手动触发时检查两个 Mac 目标的编译和链接，不发布版本；现有 release 工作流继续负责 DMG 打包。本地准备工作流不代表已经在远端执行，不在未获授权时推送或触发远端任务。
+本轮结果：前端及协议测试 105 项通过；Rust 测试 41 项通过，1 项需要真实 Windows 播放设备的测试跳过；媒体 crate 的 Windows Clippy 检查通过；生产前端依赖审计未发现已知漏洞。原有核心前端覆盖率门槛也通过，此结果不代表 Mac 原生代码的真机覆盖率。
 
-## 后续采集接入
+采集 crate 已在 Windows 对两个 Mac 目标做 Rust 类型检查，使用文档构建开关 `DOCS_RS=1` 跳过本机不可执行的 Swift 编译。**这只验证 Rust 类型，未验证 Apple 框架、Swift 桥或完整应用的 Mac 链接；不能用该模式打包或发布。**
 
-1. 锁定采集库版本和 feature，统一应用与依赖的最低系统版本。
-2. 独立管理音频与截图会话；回调仅复制数据并进入有界队列。
-3. 校验实际 PCM 格式，转换成现有 PCM16 / 16kHz / 单声道事件；测试启动取消、停止后迟到回调、溢出与流中断。
-4. 在 Mac 构建环境验证两个架构的 Swift 桥和 Rust 主程序能够链接，再在真实 Mac 验收权限和采集。
+尚未在 Mac 执行完整构建、DMG 安装或真实采集。不能把 Windows 通过的结果表述为 Mac 已可用，也不能给出真机稳定性结论。
 
-参考：[采集库源码与构建说明](https://github.com/doom-fish/screencapturekit-rs)、[Apple 录屏权限检查](https://developer.apple.com/documentation/coregraphics/cgpreflightscreencaptureaccess())、[后续功能分析](macos-next-steps.md)。此前分析中的自行维护 Swift 桥属于备选方案，以本文的实现边界为准。
+## 可复现检查
+
+在 Windows 或 Mac 运行公共回归：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+pnpm test:byok
+pnpm test:audio
+pnpm test:platform
+cargo test --locked --manifest-path src-tauri/Cargo.toml --workspace --lib
+```
+
+在安装了 Xcode 工具链的 Mac 上真实构建（不设置 DOCS_RS）：
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+export MACOSX_DEPLOYMENT_TARGET=13.0
+pnpm tauri build --target aarch64-apple-darwin --bundles dmg
+pnpm tauri build --target x86_64-apple-darwin --bundles dmg
+```
+
+`.github/workflows/macos-check.yml` 在相关拉取请求或手动运行时执行原生测试、编译链接、DMG 打包和校验，上传两个架构的验收包，不创建 GitHub Release。本次只准备工作流，没有推送或触发远端任务。现有 release 工作流仍负责标签驱动的正式发布。
+
+## Mac 真机验收清单
+
+| 场景 | 通过标准 |
+| --- | --- |
+| 首次拒绝权限 | 不进入采集、不提交空图；显示尚未允许，并能进入系统设置 |
+| 允许权限、重启后重试 | 依据实际权限更新状态；收音和截图可重新启动 |
+| 会议播放和字幕 | 对方讲话到达原有 ASR，时长与音高正常；静音不生成字幕 |
+| 本应用播放声音 | 本进程 TTS 不重复回灌；扬声器经麦克风拾取的回声另行测试 |
+| 暂停、结束、快速重开 | 无旧音频或旧错误进入新会话；取消启动不会迟到恢复 |
+| 截图与收音并发 | 不打断字幕，截图失败不关闭音频；自身浮窗不进入自己的截图 |
+| 窗口截图失败 | 明确报错，不回退采集整个显示器 |
+| 多屏和 Retina | 显示器选取正确；负坐标、混合缩放下热区与手机光标准确 |
+| 穿透、编辑和拖动 | 可切换和恢复；旧拖动不干扰新拖动；隐藏后不继续移动 |
+| 全屏与多个 Space | 不抢会议焦点，浮窗能显示、隐藏和找回 |
+| 撤销权限、换耳机、休眠 | 不崩溃、不重放旧音频；错误明确，可暂停后重试 |
+| Apple Silicon / Intel | 分别安装对应 DMG，验证架构、权限、采集、快捷键及长时运行 |
+| 第三方共享 | 记录实际软件效果，不以共享属性设置成功推断通用防捕获 |
+
+本实现不包含运行时修改 Mac 进程身份、Mac 原生笔试 OSD、复杂按应用音源选择、Developer ID/公证，以及对所有录屏软件的隐藏保证。
+
+参考：[采集库源码](https://github.com/doom-fish/screencapturekit-rs)、[Apple 录屏权限](https://developer.apple.com/documentation/coregraphics/cgpreflightscreencaptureaccess())、[共享标记限制](https://developer.apple.com/documentation/appkit/nswindow/sharingtype-swift.enum/none)、[Tauri DMG 打包](https://v2.tauri.app/distribute/dmg/)。此前自行维护 Swift 桥的分析属于备选方案，以本文实现状态为准。

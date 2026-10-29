@@ -3,7 +3,8 @@ import { useAiReady } from '@/lib/aiSettings';
  * 笔试工作台（对齐原版 hW）：模式三选卡、岗位、答题偏好折叠、
  * 双机位/快捷键提示/复制按钮开关、开始笔试。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getPlatformCapabilities, isTauri, type PlatformCapabilities } from '@/lib/bridge';
 import { ChevronDown, ChevronRight, Laptop, Play, Sparkles, Zap } from 'lucide-react';
 import {
   Badge,
@@ -46,6 +47,13 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
   const [newGoal, setNewGoal] = useState('');
   const [newCompany, setNewCompany] = useState('');
   const aiReady = useAiReady('vision');
+  const [platform, setPlatform] = useState<PlatformCapabilities | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let active = true;
+    void getPlatformCapabilities().then(value => { if (active) setPlatform(value); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const start = async () => {
     if (starting) return;
@@ -253,11 +261,11 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
         >
           <DualCameraSwitch scope="exam" />
         </SettingRow>
-        <SettingRow title="截图范围（Windows）" desc="默认截取屏幕；前台窗口模式只捕获当前题目窗口。空白图片会阻止发送。">
-          <Select value={captureMode} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">屏幕</option><option value="window">前台窗口</option></Select>
+        <SettingRow title="截图范围" desc={platform?.platform === 'macos' ? '屏幕模式截取鼠标所在显示器，并排除本应用窗口；前台窗口模式只截取最靠前的其他应用窗口。' : '默认截取屏幕；前台窗口模式只捕获当前题目窗口。空白图片会阻止发送。'}>
+          <Select value={captureMode} disabled={platform?.screenCapture === false} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">屏幕</option><option value="window">前台窗口</option></Select>
         </SettingRow>
         <SettingRow title="截图兼容模式（Windows）" desc="优先读取前台窗口，失败后回退屏幕截图。默认模式会在屏幕黑屏时尝试窗口读取。">
-          <Switch checked={compatibility} onCheckedChange={setCompatibility} />
+          <Switch checked={platform?.platform === 'windows' && compatibility} disabled={platform?.platform !== 'windows'} onCheckedChange={setCompatibility} />
         </SettingRow>
       </Card>
 

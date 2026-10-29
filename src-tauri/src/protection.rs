@@ -99,15 +99,20 @@ fn write_affinity(window: &Window, affinity: u32) -> Result<(), String> {
 pub(crate) fn read_affinity(window: &Window) -> Result<u32, String> {
     crate::window_macos::with_native(window, |raw| {
         // SAFETY: live Tauri window, main-thread execution guaranteed by with_native.
-        unsafe { mianxu_macos_capture::window::sharing_restricted(raw) }.map(|restricted| if restricted { EXCLUDED } else { 0 })
+        unsafe { mianxu_macos_capture::window::sharing_restricted(raw) }
+            .map(|restricted| if restricted { EXCLUDED } else { 0 })
     })
 }
 #[cfg(target_os = "macos")]
 fn write_affinity(window: &Window, value: u32) -> Result<(), String> {
     // Legacy AppKit sharing flag: best effort only. It cannot force third-party
     // ScreenCaptureKit streams to omit this window on current macOS versions.
-    window.set_content_protected(value != 0).map_err(|e| e.to_string())?;
-    if read_affinity(window)? != value { return Err("Mac 窗口共享限制未应用".into()); }
+    window
+        .set_content_protected(value != 0)
+        .map_err(|e| e.to_string())?;
+    if read_affinity(window)? != value {
+        return Err("Mac 窗口共享限制未应用".into());
+    }
     Ok(())
 }
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -126,7 +131,7 @@ pub fn reapply(window: &Window) -> Result<(), String> {
     let Some(state) = window.app_handle().try_state::<CaptureState>() else {
         return Ok(());
     };
-    let policy = state.0.lock().map_err(|e| e.to_string())?;
+    let policy = state.0.lock().map_err(|e| e.to_string())?.clone();
     write_affinity(window, policy.affinity(window.label(), dev_bypass()))
 }
 
@@ -256,7 +261,8 @@ pub struct CaptureStatus {
 #[tauri::command]
 pub fn cmd_get_capture_status(app: AppHandle) -> Result<CaptureStatus, String> {
     let state = app.state::<CaptureState>();
-    let policy = state.0.lock().map_err(|e| e.to_string())?;
+    // Never hold this lock while dispatching an AppKit read to the UI thread.
+    let policy = state.0.lock().map_err(|e| e.to_string())?.clone();
     let windows = LABELS
         .into_iter()
         .map(|label| {
@@ -266,8 +272,16 @@ pub fn cmd_get_capture_status(app: AppHandle) -> Result<CaptureStatus, String> {
             WindowStatus {
                 label: label.into(),
                 requested: policy.requested[label],
-                affinity: if cfg!(windows) { result.as_ref().ok().copied() } else { None },
-                sharing_restricted: if cfg!(target_os = "macos") { result.as_ref().ok().map(|value| *value != 0) } else { None },
+                affinity: if cfg!(windows) {
+                    result.as_ref().ok().copied()
+                } else {
+                    None
+                },
+                sharing_restricted: if cfg!(target_os = "macos") {
+                    result.as_ref().ok().map(|value| *value != 0)
+                } else {
+                    None
+                },
                 error: result.err(),
             }
         })

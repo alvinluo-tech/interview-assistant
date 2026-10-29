@@ -6,7 +6,7 @@ pub mod selection;
 #[cfg(target_os = "macos")]
 mod native;
 #[cfg(target_os = "macos")]
-pub use native::{capture_audio, capture_image, CapturedImage};
+pub use native::{CapturedImage, capture_audio, capture_image};
 
 #[cfg(target_os = "macos")]
 pub mod window;

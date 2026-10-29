@@ -65,10 +65,16 @@ pub fn global_shortcut_handler(app: &AppHandle, shortcut: &Shortcut, event: Shor
 
 fn handle_panic(app: &AppHandle) {
     let state = app.state::<crate::overlay::OverlayState>();
-    if state.overlay_visible.load(std::sync::atomic::Ordering::SeqCst) {
+    if state
+        .overlay_visible
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
         // 瞬间隐藏浮窗（无提示）
         let _ = crate::overlay::cmd_hide_overlay(app.clone());
-    } else if state.session_active.load(std::sync::atomic::Ordering::SeqCst) {
+    } else if state
+        .session_active
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
         let _ = crate::overlay::show_overlay_and_emit(app);
     } else {
         // 浮窗未显示：告知前端（提示 + 可按上一场快速重开）
@@ -76,10 +82,7 @@ fn handle_panic(app: &AppHandle) {
     }
 }
 
-fn register_one(
-    app: &AppHandle,
-    shortcut: Shortcut,
-) -> Result<(), String> {
+fn register_one(app: &AppHandle, shortcut: Shortcut) -> Result<(), String> {
     if app.global_shortcut().is_registered(shortcut) {
         return Ok(());
     }
@@ -135,7 +138,11 @@ pub fn cmd_set_panic_hotkey(
         let _ = app.global_shortcut().unregister(old);
     }
     let registered = try_register_panic(&app, &state, accelerator.clone());
-    let _ = app.emit_to("main", "panic-hotkey-status", PanicStatusPayload { registered });
+    let _ = app.emit_to(
+        "main",
+        "panic-hotkey-status",
+        PanicStatusPayload { registered },
+    );
     // 没注册上（被其它程序占用）→ 后台每 10s 重试，最多 30 次（原版同款自动重试）
     if !registered {
         if let Some(acc) = accelerator {

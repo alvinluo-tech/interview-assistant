@@ -1,10 +1,22 @@
 //! Owned, bounded media conversion. No Apple types escape a native callback.
 use std::collections::VecDeque;
 
-pub struct AudioPlayout { pending: VecDeque<Vec<i16>>, next_ms: u64 }
-impl Default for AudioPlayout { fn default() -> Self { Self::new() } }
+pub struct AudioPlayout {
+    pending: VecDeque<Vec<i16>>,
+    next_ms: u64,
+}
+impl Default for AudioPlayout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl AudioPlayout {
-    pub fn new() -> Self { Self { pending: VecDeque::new(), next_ms: 150 } }
+    pub fn new() -> Self {
+        Self {
+            pending: VecDeque::new(),
+            next_ms: 150,
+        }
+    }
     pub fn push(&mut self, chunks: Vec<Vec<i16>>) -> Result<(), String> {
         if self.pending.len() + chunks.len() > 20 || chunks.iter().any(|c| c.len() != 1600) {
             return Err("系统收音处理积压或分包无效，请暂停后重试。".into());
@@ -13,10 +25,16 @@ impl AudioPlayout {
         Ok(())
     }
     pub fn tick(&mut self, now_ms: u64) -> Result<Option<Vec<i16>>, String> {
-        if now_ms < self.next_ms { return Ok(None); }
-        if now_ms - self.next_ms > 500 { return Err("系统收音处理已中断，请暂停后重试。".into()); }
+        if now_ms < self.next_ms {
+            return Ok(None);
+        }
+        if now_ms - self.next_ms > 500 {
+            return Err("系统收音处理已中断，请暂停后重试。".into());
+        }
         self.next_ms += 100;
-        Ok(Some(self.pending.pop_front().unwrap_or_else(|| vec![0; 1600])))
+        Ok(Some(
+            self.pending.pop_front().unwrap_or_else(|| vec![0; 1600]),
+        ))
     }
 }
 
@@ -146,7 +164,9 @@ pub struct PcmChunks {
 }
 impl PcmChunks {
     pub fn flush(&mut self) -> Option<Vec<i16>> {
-        if self.pending.is_empty() { return None; }
+        if self.pending.is_empty() {
+            return None;
+        }
         let mut tail: Vec<i16> = self.pending.drain(..).collect();
         tail.resize(1600, 0);
         Some(tail)
