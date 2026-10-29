@@ -45,3 +45,24 @@ test('browser preview does not masquerade as a native capture session', async ()
   await assert.rejects(h.api.captureScreen(), /桌面/);
   assert.equal(h.calls.length, 0);
 });
+
+test('unmounting before event registration completes cannot leak a listener or deliver late events', async () => {
+  let completeRegistration, handler, removed = 0, delivered = 0;
+  const api = evaluateFixture('src/lib/bridge.ts', {
+    exports: {}, window: { __TAURI_INTERNALS__: {} },
+    require: name => {
+      if (name === '@tauri-apps/api/core') return {};
+      if (name === '@tauri-apps/api/event') return { listen: (_event, callback) => {
+        handler = callback;
+        return new Promise(resolve => { completeRegistration = resolve; });
+      } };
+      throw new Error(`Unexpected dependency ${name}`);
+    },
+  });
+  const stop = api.onEvent('synthetic-event', () => { delivered++; });
+  stop(); completeRegistration(() => { removed++; });
+  await Promise.resolve(); await Promise.resolve();
+  handler({ payload: {} });
+  assert.equal(removed, 1);
+  assert.equal(delivered, 0);
+});

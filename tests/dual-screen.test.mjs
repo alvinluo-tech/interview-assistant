@@ -101,6 +101,8 @@ test('malformed phone messages cannot escape the event handler or write zones', 
   assert.doesNotThrow(() => h.message({ t: 'zones', zones: [{ id: 'solve', x: NaN, y: 0, w: 1, h: 1 }] }));
   await flush();
   assert.ok(!h.calls.some(([name, zones]) => name === 'zones' && zones.some(z => !Number.isFinite(z.x))));
+  h.message({ t: 'zones', zones: [{ id: 'end-session', x: 0, y: 0, w: 0.2, h: 0.1 }] }); await flush();
+  assert.ok(!h.calls.some(([name, zones]) => name === 'zones' && zones.some(z => z.id === 'dual:end-session')), 'A desktop dwell must not bypass the phone end-session confirmation');
   stop();
 });
 
