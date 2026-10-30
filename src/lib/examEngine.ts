@@ -94,6 +94,10 @@ const listeners = new Set<() => void>();
 
 function setState(patch: Partial<SolverState>) {
   state = { ...state, ...patch };
+  if (!['thinking', 'streaming', 'capturing', 'uploading'].includes(state.phase) && tickTimer !== null) {
+    window.clearInterval(tickTimer);
+    tickTimer = null;
+  }
   listeners.forEach((l) => l());
 }
 
@@ -127,6 +131,10 @@ function ensureTicker() {
   }, 1000);
 }
 
+function modeSettingKey(): 'exam.mode' | 'interview.solverExamMode' {
+  return getSetting('overlay.mode', 'exam') === 'interview' ? 'interview.solverExamMode' : 'exam.mode';
+}
+
 function customization(): ExamCustomization {
   return { ...DEFAULT_EXAM_CUSTOMIZATION, ...getSetting('exam.customization', DEFAULT_EXAM_CUSTOMIZATION) };
 }
@@ -154,7 +162,8 @@ export async function startExamSession(goalId: string | null): Promise<void> {
 }
 
 async function createSessionForGeneration(goalId: string | null, current: number): Promise<void> {
-  const mode = getSetting('exam.mode', 'quick') as ExamModeKey;
+  const configured = getSetting(modeSettingKey(), 'quick');
+  const mode = examModeInfo(configured).key as ExamModeKey;
   const goals = readData<{ id: string; name: string; companyName?: string }[]>('goals', []);
   const goal = goals.find((g) => g.id === goalId);
   const session = await createExamSession({
@@ -176,7 +185,6 @@ async function createSessionForGeneration(goalId: string | null, current: number
     goalId,
   });
   void goal;
-  ensureTicker();
 }
 
 /** 保存当前已完成的 turn 到记录（实时写） */
@@ -198,6 +206,13 @@ async function persistTurns() {
 
 function captureOptions(){return {protectedOnTop:true,compatibilityMode:getSetting('capture.compatibilityMode',false),captureMode:getSetting('capture.mode','screen')};}
 export async function capturePage(): Promise<string> {
+  const max = examModeInfo(state.mode).maxScreenshotPages;
+  if (state.pendingScreenshots.length >= max) {
+    const message = `最多收集 ${max} 页，请先发送或清空已收集截图。`;
+    setState({ errorMessage: message });
+    throw new Error(message);
+  }
+  if (['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) throw new Error('当前操作尚未完成，请稍候。');
   const current = generation;
   setState({ phase: 'capturing', statusText: '截屏中…' });
   try {
@@ -253,7 +268,11 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       return;
     }
   }
-  shots = shots.slice(0, maxPages);
+  if (shots.length > maxPages) {
+    requestController = null;
+    setState({phase:'error', errorMessage:`最多发送 ${maxPages} 页，请调整截图数量后重试。`});
+    return;
+  }
   setState({
     pendingScreenshots: [],
     phase: 'thinking',
@@ -272,6 +291,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   };
   const turns = [...state.turns, turn];
   setState({ turns, activeTurnId: turn.id });
+  ensureTicker();
   const startedAt = Date.now();
   let raw = '';
   try {
@@ -340,8 +360,13 @@ function suggestFollowUps(answer: string): string[] {
 }
 
 /** 直接答（answerNow）：不做新截屏，让 AI 收敛输出当前答案 —— 本地实现为停止生成 */
-export function answerNow() {
-  // 本地管线：当前 turn 自然结束时已是完整答案；此处理保留命令面
+export async function answerNow(): Promise<void> {
+  if (!requestController || !state.activeTurnId) return;
+  const id = state.activeTurnId;
+  cancelRequest();
+  setState({ phase:'done', statusText:'', activeTurnId:null,
+    turns:state.turns.map(turn => turn.id === id ? {...turn,reasoningDone:true} : turn) });
+  await persistTurns();
 }
 
 export async function followUp(opts: {
@@ -387,6 +412,7 @@ export async function followUp(opts: {
     phase: 'streaming',
     statusText: opts.intent === 'code-review' ? 'AI 检查中…' : 'AI 输出中…',
   });
+  ensureTicker();
   const startedAt = Date.now();
   try {
     const context = state.turns
@@ -437,13 +463,15 @@ export function hasPendingPages(): boolean {
 
 /** 切换答题档位（浮窗模式 chip / 设置页） */
 export function setSolverMode(mode: ExamModeKey) {
-  // 截断超出新档位上限的已收集页
   const max = EXAM_MODES[mode].maxScreenshotPages;
+  if (state.pendingScreenshots.length > max) {
+    setState({errorMessage:`已收集 ${state.pendingScreenshots.length} 页，超过此档位 ${max} 页上限，请先发送或清空。`});
+    return;
+  }
   setState({
     mode,
-    pendingScreenshots: state.pendingScreenshots.slice(0, max),
   });
-  void import('./store').then(({ setSetting }) => setSetting('exam.mode', mode));
+  return import('./store').then(({ setSetting }) => setSetting(modeSettingKey(), mode));
 }
 
 export async function abortSolve(): Promise<void> {

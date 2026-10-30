@@ -29,7 +29,7 @@ import {
 } from './backend';
 import type { ExamSessionRecord } from './backend';
 import { getSolverState } from './examEngine';
-import { getSetting } from './store';
+import { getSetting, setSetting } from './store';
 import { bus } from './events';
 import { openMicrophone, type MicrophoneCapture } from './microphone';
 import { joinTranscript } from './speechProtocol';
@@ -628,7 +628,7 @@ export async function startInterview(opts: {
 export function resumeInterviewSession(sessionId: string, goalId: string | null, resumeId: string | null) {
   const sessions = readData<InterviewSession[]>('interviewSessions', []);
   const session = sessions.find((s) => s.id === sessionId);
-  if (!session) return false;
+  if (!session || session.type !== 'INTERVIEW' || session.status !== 'ACTIVE') return false;
   sessionGeneration++;
   setState({
     ...state,
@@ -829,10 +829,14 @@ export async function endInterview(complete = true) {
   await stopCapture();
   if (state.sessionId !== sessionId) return;
   setState({ status: 'ended', audio: { ...emptyAudio(), source: state.audio.source } });
-  if (complete && sessionId) {
-    await completeSession(sessionId);
+  try {
+    if (complete && sessionId) await completeSession(sessionId);
+  } finally {
+    if (state.sessionId === sessionId) {
+      setState({ sessionId: null });
+      if (getSetting('interview.sessionId', null) === sessionId) await setSetting('interview.sessionId', null);
+    }
   }
-  if (state.sessionId === sessionId) setState({ sessionId: null });
 }
 
 async function persistMessages(messages: ChatMessage[]) {
