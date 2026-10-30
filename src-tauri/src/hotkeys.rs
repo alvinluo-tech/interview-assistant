@@ -198,3 +198,31 @@ pub fn cmd_panic_hotkey_status(state: State<'_, HotkeyRouting>) -> HashMap<Strin
     let registered = state.panic_shortcut.lock().unwrap().is_some();
     HashMap::from([("registered".to_string(), registered)])
 }
+
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+    use std::cell::Cell;
+    #[test]
+    fn panic_replacement_is_idempotent_and_keeps_working_key_on_conflict() {
+        let old = Shortcut::from_str("Control+Shift+X").unwrap();
+        let new = Shortcut::from_str("Control+Shift+Y").unwrap();
+        let mut current = Some(old);
+        let registrations = Cell::new(0);
+        let unregistrations = Cell::new(0);
+        replace_panic_shortcut(&mut current, Some(old), |_| { registrations.set(registrations.get()+1); Ok(()) }, |_| {unregistrations.set(unregistrations.get()+1); Ok(())}).unwrap();
+        assert_eq!(registrations.get(), 0);
+        assert_eq!(unregistrations.get(), 0);
+        assert!(replace_panic_shortcut(&mut current, Some(new), |_| Err("occupied".into()), |_| {unregistrations.set(unregistrations.get()+1); Ok(())}).is_err());
+        assert_eq!(current, Some(old));
+        assert_eq!(unregistrations.get(), 0);
+        replace_panic_shortcut(&mut current, None, |_| Ok(()), |_| Ok(())).unwrap();
+        assert!(current.is_none());
+    }
+    #[test]
+    fn recorder_key_names_parse_in_the_actual_native_shortcut_library() {
+        for key in ["Escape","NumpadAdd","NumpadSubtract","NumpadMultiply","NumpadDivide","NumpadDecimal","NumpadEnter","ContextMenu"] {
+            assert!(Shortcut::from_str(key).is_ok(), "{key}");
+        }
+    }
+}

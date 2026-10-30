@@ -590,3 +590,16 @@ pub fn spawn_heartbeat_watcher(app: AppHandle) {
         }
     });
 }
+
+#[cfg(test)]
+mod geometry_audit_tests {
+    use super::*;
+    #[test]
+    fn overlay_size_rejects_nonfinite_and_bounds_unusable_dimensions() {
+        assert!(bounded_overlay_size(f64::NAN, 300.0).is_err());
+        assert!(bounded_overlay_size(300.0, f64::INFINITY).is_err());
+        assert_eq!(bounded_overlay_size(1.0,1.0).unwrap(),(200.0,150.0));
+        assert_eq!(bounded_overlay_size(30000.0,30000.0).unwrap(),(2560.0,2560.0));
+        assert_eq!(bounded_overlay_size(420.0,520.0).unwrap(),(420.0,520.0));
+    }
+}
