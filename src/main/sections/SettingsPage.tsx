@@ -32,7 +32,7 @@ import {
 } from '@/lib/hotkeys';
 import { useAiSettings, useAiReady } from '@/lib/aiSettings';
 import { AiServicesTab } from './AiServicesTab';
-import { setActionHotkeys, setPanicHotkey } from '@/lib/bridge';
+import { onEvent, panicHotkeyStatus, setActionHotkeys, setPanicHotkey } from '@/lib/bridge';
 import { APP_VERSION } from '@/lib/env';
 import { LOCALE_NAMES, LOCALES, currentLocale, switchLocale, systemLocale } from '@/lib/i18n';
 import { SimulatedPlatform } from '@/overlay/platform';
@@ -585,17 +585,12 @@ function HotkeysTab() {
   const [panicCapturing, setPanicCapturing] = useState(false);
   const [panicRegistered, setPanicRegistered] = useState(true);
 
-  // 恐慌键注册状态（被其它程序占用时提示，原生侧会自动重试）
+  // Native registration failures are surfaced immediately; status listeners are scoped.
   useEffect(() => {
-    void import('@/lib/bridge').then(async ({ panicHotkeyStatus, onEvent }) => {
-      try {
-        const s = await panicHotkeyStatus();
-        setPanicRegistered(Boolean(s?.registered));
-      } catch {
-        // ignore
-      }
-      onEvent<{ registered: boolean }>('panic-hotkey-status', (p) => setPanicRegistered(p.registered));
-    });
+    let disposed=false;
+    const off=onEvent<{registered:boolean}>('panic-hotkey-status',p=>setPanicRegistered(p.registered));
+    void panicHotkeyStatus().then(status=>{if(!disposed)setPanicRegistered(Boolean(status?.registered));}).catch(()=>{});
+    return ()=>{disposed=true;off();};
   }, []);
 
   const effective = effectiveHotkeys(scheme, custom);
@@ -603,7 +598,7 @@ function HotkeysTab() {
   // 录键
   useEffect(() => {
     if (!capturing && !panicCapturing) return;
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = async (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (e.key === 'Escape') {
@@ -614,15 +609,17 @@ function HotkeysTab() {
       const { accelerator, error } = keyEventToAccelerator(e);
       if (error || !accelerator) return;
       if (panicCapturing) {
-        setPanic(accelerator);
-        void setPanicHotkey(accelerator);
-        setPanicCapturing(false);
+        try {
+          await setPanicHotkey(accelerator);
+          setPanic(accelerator);
+          setPanicCapturing(false);
+        } catch(error) {showToast({type:'error',title:'快捷键未保存',description:String((error as Error).message||error)});}
       } else if (capturing) {
         const next = { ...custom, [capturing]: accelerator };
         setCustom(next);
         void setActionHotkeys(
           Object.entries(effectiveHotkeys(scheme, next)).map(([action, acc]) => ({ action, accelerator: acc })),
-        );
+        ).catch(error=>showToast({type:'error',title:'部分快捷键未生效',description:String((error as Error).message||error)}));
         setCapturing(null);
       }
     };

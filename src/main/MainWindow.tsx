@@ -77,6 +77,20 @@ const PAGE_TITLES: Record<Exclude<Section, 'interview' | 'settings'>, { h1: stri
   records: { h1: '历史记录', sub: '每场面试的问答记录、每次笔试的题目与答案。' },
 };
 
+let startupHotkeys: Promise<void> | undefined;
+function initializeStartupHotkeys() {
+  return startupHotkeys ??= (async () => {
+    const {showToast}=await import('@/ui/primitives');
+    try {await setPanicHotkey(getSetting('panic.hotkey',DEFAULT_PANIC_HOTKEY));}
+    catch(error){showToast({type:'error',title:'应急隐藏快捷键未生效',description:String((error as Error).message||error)});}
+    const scheme=getSetting<HotkeyScheme>('overlay.hotkeyScheme','simple');
+    const effective=effectiveHotkeys(scheme,getSetting('overlay.actionHotkeys',{}) as Partial<Record<ActionKey,string>>);
+    try {await setActionHotkeys(Object.entries(effective).map(([action,accelerator])=>({action,accelerator})));}
+    catch(error){showToast({type:'error',title:'部分浮窗快捷键未生效',description:String((error as Error).message||error)});}
+  })();
+}
+let staleCleanup: Promise<void> | undefined;
+
 export function MainWindow() {
   const dataError=useDataError();
   const [section, setSection] = useState<Section>('interview');
@@ -89,13 +103,7 @@ export function MainWindow() {
   // 启动副作用：注册 panic + 动作热键、浮窗异常事件
   useEffect(() => {
     if (!('__TAURI_INTERNALS__' in window)) return;
-    void setPanicHotkey(getSetting('panic.hotkey', DEFAULT_PANIC_HOTKEY));
-    const scheme = getSetting<HotkeyScheme>('overlay.hotkeyScheme', 'simple');
-    const custom = getSetting('overlay.actionHotkeys', {}) as Partial<Record<ActionKey, string>>;
-    const effective = effectiveHotkeys(scheme, custom);
-    void setActionHotkeys(
-      Object.entries(effective).map(([action, accelerator]) => ({ action, accelerator })),
-    );
+    void initializeStartupHotkeys();
     const offDead = onEvent('overlay-webview-dead', () => {
       import('@/ui/primitives').then(({ showToast }) =>
         showToast({ type: 'error', title: '悬浮窗出现异常已自动收起，重新开始面试即可继续。' }),
@@ -124,14 +132,14 @@ export function MainWindow() {
 
   // 启动时清理陈旧的活动会话（浮窗没在跑，上一场不可能还活着）
   useEffect(() => {
-    void (async () => {
+    void (staleCleanup ??= (async () => {
       const { overlayShowSeq } = await import('@/lib/bridge');
       const seq = await overlayShowSeq().catch(() => 0);
       if (!seq) {
         const { closeStaleActiveSessions } = await import('@/lib/backend');
         await closeStaleActiveSessions();
       }
-    })();
+    })().catch(error => console.warn('[sessions] stale cleanup failed',error)));
   }, []);
 
   // 面试/笔试会话进行中时主窗口自动隐藏（由 workbench 调 startFlow）
@@ -150,7 +158,7 @@ export function MainWindow() {
     }
   };
 
-  const showOnboarding = !onboardingSkipped && !usageAcked === false;
+  const showOnboarding = !onboardingSkipped && usageAcked;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

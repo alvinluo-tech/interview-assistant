@@ -30,8 +30,8 @@
         "url": "index.html#overlay",
         "width": 420,
         "height": 520,
-        "minWidth": 120,
-        "minHeight": 80,
+        "minWidth": 200,
+        "minHeight": 150,
         "x": 1200,
         "y": 300,
         "decorations": false,
@@ -41,7 +41,9 @@
         "resizable": true,
         "shadow": false,
         "alwaysOnTop": true,
-        "focus": false
+        "focus": false,
+        "maxWidth": 2560,
+        "maxHeight": 2560
       }
     ],
     "security": {

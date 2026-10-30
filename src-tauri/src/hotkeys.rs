@@ -23,6 +23,7 @@ pub struct PanicStatusPayload {
 
 #[derive(Default)]
 pub struct HotkeyRouting {
+    registration_lock: Mutex<()>,
     /// 当前已注册的 action 快捷键 → action 名
     pub action_map: Mutex<HashMap<Shortcut, String>>,
     pub panic_shortcut: Mutex<Option<Shortcut>>,
@@ -97,11 +98,13 @@ pub fn cmd_set_action_hotkeys(
     state: State<'_, HotkeyRouting>,
     bindings: Vec<HotkeyBinding>,
 ) -> Result<(), String> {
+    let _registration = state.registration_lock.lock().map_err(|_| "快捷键注册锁异常")?;
+    let panic = *state.panic_shortcut.lock().map_err(|_| "快捷键状态锁异常")?;
     // 先注销现有 action 快捷键
     {
         let mut map = state.action_map.lock().unwrap();
         for sc in map.keys() {
-            let _ = app.global_shortcut().unregister(*sc);
+            if Some(*sc) != panic { let _ = app.global_shortcut().unregister(*sc); }
         }
         map.clear();
     }
@@ -109,6 +112,7 @@ pub fn cmd_set_action_hotkeys(
     let mut map = state.action_map.lock().unwrap();
     for b in bindings {
         match Shortcut::from_str(&b.accelerator) {
+            Ok(sc) if Some(sc) == panic => errors.push(format!("{}: 与应急隐藏快捷键冲突", b.action)),
             Ok(sc) => match register_one(&app, sc) {
                 Ok(()) => {
                     map.insert(sc, b.action.clone());
@@ -133,64 +137,38 @@ pub fn cmd_set_panic_hotkey(
     state: State<'_, HotkeyRouting>,
     accelerator: Option<String>,
 ) -> Result<(), String> {
-    // 注销旧的
-    if let Some(old) = state.panic_shortcut.lock().unwrap().take() {
-        let _ = app.global_shortcut().unregister(old);
+    let _registration = state.registration_lock.lock().map_err(|_| "快捷键注册锁异常")?;
+    let desired = accelerator.as_deref().map(Shortcut::from_str).transpose()
+        .map_err(|e| format!("快捷键无效：{e}"))?;
+    if desired.is_some_and(|key| state.action_map.lock().unwrap().contains_key(&key)) {
+        return Err("此快捷键已被浮窗动作占用，请选择其他组合。".into());
     }
-    let registered = try_register_panic(&app, &state, accelerator.clone());
-    let _ = app.emit_to(
-        "main",
-        "panic-hotkey-status",
-        PanicStatusPayload { registered },
-    );
-    // 没注册上（被其它程序占用）→ 后台每 10s 重试，最多 30 次（原版同款自动重试）
-    if !registered {
-        if let Some(acc) = accelerator {
-            let app2 = app.clone();
-            std::thread::spawn(move || {
-                for _ in 0..30 {
-                    std::thread::sleep(std::time::Duration::from_secs(10));
-                    let state: State<HotkeyRouting> = app2.state();
-                    if state.panic_shortcut.lock().unwrap().is_some() {
-                        return;
-                    }
-                    if try_register_panic(&app2, &state, Some(acc.clone())) {
-                        let _ = app2.emit_to(
-                            "main",
-                            "panic-hotkey-status",
-                            PanicStatusPayload { registered: true },
-                        );
-                        return;
-                    }
-                }
-            });
-        }
-    }
-    Ok(())
+    let mut current = state.panic_shortcut.lock().map_err(|_| "快捷键状态锁异常")?;
+    let result = replace_panic_shortcut(&mut current, desired,
+        |key| register_one(&app, key),
+        |key| app.global_shortcut().unregister(key).map_err(|e| e.to_string()));
+    let registered = current.is_some();
+    drop(current);
+    let _ = app.emit_to("main", "panic-hotkey-status", PanicStatusPayload { registered });
+    // Conflicts require user action. No detached retries survive a setting change.
+    result.map_err(|e| format!("应急隐藏快捷键未生效，可能已被其他程序占用，请更换组合：{e}"))
 }
 
-fn try_register_panic(
-    app: &AppHandle,
-    state: &State<'_, HotkeyRouting>,
-    accelerator: Option<String>,
-) -> bool {
-    let Some(acc) = accelerator else { return false };
-    match Shortcut::from_str(&acc) {
-        Ok(sc) => match register_one(app, sc) {
-            Ok(()) => {
-                *state.panic_shortcut.lock().unwrap() = Some(sc);
-                true
-            }
-            Err(e) => {
-                log::warn!("[hotkey] panic hotkey register failed: {e}");
-                false
-            }
-        },
-        Err(e) => {
-            log::warn!("[hotkey] panic hotkey parse failed: {e}");
-            false
+fn replace_panic_shortcut(
+    current: &mut Option<Shortcut>, desired: Option<Shortcut>,
+    mut register: impl FnMut(Shortcut) -> Result<(), String>,
+    mut unregister: impl FnMut(Shortcut) -> Result<(), String>,
+) -> Result<(), String> {
+    if *current == desired { return Ok(()); }
+    if let Some(new) = desired { register(new)?; }
+    if let Some(old) = *current {
+        if let Err(error) = unregister(old) {
+            if let Some(new) = desired { let _ = unregister(new); }
+            return Err(error);
         }
     }
+    *current = desired;
+    Ok(())
 }
 
 #[tauri::command]
@@ -221,7 +199,7 @@ mod audit_tests {
     }
     #[test]
     fn recorder_key_names_parse_in_the_actual_native_shortcut_library() {
-        for key in ["Escape","NumpadAdd","NumpadSubtract","NumpadMultiply","NumpadDivide","NumpadDecimal","NumpadEnter","ContextMenu"] {
+        for key in ["Escape","NumpadAdd","NumpadSubtract","NumpadMultiply","NumpadDivide","NumpadDecimal","NumpadEnter"] {
             assert!(Shortcut::from_str(key).is_ok(), "{key}");
         }
     }

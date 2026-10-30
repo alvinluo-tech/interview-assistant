@@ -201,9 +201,15 @@ pub fn cmd_position_overlay(app: AppHandle, pos: PhysicalPosition<i32>) -> Resul
 /// 前端传逻辑像素（与 overlay.style 里 examWidth/interviewWidth 同一坐标系）
 #[tauri::command]
 pub fn cmd_set_overlay_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
+    let (width, height) = bounded_overlay_size(width, height)?;
     let win = overlay_window(&app).ok_or("overlay window missing")?;
     win.set_size(LogicalSize::new(width, height))
         .map_err(|e| e.to_string())
+}
+
+fn bounded_overlay_size(width: f64, height: f64) -> Result<(f64, f64), String> {
+    if !width.is_finite() || !height.is_finite() { return Err("浮窗尺寸必须是有限数值。".into()); }
+    Ok((width.clamp(200.0, 2560.0), height.clamp(150.0, 2560.0)))
 }
 
 #[tauri::command]

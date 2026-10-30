@@ -190,7 +190,7 @@ export function keyEventToAccelerator(e: KeyboardEvent): CapturedKey {
   if (/^Key[A-Z]$/.test(key)) key = key.slice(3);
   else if (/^Digit\d$/.test(key)) key = key.slice(5);
   else if (/^Numpad\d$/.test(key)) key = 'num' + key.slice(6);
-  else if (/^F\d{1,2}$/.test(key)) {
+  else if (/^F(?:[1-9]|1\d|2[0-4])$/.test(key)) {
     // 保留 F1-F24
   } else {
     const map: Record<string, string> = {
@@ -200,7 +200,7 @@ export function keyEventToAccelerator(e: KeyboardEvent): CapturedKey {
       ArrowRight: 'Right', Equal: '=', Minus: '-', BracketLeft: '[', BracketRight: ']',
       Semicolon: ';', Quote: "'", Backslash: '\\', Comma: ',', Period: '.', Slash: '/',
       Backquote: '`', CapsLock: 'CapsLock', PrintScreen: 'PrintScreen', ScrollLock: 'ScrollLock',
-      Pause: 'Pause', ContextMenu: 'ContextMenu', NumpadAdd: 'NumpadAdd', NumpadSubtract: 'NumpadSubtract',
+      Pause: 'Pause', NumpadAdd: 'NumpadAdd', NumpadSubtract: 'NumpadSubtract',
       NumpadMultiply: 'NumpadMultiply', NumpadDivide: 'NumpadDivide', NumpadDecimal: 'NumpadDecimal', NumpadEnter:'NumpadEnter',
     };
     if (!map[key]) return { accelerator:'', error:'暂不支持此按键，请选择字母、数字或常用功能键' };

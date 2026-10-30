@@ -4,7 +4,7 @@
  * 对齐原版 mJ/hJ 的生命周期与常量。
  */
 import { useEffect, useRef, useState } from 'react';
-import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+import { getCurrentWindow, currentMonitor, availableMonitors } from '@tauri-apps/api/window';
 import {
   overlayHeartbeat,
   overlaySessionReady,
@@ -98,6 +98,28 @@ export function OverlayApp() {
     }
   }, [active, style.interviewWidth, style.interviewHeight, style.examWidth, style.examHeight]);
 
+  useEffect(() => {
+    if (!active) return;
+    let disposed = false, off:(()=>void)|undefined, timer:number|undefined;
+    const win = getCurrentWindow();
+    void win.onResized(event => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void (async () => {
+          const scale = await win.scaleFactor();
+          if (disposed || !Number.isFinite(scale) || scale <= 0) return;
+          const width=Math.round(event.payload.width / scale), height=Math.round(event.payload.height / scale);
+          if (width < 200 || height < 150 || width > 2560 || height > 2560) return;
+          const current=normalizeStyle(getSetting('overlay.style',DEFAULT_OVERLAY_STYLE));
+          const interview=['interview','interview-preview'].includes(getSetting('overlay.mode','exam'));
+          if (interview ? current.interviewWidth===width && current.interviewHeight===height : current.examWidth===width && current.examHeight===height) return;
+          await setSetting('overlay.style', normalizeStyle({...current,...(interview?{interviewWidth:width,interviewHeight:height}:{examWidth:width,examHeight:height})}));
+        })().catch(error => console.warn('[overlay] resize save failed',error));
+      },500);
+    }).then(release => {if(disposed)release();else off=release;}).catch(() => {});
+    return () => {disposed=true;window.clearTimeout(timer);off?.();};
+  }, [active, showSeq, seq]);
+
   // 手机副屏接管（exam-dual）：无连接时静默待机，手机上线后隐身本地浮窗
   useEffect(() => {
     if (!active) return;
@@ -136,7 +158,14 @@ async function restorePosition() {
   try {
     const pos = getSetting('overlay.position', null) as { x: number; y: number } | null;
     if (pos) {
-      await positionOverlay({ x: pos.x, y: pos.y });
+      const [monitors, size] = await Promise.all([availableMonitors(),getCurrentWindow().outerSize()]);
+      const monitor = monitors.find(m => pos.x >= m.workArea.position.x && pos.y >= m.workArea.position.y && pos.x < m.workArea.position.x+m.workArea.size.width && pos.y < m.workArea.position.y+m.workArea.size.height)
+        ?? await currentMonitor() ?? monitors[0];
+      if (!monitor || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return;
+      const {position, size:work}=monitor.workArea;
+      const clamped={x:Math.round(clampAxis(pos.x,position.x,position.x+Math.max(0,work.width-size.width))),y:Math.round(clampAxis(pos.y,position.y,position.y+Math.max(0,work.height-size.height)))};
+      await positionOverlay(clamped);
+      if(clamped.x!==pos.x || clamped.y!==pos.y)await setSetting('overlay.position',clamped);
     }
   } catch {
     // ignore
