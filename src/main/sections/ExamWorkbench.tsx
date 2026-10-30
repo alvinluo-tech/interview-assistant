@@ -25,7 +25,6 @@ import {
   EXAM_MODES,
   EXAM_MODE_ORDER,
   customizationSummary,
-  startExamSession,
   type ExamModeKey,
 } from '@/lib/examEngine';
 import { startOverlayFlow } from '../MainWindow';
@@ -68,7 +67,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
         await closeStaleActiveSessions();
       }
       await setSetting('exam.mode', mode);
-      await startExamSession(goalId);
+      await setSetting('exam.pendingConfig', {runId:crypto.randomUUID(),goalId});
       await startOverlayFlow('exam', goalId);
       showToast({ type: 'success', title: '笔试浮窗已启动', description: '把题目放到屏幕上，悬停「解题」即可。' });
     } catch (e) {

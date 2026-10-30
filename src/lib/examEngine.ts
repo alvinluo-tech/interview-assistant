@@ -115,6 +115,7 @@ let generation = 0;
 let requestController: AbortController | null = null;
 let startingSolve = false;
 let turnSequence = 0;
+let examRunId: string | null = null;
 function turnId() { return `t${Date.now()}-${++turnSequence}`; }
 function cancelRequest() {
   generation++;
@@ -155,6 +156,15 @@ export function customizationSummary(): string {
 }
 
 // ---------------- 会话 ----------------
+
+/** New workbench runs reset only the owning runtime; panic hide/show keeps it. */
+export function prepareExamRun(runId:string, goalId:string|null) {
+  if (examRunId === runId) return;
+  examRunId = runId;
+  cancelRequest();
+  setState({sessionId:null,goalId,mode:examModeInfo(getSetting(modeSettingKey(),'quick')).key as ExamModeKey,
+    phase:'idle',turns:[],pendingScreenshots:[],activeTurnId:null,elapsedSec:0,statusText:'',errorMessage:null});
+}
 
 export async function startExamSession(goalId: string | null): Promise<void> {
   cancelRequest();

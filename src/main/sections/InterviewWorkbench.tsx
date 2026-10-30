@@ -23,6 +23,7 @@ import { useSetting, setSetting } from '@/lib/store';
 import { startOverlayFlow } from '../MainWindow';
 import { ANSWER_STYLES, type AnswerStyle } from '@/lib/ai';
 import { MicrophoneCheck } from './MicrophoneCheck';
+import { requestInterviewStop } from '@/lib/interviewLifecycle';
 
 export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => void }) {
   const goals = useData<Goal[]>('goals', [])[0];
@@ -88,11 +89,13 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
   };
 
   const stop = async () => {
-    const { completeSession } = await import('@/lib/backend');
-    if (activeSessionId) await completeSession(activeSessionId);
-    await setSetting('interview.sessionId', null);
     const { recallWorkbench } = await import('../MainWindow');
-    await recallWorkbench();
+    try {
+      if (activeSessionId) await requestInterviewStop(activeSessionId);
+      await setSetting('interview.sessionId', null);
+    } catch (error) {
+      showToast({type:'error',title:'结束面试未完成',description:String((error as Error).message||error)});
+    } finally {await recallWorkbench();}
   };
 
   return (

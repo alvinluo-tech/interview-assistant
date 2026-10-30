@@ -195,6 +195,7 @@ export const ALL_KEYS = [
   'interview.solverExamMode',
   'overlay.parkedLooks',
   'exam.mode',
+  'exam.pendingConfig',
   'interview.turnCards',
   'interview.showHotkeyHints',
   'disguise.enabled',

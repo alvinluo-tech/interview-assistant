@@ -19,10 +19,12 @@ import { ExamOverlay } from './ExamOverlay';
 import { InterviewOverlay } from './InterviewOverlay';
 import { OverlayPlatformProvider } from './platform';
 import { persistPosition } from './widgets';
+import { listenForInterviewStop } from '@/lib/interviewLifecycle';
 
 type ActiveMode = 'exam' | 'interview' | 'preview' | 'interview-preview';
 
 export function OverlayApp() {
+  useEffect(listenForInterviewStop, []);
   const [active, setActive] = useState(false);
   const [seq, setSeq] = useState(0);
   const [showSeq, setShowSeq] = useState(0);

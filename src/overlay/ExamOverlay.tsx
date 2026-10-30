@@ -23,6 +23,7 @@ import {
   abortSolve,
   endExamSession,
   followUp,
+  prepareExamRun,
   extractLastCodeBlock,
   stripMarkdown,
   type SolverState,
@@ -30,6 +31,7 @@ import {
 import { setOverlaySize, setSessionActive, captureScreen } from '@/lib/bridge';
 import { effectiveHotkeys, hotkeyBadge, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
 import { isMac } from '@/lib/env';
+import { getSetting } from '@/lib/store';
 import { Md } from './Md';
 import {
   DwellButton,
@@ -46,6 +48,11 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
   const style: OverlayStyle = normalizeStyle(rawStyle);
   const skin = useMemo(() => computeSkin(style, 'exam' as OverlayMode), [style]);
   const { bindHotkey } = usePlatform();
+  useEffect(() => {
+    if (preview) return;
+    const config=getSetting<{runId:string;goalId:string|null}|null>('exam.pendingConfig',null);
+    if(config)prepareExamRun(config.runId,config.goalId);
+  }, [preview]);
 
   useEffect(() => {
     if (preview) return;
