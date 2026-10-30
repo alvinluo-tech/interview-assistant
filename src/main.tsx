@@ -39,10 +39,12 @@ const errorSink: string[] = [];
 window.addEventListener('error', (e) => {
   const msg = String((e.error as Error | undefined)?.stack ?? e.message);
   errorSink.push(msg);
+  if (errorSink.length > 400) errorSink.splice(0,errorSink.length-400);
   console.error('[desktop] uncaught error', e.error ?? e.message);
 });
 window.addEventListener('unhandledrejection', (e) => {
   const msg = `rejection: ${String((e.reason as Error | undefined)?.stack ?? e.reason)}`;
   errorSink.push(msg);
+  if (errorSink.length > 400) errorSink.splice(0,errorSink.length-400);
   console.error('[desktop] unhandled rejection', e.reason);
 });

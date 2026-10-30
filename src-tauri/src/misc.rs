@@ -9,7 +9,8 @@ use tauri::{AppHandle, Manager};
 pub fn cmd_read_recent_logs(app: AppHandle, limit: Option<usize>) -> Result<Vec<String>, String> {
     let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
     // tauri-plugin-log 默认文件名 = productName
-    let path = dir.join("骆耀升老公酱面试助手.log");
+    let name = app.config().product_name.as_deref().unwrap_or(&app.package_info().name);
+    let path = dir.join(format!("{name}.log"));
     let f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
     let mut reader = std::io::BufReader::new(f);
     let mut lines: Vec<String> = Vec::new();

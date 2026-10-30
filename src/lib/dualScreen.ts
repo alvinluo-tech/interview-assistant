@@ -395,7 +395,7 @@ async function dispatchAction(id: string) {
   if (id === 'solve') {
     await solve();
   } else if (id === 'direct') {
-    answerNow();
+    await answerNow();
   } else if (id === 'add-page') {
     await capturePage();
   } else if (id === 'reset') {

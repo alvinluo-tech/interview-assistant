@@ -438,6 +438,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
   };
   const messages = [...state.messages, assistantMsg];
   setState({ messages });
+  let checkpointTimer:number|null=null;
 
   try {
     const { prompt, sources } = buildSystemPromptForSession(question);
@@ -479,6 +480,13 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
             ),
           });
         }
+        if (checkpointTimer === null) checkpointTimer=window.setTimeout(() => {
+          checkpointTimer=null;
+          if (state.sessionId !== sessionId || turn.abort?.signal.aborted) return;
+          void persistMessages(state.messages).catch(error => {
+            if(state.sessionId===sessionId)setState({errorMessage:`回答暂未保存：${String((error as Error).message||error)}`});
+          });
+        },2000);
       },
     });
     if (turn.abort?.signal.aborted || state.sessionId !== sessionId) return;
@@ -510,6 +518,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
       setState({ status: state.status === 'answering' ? 'listening' : state.status });
     }
   } finally {
+    if(checkpointTimer !== null)window.clearTimeout(checkpointTimer);
     if (state.sessionId === sessionId) setState({ turns: state.turns.map(t => t.id === turn.id ? { ...t, answerPending: false } : t) });
     void drainAnswers();
   }
@@ -826,23 +835,28 @@ export async function endInterview(complete = true) {
   const sessionId = state.sessionId;
   setState({ status: 'ended' });
   state.turns.forEach(t => t.abort?.abort());
-  await stopCapture();
-  if (state.sessionId !== sessionId) return;
-  setState({ status: 'ended', audio: { ...emptyAudio(), source: state.audio.source } });
   try {
+    await stopCapture();
+    if (state.sessionId !== sessionId) return;
+    setState({ status:'ended', audio:{...emptyAudio(),source:state.audio.source}, messages:state.messages.map(message=>({...message,pending:false})) });
+    await persistMessages(state.messages);
     if (complete && sessionId) await completeSession(sessionId);
   } finally {
     if (state.sessionId === sessionId) {
       setState({ sessionId: null });
-      if (getSetting('interview.sessionId', null) === sessionId) await setSetting('interview.sessionId', null);
+      if (complete && getSetting('interview.sessionId', null) === sessionId) await setSetting('interview.sessionId', null);
     }
   }
 }
 
+let messageWrites:Promise<void>=Promise.resolve();
 async function persistMessages(messages: ChatMessage[]) {
   const sessionId = state.sessionId;
   if (sessionId) {
-    await updateSession(sessionId, { messages });
+    const snapshot=messages.map(message=>({...message,pending:false}));
+    const task=messageWrites.catch(()=>{}).then(()=>updateSession(sessionId,{messages:snapshot}));
+    messageWrites=task;
+    await task;
   }
 }
 

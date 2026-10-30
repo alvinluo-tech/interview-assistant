@@ -490,6 +490,10 @@ function SolverView({
           {solver.statusText}
         </div>
       )}
+      {solver.phase === 'done' && last && <div className="mt-2 flex flex-wrap gap-1.5">
+        {[...new Set(last.followUpOptions)].slice(0,3).map((option,index)=><DwellButton key={option}
+          id={`iv-suggested-${index}`} compact hoverMs={HOVER_MS.followUp} onTrigger={() => void followUp({message:option})}>{option}</DwellButton>)}
+      </div>}
       <div className="mt-2 flex gap-1.5">
         <button
           type="button"

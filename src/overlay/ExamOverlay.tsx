@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Copy, Puzzle } from 'lucide-react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { showToast } from '@/ui/primitives';
 import {
   computeSkin,
   normalizeStyle,
@@ -84,16 +85,16 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
 }
 
 /** 复制答案（热键路径，与浮窗内按钮同一逻辑） */
-async function copyAnswerToClipboard() {
+async function copyAnswerToClipboard(body?:string) {
   const s = getSolverState();
-  const lastBody = s.turns[s.turns.length - 1]?.body ?? '';
-  if (!lastBody) return;
+  const lastBody = body ?? s.turns[s.turns.length - 1]?.body ?? '';
+  if (!lastBody.trim()) {showToast({type:'info',title:'答案还没写完，写完再复制'});return;}
   const code = extractLastCodeBlock(lastBody);
   try {
-    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
     await writeText(code ?? stripMarkdown(lastBody));
+    showToast({type:'success',title:code?`已复制代码（${code.trimEnd().split('\n').length} 行）`:`已复制答案文字（${stripMarkdown(lastBody).length} 字）`});
   } catch {
-    // 忽略
+    showToast({type:'error',title:'复制失败，请再按一次'});
   }
 }
 
@@ -131,20 +132,7 @@ function ExamShell({
     solver.phase === 'capturing' ||
     solver.phase === 'uploading';
 
-  const copy = async () => {
-    const lastBody = solver.turns[solver.turns.length - 1]?.body ?? '';
-    if (!lastBody) return;
-    const code = extractLastCodeBlock(lastBody);
-    try {
-      if (code) {
-        await writeText(code);
-      } else {
-        await writeText(stripMarkdown(lastBody));
-      }
-    } catch {
-      // ignore
-    }
-  };
+  const copy = () => copyAnswerToClipboard(solver.turns[solver.turns.length-1]?.body ?? '');
 
   const doSolve = async () => {
     if (multiPage) {
@@ -238,6 +226,9 @@ function ExamShell({
       {/* 追问 chips */}
       {solver.turns.length > 0 && !multiPage && !solving && (
         <div className="mt-2 flex flex-wrap gap-1.5 px-2">
+          {[...new Set(solver.turns[solver.turns.length-1]?.followUpOptions ?? [])].slice(0,3).map((option,index)=><DwellChip
+            key={option} id={`suggested-${index}`} hoverMs={HOVER_MS.followUp} label={option}
+            onTrigger={() => void followUp({message:option})} />)}
           {showCopyCode && (
             <DwellChip
               id="copy-code"

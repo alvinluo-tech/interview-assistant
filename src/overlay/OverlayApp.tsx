@@ -20,6 +20,7 @@ import { InterviewOverlay } from './InterviewOverlay';
 import { OverlayPlatformProvider } from './platform';
 import { persistPosition } from './widgets';
 import { listenForInterviewStop } from '@/lib/interviewLifecycle';
+import { ToastViewport } from '@/ui/primitives';
 
 type ActiveMode = 'exam' | 'interview' | 'preview' | 'interview-preview';
 
@@ -150,6 +151,7 @@ export function OverlayApp() {
       interactive={isPreview ? true : undefined}
     >
       {isInterview ? <InterviewOverlay preview={isPreview} /> : <ExamOverlay preview={isPreview} />}
+      <ToastViewport />
     </OverlayPlatformProvider>
   );
 }

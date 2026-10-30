@@ -14,6 +14,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 import { X } from 'lucide-react';
+import { bus } from '../lib/events';
 
 // ---------------- Button ----------------
 
@@ -240,7 +241,9 @@ export function ToastViewport() {
   const [items, setItems] = useState<ToastItem[]>(toasts);
   useEffect(() => {
     toastListeners.add(setItems);
+    const off=bus.on<Parameters<typeof showToast>[0]>('toast',showToast);
     return () => {
+      off();
       toastListeners.delete(setItems);
     };
   }, []);

@@ -292,6 +292,11 @@ export async function closeStaleActiveSessions() {
       exams.map((s) => (s.status === 'ACTIVE' ? { ...s, status: 'COMPLETED', endedAt: Date.now() } : s)),
     );
   }
+  const {getSetting,setSetting}=await import('./store');
+  const recoveryId=getSetting<string|null>('interview.sessionId',null);
+  if(recoveryId && !readData<InterviewSession[]>('interviewSessions',[]).some(session=>session.id===recoveryId && session.type==='INTERVIEW' && session.status==='ACTIVE')) {
+    await setSetting('interview.sessionId',null);
+  }
 }
 
 export async function createExamSession(
