@@ -27,6 +27,9 @@ import {
 import { updateSession, useData, type ChatMessage, type InterviewSession } from '@/lib/backend';
 import { AvatarMark } from './AvatarMark';
 import { questionSpeaker } from '@/lib/questionSpeech';
+import {normalizeSpeechProfile,speechRenderSpec,recognitionLanguage,type SpeechProfile} from '@/lib/speechProfile';
+import {SpeechProfilePanel} from '@/main/sections/SpeechProfilePanel';
+import {translateSpeechText} from '@/lib/speechTranslation';
 import {currentMockKnowledge} from '@/lib/sessionKnowledge';
 import {retryDelay} from '@/lib/aiTaskPolicy';
 import type { SpeechPhase } from '@/lib/questionSpeaker';
@@ -35,13 +38,13 @@ import './room.css';
 const SILENCE_HINT_AFTER_MS = 4000;
 interface VoiceRecording { capture:MicrophoneCapture|null; realtime?:RealtimeCapture; controller:AbortController; chunks:Int16Array[]; length:number; voicedMs:number; finals:string[]; stopping:boolean }
 
-function newMessage(role: ChatMessage['role'], text: string, turnKind?: 'NEW' | 'CONT'): ChatMessage {
+function newMessage(role: ChatMessage['role'], text: string, turnKind?: 'NEW' | 'CONT',speechProfile?:SpeechProfile): ChatMessage {
   return {
     id: `m_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     role,
     text,
     createdAt: Date.now(),
-    metadata:{...(turnKind?{turnKind}:{}),origin:role==='INTERVIEWER'?'model_generated':'candidate_response'},
+    metadata:{...(turnKind?{turnKind}:{}),origin:role==='INTERVIEWER'?'model_generated':'candidate_response',speechProfile},
   };
 }
 
@@ -56,6 +59,14 @@ function MockRoom() {
   const [sessions] = useData<InterviewSession[]>('interviewSessions', []);
   const session = sessions.find((s) => s.id === sessionId) ?? null;
   const config: MockConfig | null = session ? (mockMeta(session)?.config ?? null) : null;
+  const profile=normalizeSpeechProfile(config?.speechProfile);
+  const profileRef=useRef(profile);profileRef.current=profile;
+  const [languageOpen,setLanguageOpen]=useState(false);
+  const changeProfile=async(speechProfile:SpeechProfile)=>{
+    if(!session||!config)return;player.stop();
+    try{await updateSession(session.id,{metadata:{...session.metadata,config:{...config,speechProfile}}});}
+    catch(error){showToast({type:'error',title:'语言设置保存失败',description:String(error)});}
+  };
 
   const [draft, setDraft] = useState('');
   const [recording, setRecording] = useState(false);
@@ -82,7 +93,7 @@ function MockRoom() {
   const recorderRef = useRef<VoiceRecording|null>(null);
   const [voicePreview,setVoicePreview] = useState('');
   const [voiceStatus,setVoiceStatus] = useState('');
-  const player = useMemo(() => questionSpeaker(setSpeaking, reason => showToast({type:'error', title:'面试官语音暂时不可用', description:String((reason as Error).message || reason)}), setSpeechPhase), []);
+  const player = useMemo(() => questionSpeaker(setSpeaking, reason => showToast({type:'error', title:'面试官语音暂时不可用', description:String((reason as Error).message || reason)}), setSpeechPhase,text=>speechRenderSpec(profileRef.current,text)), []);
   const busyRef = useRef(false);
   const finishingRef = useRef(false);
   const requestGeneration = useRef(0);
@@ -101,6 +112,10 @@ function MockRoom() {
   const asked = askedQuestionCount(messages);
   const currentQuestion = [...messages].reverse().find((m) => m.role === 'INTERVIEWER') ?? null;
   const done = finished || session?.status === 'COMPLETED';
+  const [questionTranslation,setQuestionTranslation]=useState('');
+  useEffect(()=>{setQuestionTranslation('');if(!currentQuestion||profile.translationLanguage==='none'||done)return;const controller=new AbortController();
+    void translateSpeechText(currentQuestion.text,profile.translationLanguage,controller.signal).then(text=>{if(!controller.signal.aborted)setQuestionTranslation(text);}).catch(()=>{if(!controller.signal.aborted)setQuestionTranslation('辅助翻译暂不可用，可继续使用原文。');});return()=>controller.abort();
+  },[currentQuestion?.id,profile.translationLanguage,done]);
   useEffect(() => () => {
     player.dispose();
     requestGeneration.current++; questionRequest.current?.abort();
@@ -123,7 +138,7 @@ function MockRoom() {
           ? {question: await generateOpeningQuestion(currentMockKnowledge(config), controller.signal), turnKind:'NEW' as const}
           : await generateNextQuestion(currentMockKnowledge(config), msgs, controller.signal);
         if (controller.signal.aborted || generation !== requestGeneration.current) return;
-        await updateSession(session.id, {messages:[...msgs, newMessage('INTERVIEWER',reply.question,reply.turnKind)]});
+        await updateSession(session.id, {messages:[...msgs, newMessage('INTERVIEWER',reply.question,reply.turnKind,profileRef.current)]});
         retryAttempts.current=0;
       } catch (error) {
         if (controller.signal.aborted || generation !== requestGeneration.current) return;
@@ -215,7 +230,7 @@ function MockRoom() {
             if(rec.finals.length)setDraft(text=>[text,...rec.finals].filter(Boolean).join(' '));
             showToast({type:'error',title:'实时语音中断',description:error.message});
           },
-        },{signal:rec.controller.signal});
+        },{signal:rec.controller.signal,language:recognitionLanguage(profileRef.current)});
       }
       if(recorderRef.current!==rec) {await rec.realtime?.close();return;}
       rec.capture=await openMicrophone({deviceId:getSetting('interview.microphoneId',''),onPcm:(pcm,volume)=>{
@@ -258,7 +273,7 @@ function MockRoom() {
     }
     setTranscribing(true);
     try {
-      const text = rec.realtime ? await rec.realtime.finish() : await transcribeAudio(encodeWav(pcm),{signal:rec.controller.signal});
+      const text = rec.realtime ? await rec.realtime.finish() : await transcribeAudio(encodeWav(pcm),{signal:rec.controller.signal,lang:recognitionLanguage(profileRef.current)});
       if (text && recorderRef.current===rec) setDraft((d) => (d ? `${d} ${text}` : text));
       else showToast({ type: 'info', title: '没听到你说话，再说一次' });
     } catch (e) {
@@ -343,7 +358,7 @@ function MockRoom() {
     let answerSaved = false;
     try {
       const base = session.messages;
-      const answer = newMessage('ASSISTANT', text);
+      const answer = newMessage('ASSISTANT', text,undefined,profileRef.current);
       answer.metadata={...answer.metadata,questionId:currentQuestion?.id,hintUsed:assistEnabled&&!!(currentQuestion&&hints[currentQuestion.id])};
       await updateSession(session.id, { messages: [...base, answer] });
       answerSaved = true;
@@ -357,7 +372,7 @@ function MockRoom() {
       const next = await generateNextQuestion(currentMockKnowledge(config), withAnswer, controller.signal);
       if (controller.signal.aborted || generation !== requestGeneration.current) return;
       await updateSession(session.id, {
-        messages: [...withAnswer, newMessage('INTERVIEWER', next.question, next.turnKind)],
+        messages: [...withAnswer, newMessage('INTERVIEWER', next.question, next.turnKind,profileRef.current)],
       });
       retryAttempts.current=0;setQuestionError('');
     } catch (e) {
@@ -425,11 +440,13 @@ function MockRoom() {
         <div className="mock-room-identity"><span className="mock-live-dot" /><div><h1>模拟面试 <span>· {config.goalName || '综合面试'}</span></h1><p>{config.company || config.difficultyLabel} · 第 {Math.min(asked, config.turnBudget)} / {config.turnBudget} 题</p></div></div>
         <time className="mock-clock">{fmtElapsed(elapsed)}</time>
         <div className="mock-room-actions">
+          <button aria-expanded={languageOpen} onClick={()=>setLanguageOpen(!languageOpen)}>语言 / 声音</button>
           <button aria-label={transcriptOpen ? '收起对话记录' : '展开对话记录'} aria-pressed={transcriptOpen} title="对话记录" onClick={() => setTranscriptOpen(!transcriptOpen)}><MessagesSquare size={18} /></button>
           <button aria-label={ttsOn ? '关闭面试官语音' : '开启面试官语音'} aria-pressed={ttsOn} title={speechSettings.routes.tts ? `使用 ${speechSettings.routes.tts.modelId}` : '使用系统默认语音'} onClick={() => {player.stop();setTtsOn(!ttsOn);}}>{ttsOn ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
           <button className="mock-end" onClick={() => setConfirmEnd(true)}>结束面试</button>
         </div>
       </header>
+      {languageOpen&&<div className="mx-6 rounded-xl border border-neutral-700 bg-neutral-900 p-4"><SpeechProfilePanel mock value={profile} disabled={thinking||recording||transcribing} onChange={value=>void changeProfile(value)}/><p className="mt-2 text-xs text-neutral-400">新语言从下一问生效；当前问题可用新声音重播。云端不支持的音色会明确提示，可切回标准发音。</p></div>}
       <div className={`mock-room-workspace ${transcriptOpen ? '' : 'without-transcript'}`}>
         <section className="mock-stage" aria-label="面试现场">
           <div className="mock-participants">
@@ -443,6 +460,7 @@ function MockRoom() {
             </div>
           </div>
           <div className="mock-question" aria-live="polite"><span className="mock-question-label">{thinking ? '面试官正在思考' : '当前问题'}</span><p>{currentQuestion?.text || (thinking ? '面试官正在准备开场问题…' : '准备好后开始对话。')}</p>
+            {questionTranslation&&<p className="mt-2 text-sm text-neutral-400" aria-label="辅助译文">{questionTranslation}</p>}
             {currentQuestion && <button disabled={recording || transcribing || thinking} title={speechPhase !== 'idle' ? '停止本次朗读，自动播报开关保持不变' : '重新朗读当前问题；已生成的云端音频优先从本场缓存播放'} aria-label={speechPhase !== 'idle' ? '停止朗读' : '朗读当前问题'} onClick={() => {if (speechPhase !== 'idle') player.stop();else if (!ttsOn) setTtsOn(true);else void player.speak(currentQuestion.text);}}>{speechPhase === 'preparing' ? <Loader2 size={16} className="animate-spin" /> : speechPhase === 'speaking' ? <Square size={16} /> : <Volume2 size={16} />}</button>}
           </div>
           {questionError&&<div role="alert" className="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200"><p>{questionError}</p><Button size="sm" variant="outline" className="mt-2" disabled={thinking} onClick={()=>{retryBlocked.current=false;retryAttempts.current=0;if(retryTimer.current)window.clearTimeout(retryTimer.current);setQuestionError('');setRetryTick(t=>t+1);}}>重试出题</Button></div>}

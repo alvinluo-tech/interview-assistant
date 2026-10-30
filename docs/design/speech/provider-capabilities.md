@@ -29,6 +29,7 @@
 | --- | --- | --- | --- |
 | MiMo `mimo-v2.5-tts` | 有中英文预置音色，英文场景应选英文音色 | 官方风格例子列出粤语、四川话、东北话、河南话；通过 user 风格指令或合成文本的风格标签控制 | 未见独立重庆预设保证；可做明确标注的川渝风格实验，不把四川话直接改名成重庆话 |
 | Qwen3-TTS-Flash | 多语种，具体以所选音色为准 | 粤语可选 `Rocky / Kiki`，四川话可选 `Eric`；其他方言看完整音色表 | 当前这些预置项不能证明精确重庆话能力 |
+| Qwen Audio 3.1 TTS Flash（实施时补核） | 多语言系统音色，北京/新加坡 | `longanhuan_v3.1` 等官方多方言声音支持粤语、东北、重庆、上海、陕西等；通过 instruction 控制 | **有直接重庆话依据，不需要冒充四川话或强制复刻声音** |
 | CosyVoice-v3-Flash | 多种系统音色，模型与音色绑定 | 例如 `longanhuan_v3` 提供指令控制；`longlaotie_v3` 为东北话音色，`longanyue_v3` 为粤语音色 | 本次核实的上述系统音色不能冒充独立重庆话预设 |
 | 系统 TTS | 取决于本机已安装语音包 | 枚举到什么才展示什么 | 不能默认承诺具备所有中文方言 |
 
@@ -42,7 +43,7 @@
 4. CosyVoice-v3-flash 的指令随音色而异；多方言音色可用固定中文句式控制，不能给每个音色任意发送同一套自然语言标签。见 [官方错误码与指令要求](https://help.aliyun.com/zh/model-studio/error-code)。
 5. 地域必须参与筛选：本次音色表中 `longanhuan_v3`、`longlaotie_v3` 列出北京，`longanyue_v3` 列出北京和新加坡。已有新加坡 Key 不自动拥有北京能力。
 6. 本次 CosyVoice HTTP API 页面只列出北京端点，而 [WS 接入页](https://help.aliyun.com/zh/model-studio/cosyvoice-websocket-api/)列出北京和新加坡。新加坡需优先采用有文档依据的协议；不能只替换 HTTP 域名就宣称接通。账户可用性和目标 voice 仍需测试。
-7. 阿里另有新模型/复刻音色路径的更广方言清单；其模型、音色来源、地域与录入流程不同，不作为现有系统音色模式默认承诺。若后续要求精确重庆话，再单列相应官方通路与试听验收。
+7. 实施时进一步核实 [Qwen Audio 音色表](https://www.alibabacloud.com/help/en/model-studio/qwen-audio-tts-voice-list)、[HTTP API](https://help.aliyun.com/en/model-studio/qwen-audio-tts-http-api)和[3.1 模型说明](https://help.aliyun.com/en/model-studio/qwen-audio-3-1-tts-flash)：存在无需复刻的官方重庆话系统音色通路，已单列接入。不能把这些能力倒灌到 Qwen3-TTS、旧 Qwen Audio 3.0 或所有 CosyVoice voice。
 
 ## 3. 声纹服务与普通 ASR 的边界
 

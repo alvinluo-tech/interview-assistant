@@ -170,6 +170,7 @@ export const DEFAULT_EXAM_CUSTOMIZATION: ExamCustomization = {
 };
 
 export const ALL_KEYS = [
+  'interview.speechProfile','mock.speechProfile','interview.speakerMode',
   'ai.taskPreferences',
   'updates.repository',
   'updates.reminder',

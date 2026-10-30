@@ -25,8 +25,12 @@ import { ANSWER_STYLES, type AnswerStyle } from '@/lib/ai';
 import { MicrophoneCheck } from './MicrophoneCheck';
 import { requestInterviewStop } from '@/lib/interviewLifecycle';
 import { OutputExclusions } from './OutputExclusions';
+import {SpeechProfilePanel} from './SpeechProfilePanel';
+import {useSpeechProfile} from '@/lib/speechPreferences';
+import {PhoneSpeakerSetup} from './PhoneSpeakerSetup';
 
 export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => void }) {
+  const [speechProfile,saveSpeechProfile]=useSpeechProfile('interview');
   const goals = useData<Goal[]>('goals', [])[0];
   const resumes = useData<Resume[]>('resumes', [])[0];
   const materials = useData<Material[]>('materials', [])[0];
@@ -103,6 +107,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
 
   return (
     <div className="flex flex-col gap-4">
+      <Card className="p-5"><SectionHeader title="面试语言" desc="识别语言、参考答案和辅助翻译分别设置；中文自动识别包含服务所支持的方言。"/><SpeechProfilePanel value={speechProfile} disabled={activeSession} onChange={value=>void saveSpeechProfile(value).catch(error=>showToast({type:'error',title:'语言设置保存失败',description:String(error)}))}/>{audioSource==='PHONE'&&<PhoneSpeakerSetup disabled={activeSession}/>}</Card>
       {activeSession && (
         <Card className="flex items-center justify-between border-primary/30 bg-primary/5 p-4">
           <div className="flex items-center gap-3">
@@ -153,7 +158,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
         </div>
 
         {audioSource === 'SPEAKER' && <OutputExclusions active={activeSession} />}
-        {audioSource === 'PHONE' && <><MicrophoneCheck enabled={!starting && !activeSession} /><p className="mb-4 text-xs leading-relaxed text-muted-foreground">请确保麦克风能听到电话另一端的声音。当前未进行说话人识别，自动作答会处理采集到的有效发言；需要时可关闭自动回答、手动选择问题。与 AI 对练请使用独立的「模拟面试」入口。</p></>}
+        {audioSource === 'PHONE' && <><MicrophoneCheck enabled={!starting && !activeSession} /><p className="mb-4 text-xs leading-relaxed text-muted-foreground">请确保麦克风能听到电话另一端的声音。在上方完成自己的试音后可启用本地声音识别；未确认身份的转写可在浮窗标记为“这是我”或“面试官 · 作答”。与 AI 对练请使用独立的「模拟面试」入口。</p></>}
         {sttProvider && <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs" data-testid="speech-mode-summary">
           <div className="font-medium">{sttProvider.name} / {sttRoute?.modelId} · {aiSettings.speechInputMode === 'realtime' ? '持续实时语音流' : liveSpeech ? '分段实时字幕' : '停顿后识别'}</div>
           <div className="mt-1 text-muted-foreground">{aiSettings.speechInputMode === 'realtime' ? '持续发送音频，实时显示部分字幕，句子定稿后流式回答。断线后会重连并提示中断。' : liveSpeech ? '约每 2.5 秒更新字幕；停顿后校正整句并流式回答。预览会增加转写用量。' : '等待说话停顿后转写，AI 回答逐步显示。'}</div>

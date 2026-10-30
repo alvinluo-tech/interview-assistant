@@ -161,7 +161,9 @@ export interface ChatMessage {
   metadata?: { turnKind?: 'NEW' | 'CONT' | 'SKIP'; webSearch?: { queries: string[]; sources: string[] };
     origin?:'audio_transcript'|'typed'|'model_generated'|'candidate_response'|'legacy_unknown';
     questionId?:string;revision?:number;contextCutoffId?:string;superseded?:boolean;completionStatus?:string;hintUsed?:boolean;
-    sources?:import('./knowledgeContext').ContextSource[];request?:import('./aiTaskPolicy').AiRequestTrace };
+    sources?:import('./knowledgeContext').ContextSource[];request?:import('./aiTaskPolicy').AiRequestTrace;
+    translation?:{language:import('./speechProfile').SpeechLanguage;text:string;status:'pending'|'ready'|'failed';error?:string};
+    speaker?:import('./speakerRouting').SpeakerDecision;observationId?:string;speechProfile?:import('./speechProfile').SpeechProfile };
   pending?: boolean;
 }
 

@@ -1,4 +1,4 @@
-import {recordCandidateResponse} from '@/lib/interviewEngine';
+import {recordCandidateResponse,markTranscriptSpeaker} from '@/lib/interviewEngine';
 import {GenerationDetails} from './GenerationDetails';
 import {selectSolverTurn} from '@/lib/examEngine';
 /*
@@ -58,6 +58,7 @@ import {
   registerOverlayList,
 } from './widgets';
 import { useDwell, usePlatform } from './platform';
+import {getSpeechProfile,useSpeechProfile} from '@/lib/speechPreferences';
 
 let bootstrapping: Promise<void> | null = null;
 
@@ -135,6 +136,8 @@ function InterviewShell({
   skin: ReturnType<typeof computeSkin>;
   preview?: boolean;
 }) {
+  const [speechProfile,saveSpeechProfile]=useSpeechProfile('interview');
+  const switchLanguage=()=>{const next=speechProfile.answerLanguage==='en-US'?'zh-CN':'en-US';void saveSpeechProfile({...speechProfile,answerLanguage:next}).catch(error=>showToast({type:'error',title:'语言切换未保存',description:String(error)}));};
   const engine = useEngineState();
   const solver = useSolverState();
   const [tab, setTab] = useState<'chat' | 'solver'>('chat');
@@ -235,6 +238,7 @@ function InterviewShell({
         {tab === 'chat' ? (
           <>
             <div className="flex gap-1.5">
+              <DwellButton id="chat-language" variant="muted" hoverMs={HOVER_MS.action} onTrigger={switchLanguage}>答案 · {speechProfile.answerLanguage==='en-US'?'English':speechProfile.answerLanguage==='follow'?'跟随':speechProfile.answerLanguage==='yue-HK'?'粤语':'中文'}</DwellButton>
               <DwellButton
                 id="chat-toggle"
                 variant={started && engine.status !== 'paused' ? 'muted' : 'primary'}
@@ -319,6 +323,7 @@ function AudioInputFeedback({ engine }: { engine: EngineState }) {
 }
 
 function lastInterviewer(messages: EngineState['messages']): string | null {
+  messages=messages.filter(m=>!m.metadata?.speaker||m.metadata.speaker.role==='interviewer');
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'INTERVIEWER') return messages[i].text;
   }
@@ -428,7 +433,9 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         className="ov-line-strong ov-text-2 ov-body-sm flex items-start gap-1 whitespace-pre-wrap border-l-2 pl-1.5"
                       >
                         <div className="min-w-0 flex-1">{m.text}
-                          {m.metadata?.superseded ? <span className="ov-text-3 ml-2 text-[10px]">已更正</span> : <DwellButton id={`correct-${m.id}`} compact hoverMs={1200} onTrigger={()=>{if(!interactive)toggleInteractive();setEditingQuestion({id:m.id,text:m.text});}}>更正并重答</DwellButton>}
+                          {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
+                          {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
+                          {m.metadata?.superseded ? <span className="ov-text-3 ml-2 text-[10px]">已更正</span> : (!m.metadata?.speaker||m.metadata.speaker.role==='interviewer')&&<DwellButton id={`correct-${m.id}`} compact hoverMs={1200} onTrigger={()=>{if(!interactive)toggleInteractive();setEditingQuestion({id:m.id,text:m.text});}}>更正并重答</DwellButton>}
                         </div>
                       </div>
                     ) : (
@@ -436,6 +443,8 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         {m.metadata?.superseded && <div className="ov-text-3 mb-1 text-[10px]">更正前的参考答案</div>}
                         {m.metadata?.origin==='candidate_response' && <div className="ov-text-3 text-[10px]">我的实际回答</div>}
                         <Md text={m.text} />
+                        {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
+                        {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
                         {!m.pending && <GenerationDetails status={m.metadata?.completionStatus} request={m.metadata?.request}/>}
                         {!!m.metadata?.sources?.length && <details className="ov-text-3 mt-1 text-[10px]"><summary className="cursor-pointer">本轮参考资料</summary>{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</details>}
                         {m.pending && (
@@ -722,7 +731,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
     setTranscribing(true);
     const controller = new AbortController(); request.current = controller;
     try {
-      const text = await transcribeAudio(encodeWav(pcm), { signal: controller.signal });
+      const text = await transcribeAudio(encodeWav(pcm), { signal: controller.signal,...(kind==='chat'?{lang:getSpeechProfile('interview').inputLanguage}:{}) });
       if (!alive.current || controller.signal.aborted) return;
       if (!text) { setError('没有识别到文字，请检查音量条后重试。'); return; }
       if (kind === 'chat') await answerQuestion(text, { voiceAsk: true });
@@ -796,6 +805,12 @@ async function applyIvPalette() {
   } catch {
     doc.classList.remove('ov-palette-capturing');
   }
+}
+
+function SpeakerIdentity({message}:{message:EngineState['messages'][number]}){
+ const decision=message.metadata?.speaker;
+ const update=(role:'candidate'|'interviewer')=>void markTranscriptSpeaker(message.id,role).catch(error=>showToast({type:'error',title:'身份更正未完成',description:String((error as Error).message||error)}));
+ return <div className="ov-text-3 mt-1 flex flex-wrap items-center gap-2 text-[10px]"><span>{decision?.role==='candidate'?'我':decision?.role==='interviewer'?'面试官':'身份待确认 · 不自动作答'}</span>{decision?.role!=='candidate'&&<DwellButton id={`speaker-me-${message.id}`} compact hoverMs={1000} onTrigger={()=>update('candidate')}>这是我</DwellButton>}{decision?.role!=='interviewer'&&<DwellButton id={`speaker-peer-${message.id}`} compact hoverMs={1000} onTrigger={()=>update('interviewer')}>面试官 · 作答</DwellButton>}</div>;
 }
 
 function EndButton({ onEnd }: { onEnd: () => void }) {

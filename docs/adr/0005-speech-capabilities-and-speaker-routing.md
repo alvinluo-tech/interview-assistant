@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-30
 design: SPEECH-DESIGN-001
 ---
@@ -18,4 +18,4 @@ design: SPEECH-DESIGN-001
 
 代价：需要维护能力证据、模型资源和设备评测；本地角色识别增加 CPU/内存与一定等待时间。它不能保证零串音，发布承诺以混合音频实测为准。
 
-状态为 proposed：本轮只有研究与方案，没有新增语音功能上线。详见 [设计索引](../design/speech/README.md) 与 [实施路线](../design/speech/implementation-plan.md)。
+2026-10-31 接受并按此分层实现。Windows 原生与公开样本已验证，真实外放质量、付费试听和 macOS 真机仍需独立验收。详见[实现记录](../design/speech/implementation-2026-10-31.md)、[设计索引](../design/speech/README.md)与[原始实施路线](../design/speech/implementation-plan.md)。

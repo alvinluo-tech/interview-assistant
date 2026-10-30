@@ -7,6 +7,7 @@ import {applyTaskInstructions,type TaskPreferences} from './taskPrompts';
 import {getSetting} from './store';
 import { recognizeSpeech, type TranscriptionOptions } from './speechProtocol';
 import { requestSpeech, type SpeechConsumer } from './ttsProtocol';
+import type {SpeechRenderSpec} from './speechProfile';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -72,11 +73,11 @@ export async function transcribeAudio(wav: Blob, opts: TranscriptionOptions = {}
   const { settings, provider, modelId } = route('stt');
   return recognizeSpeech(provider, modelId, wav, opts, aiFetch, settings.timeoutMs);
 }
-export async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<ArrayBuffer | null> {
+export async function synthesizeSpeech(text: string, signal?: AbortSignal,render?:SpeechRenderSpec): Promise<ArrayBuffer | null> {
   // TTS is explicitly optional; configured-but-failed requests still surface errors.
   if (!getAiSettings().routes.tts) return null;
   const chunks: Uint8Array[] = []; let pcm = true, size = 0;
-  await streamSpeech(text,signal,chunk => {pcm = pcm && chunk.format === 'pcm16';chunks.push(chunk.bytes);size += chunk.bytes.length;});
+  await streamSpeech(text,signal,chunk => {pcm = pcm && chunk.format === 'pcm16';chunks.push(chunk.bytes);size += chunk.bytes.length;},render);
   if (!size) return null;
   if (pcm && size % 2) throw new Error('语音音频数据不完整，请重新朗读。');
   if (!pcm && chunks.length > 1) throw new Error('长问题包含多个音频文件，请使用面试官的流式播放入口。');
@@ -92,9 +93,10 @@ export async function synthesizeSpeech(text: string, signal?: AbortSignal): Prom
   return output.buffer;
 }
 
-export async function streamSpeech(text: string, signal: AbortSignal | undefined, consume: SpeechConsumer): Promise<void> {
+export async function streamSpeech(text: string, signal: AbortSignal | undefined, consume: SpeechConsumer,render?:SpeechRenderSpec): Promise<void> {
   const {settings,provider,modelId} = route('tts');
-  await requestSpeech(provider,modelId,text,settings.ttsVoice,aiFetch,settings.timeoutMs,signal,consume);
+  const connect=/^cosyvoice/.test(modelId)&&/^(?:dashscope-intl\.aliyuncs\.com|[a-z0-9-]+\.ap-southeast-1\.maas\.aliyuncs\.com)$/.test(new URL(provider.baseUrl).hostname)?(await import('./realtimeTransport')).connectRealtimeSocket:undefined;
+  await requestSpeech(provider,modelId,text,settings.ttsVoice,aiFetch,settings.timeoutMs,signal,consume,render,connect);
 }
 
 export { createQuestionSpeaker } from './questionSpeaker';

@@ -108,6 +108,9 @@ jobs:
       - name: AI context and task policy coverage
         run: pnpm test:ai
 
+      - name: Language, voice and speaker routing coverage
+        run: pnpm test:speech
+
       - name: Test session and overlay regression contracts
         run: pnpm test:bug-review
 

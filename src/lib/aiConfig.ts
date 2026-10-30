@@ -54,7 +54,7 @@ export function defaultAiSettings(): AiSettings {
 export function createProvider(presetId = 'compatible'): AiProvider {
   const preset = PROVIDER_PRESETS.find(p => p.id === presetId) ?? PROVIDER_PRESETS[0];
   return { id: crypto.randomUUID(), name: preset.name, baseUrl: preset.baseUrl, apiKey: '', authMode: preset.authMode,
-    models: presetId === 'mimo' ? [{id:'mimo-v2.5-tts',name:'MiMo 面试官语音',source:'custom'}] : presetId === 'dashscope' ? [
+    models: presetId === 'mimo' ? [{id:'mimo-v2.5-tts',name:'MiMo 面试官语音',source:'custom'},{id:'mimo-v2.5-asr',name:'MiMo 多语言转写',source:'custom'}] : presetId === 'dashscope' ? [
       { id: 'fun-asr-realtime', name: 'Fun-ASR 实时识别', source: 'custom' },
       { id: 'fun-asr-realtime-2026-02-28', name: 'Fun-ASR 实时识别（2026-02-28）', source: 'custom' },
       { id: 'paraformer-realtime-v2', name: 'Paraformer 实时识别 v2', source: 'custom' },

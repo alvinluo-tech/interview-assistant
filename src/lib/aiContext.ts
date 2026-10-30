@@ -8,6 +8,7 @@ interface HistoryMessage {
         superseded?: boolean;
         completionStatus?: string;
         origin?: string;
+        speaker?:{role:string};
     };
 }
 export function assembleInterviewHistory(messages: HistoryMessage[], question: string, options: {
@@ -15,7 +16,7 @@ export function assembleInterviewHistory(messages: HistoryMessage[], question: s
     maxChars?: number;
 } = {}) {
     const cutoff = options.throughMessageId ? messages.findIndex(message => message.id === options.throughMessageId) : -1;
-    const past = (cutoff >= 0 ? messages.slice(0, cutoff) : messages).filter(message => !message.pending && !message.metadata?.superseded && message.text.trim());
+    const past = (cutoff >= 0 ? messages.slice(0, cutoff) : messages).filter(message => !message.pending && !message.metadata?.superseded && message.text.trim() && (!message.metadata?.speaker||['candidate','interviewer'].includes(message.metadata.speaker.role)));
     const selected: {
         role: 'user' | 'assistant';
         content: string;

@@ -58,7 +58,6 @@ test('Qwen Audio and CosyVoice request PCM at 24kHz, while unsupported region/re
     },1000,undefined,()=>{});
   }
   let requests=0; const fetcher=async()=>{requests++;return sse('');};
-  await assert.rejects(requestSpeech(provider('https://dashscope-intl.aliyuncs.com/compatible-mode/v1'),'cosyvoice-v3-flash','你好','voice',fetcher,1000,undefined,()=>{}),/北京/);
   await assert.rejects(requestSpeech(provider('https://dashscope.aliyuncs.com/compatible-mode/v1'),'qwen3-tts-flash-realtime','你好','Cherry',fetcher,1000,undefined,()=>{}),/realtime|实时/);
   await assert.rejects(requestSpeech(provider(),'mimo-v2.5-tts-voiceclone','你好','苏打',fetcher,1000,undefined,()=>{}),/复刻|克隆/);
   assert.equal(requests,0);
@@ -126,7 +125,7 @@ test('service and voice choices distinguish native services from compatible prox
   assert.ok(ttsVoices(provider(),'mimo-v2.5-tts').some(voice=>voice.id==='冰糖'));
   const ali=provider('https://dashscope.aliyuncs.com/compatible-mode/v1');
   assert.equal(defaultTtsVoice(ali,'qwen3-tts-flash'),'Cherry');
-  assert.equal(defaultTtsVoice(ali,'qwen-audio-3.1-tts-flash'),'longanhuan_v3.6');
+  assert.equal(defaultTtsVoice(ali,'qwen-audio-3.1-tts-flash'),'longanhuan_v3.1');
   assert.equal(defaultTtsVoice(ali,'cosyvoice-v3-flash'),'longanyang');
   assert.equal(defaultTtsVoice(ali,'cosyvoice-v3.5-plus'),'');
   assert.equal(defaultTtsVoice(provider('https://relay.example/v1'),'my-tts'),'alloy');

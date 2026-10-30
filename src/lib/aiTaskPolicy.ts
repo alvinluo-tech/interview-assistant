@@ -1,6 +1,7 @@
-export type AiTask = 'interview-answer' | 'exam-solve' | 'exam-followup' | 'mock-question' | 'mock-hint' | 'mock-report' | 'question-bank' | 'document-extract';
+export type AiTask = 'interview-answer' | 'exam-solve' | 'exam-followup' | 'mock-question' | 'mock-hint' | 'mock-report' | 'question-bank' | 'document-extract' | 'translation';
 export const PROMPT_VERSION = '2026-10-30.1';
 export const TASK_OUTPUT_LIMIT: Record<AiTask, number> = {
+    translation: 4096,
     'interview-answer': 1800, 'exam-solve': 8192, 'exam-followup': 8192, 'mock-question': 768,
     'mock-hint': 1024, 'mock-report': 6144, 'question-bank': 8192, 'document-extract': 12000,
 };

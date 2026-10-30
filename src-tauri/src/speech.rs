@@ -57,7 +57,25 @@ pub fn cmd_system_speech(
     window: WebviewWindow,
     id: String,
     text: String,
+    language: Option<String>,
+    rate: Option<f32>,
+    accent: Option<String>,
 ) -> Result<(), String> {
+    let rate = rate.unwrap_or(1.0);
+    if !rate.is_finite()
+        || !(0.7..=1.4).contains(&rate)
+        || language
+            .as_deref()
+            .is_some_and(|v| !["zh-CN", "en-US", "yue-HK"].contains(&v))
+    {
+        return Err("系统语音语言或语速无效。".into());
+    }
+    if accent
+        .as_deref()
+        .is_some_and(|v| !["standard", "cantonese"].contains(&v))
+    {
+        return Err("本机系统语音没有已确认的这个方言音色，请配置云端语音。".into());
+    }
     if !["main", "mock"].contains(&window.label())
         || id.len() > 128
         || text.is_empty()
@@ -91,9 +109,9 @@ pub fn cmd_system_speech(
             serde_json::json!({"id":id,"speaking":true}),
         );
         #[cfg(not(target_os = "macos"))]
-        let result = speak(text, &stop);
+        let result = speak(text, &stop, language.as_deref(), rate);
         #[cfg(target_os = "macos")]
-        let result = speak(text, &stop, &child);
+        let result = speak(text, &stop, &child, language.as_deref(), rate);
         let _ = app.emit_to(
             &label,
             "system-speech-state",
@@ -104,12 +122,12 @@ pub fn cmd_system_speech(
 }
 
 #[cfg(windows)]
-fn speak(text: String, stop: &AtomicBool) -> Result<(), String> {
+fn speak(text: String, stop: &AtomicBool, language: Option<&str>, rate: f32) -> Result<(), String> {
     use windows::{
         Win32::{
             Media::Speech::{
-                ISpVoice, SPRS_DONE, SPVOICESTATUS, SVSFIsNotXML, SVSFPurgeBeforeSpeak,
-                SVSFlagsAsync, SpVoice,
+                ISpObjectTokenCategory, ISpVoice, SPCAT_VOICES, SPRS_DONE, SPVOICESTATUS,
+                SVSFIsNotXML, SVSFPurgeBeforeSpeak, SVSFlagsAsync, SpObjectTokenCategory, SpVoice,
             },
             System::Com::{
                 CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
@@ -124,6 +142,29 @@ fn speak(text: String, stop: &AtomicBool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         let result = (|| -> windows::core::Result<()> {
             let voice: ISpVoice = CoCreateInstance(&SpVoice, None, CLSCTX_ALL)?;
+            if let Some(language) = language {
+                let category: ISpObjectTokenCategory =
+                    CoCreateInstance(&SpObjectTokenCategory, None, CLSCTX_ALL)?;
+                category.SetId(SPCAT_VOICES, false)?;
+                let filter = match language {
+                    "en-US" => "Language=409",
+                    "yue-HK" => "Language=C04",
+                    _ => "Language=804",
+                };
+                let required: Vec<u16> = filter.encode_utf16().chain(Some(0)).collect();
+                let tokens = category.EnumTokens(PCWSTR(required.as_ptr()), PCWSTR::null())?;
+                let mut token = None;
+                let mut fetched = 0;
+                tokens.Next(1, &mut token, Some(&mut fetched))?;
+                let token = token.ok_or_else(|| {
+                    windows::core::Error::new(
+                        windows::Win32::Foundation::E_FAIL,
+                        "本机未安装匹配的语音包，请安装系统语音或配置云语音。",
+                    )
+                })?;
+                voice.SetVoice(&token)?;
+            }
+            voice.SetRate(((rate - 1.0) * 10.0).round() as i32)?;
             let words: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
             if stop.load(Ordering::SeqCst) {
                 return Ok(());
@@ -160,6 +201,8 @@ fn speak(
     text: String,
     stop: &AtomicBool,
     shared: &Mutex<Option<std::process::Child>>,
+    language: Option<&str>,
+    rate: f32,
 ) -> Result<(), String> {
     use std::{
         io::Write,
@@ -168,7 +211,35 @@ fn speak(
     if stop.load(Ordering::SeqCst) {
         return Ok(());
     }
-    let child = Command::new("/usr/bin/say")
+    let mut command = Command::new("/usr/bin/say");
+    if let Some(language) = language {
+        let wanted = match language {
+            "en-US" => "en_",
+            "yue-HK" => "zh_HK",
+            _ => "zh_CN",
+        };
+        let listing = Command::new("/usr/bin/say")
+            .args(["-v", "?"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        let listing = String::from_utf8_lossy(&listing.stdout);
+        let voice = listing
+            .lines()
+            .find_map(|line| {
+                let prefix = line.split('#').next()?;
+                let mut parts = prefix.split_whitespace().collect::<Vec<_>>();
+                let locale = parts.pop()?;
+                if locale.starts_with(wanted) {
+                    Some(parts.join(" "))
+                } else {
+                    None
+                }
+            })
+            .ok_or("本机未安装匹配的语音包，请在系统设置中添加声音或配置云语音。")?;
+        command.args(["-v", &voice]);
+    }
+    command.args(["-r", &((175.0 * rate).round() as u32).to_string()]);
+    let child = command
         .stdin(Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())?;
@@ -221,6 +292,6 @@ fn speak(
     }
 }
 #[cfg(not(any(windows, target_os = "macos")))]
-fn speak(_: String, _: &AtomicBool) -> Result<(), String> {
+fn speak(_: String, _: &AtomicBool, _: Option<&str>, _: f32) -> Result<(), String> {
     Err("当前平台暂未接入系统语音。".into())
 }

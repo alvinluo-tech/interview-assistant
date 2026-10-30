@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {evaluateFixture} from './compile-fixture.mjs';
 
 function moduleFrom(file, mocks = {}) {
-  const sandbox = { exports: {}, require: name => { if (!(name in mocks)) throw new Error(`Unexpected import: ${name}`); return mocks[name]; }, Blob, TextDecoder, TextEncoder, Uint8Array, AbortController, DOMException, console };
+  const sandbox = { exports: {}, require: name => { if(name==='./speechProfile')return moduleFrom('src/lib/speechProfile.ts');if (!(name in mocks)) throw new Error(`Unexpected import: ${name}`); return mocks[name]; }, Blob, TextDecoder, TextEncoder, Uint8Array, AbortController, DOMException, console };
   return evaluateFixture(file,sandbox);
 }
 

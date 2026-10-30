@@ -14,7 +14,7 @@ export interface RealtimeSocket {
   disconnect(): Promise<void>;
 }
 export interface RealtimeConfig { endpoint?: string; apiKey: string; modelId: string; vocabularyId?: string; silenceMs?: number; language?: string; signal?: AbortSignal }
-export interface RealtimeResult { text: string; isFinal: boolean; id: string }
+export interface RealtimeResult { text: string; isFinal: boolean; id: string;beginMs?:number;endMs?:number }
 export interface RealtimeCallbacks { onResult(result: RealtimeResult): void; onError(error: Error): void; onState?(state: 'connecting' | 'ready' | 'reconnecting' | 'closed'): void }
 export type RealtimeConnect = (url: string, options: { headers: Record<string, string>; maxMessageSize: number; maxFrameSize: number }) => Promise<RealtimeSocket>;
 
@@ -115,7 +115,7 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
           if (seen.size > 2048) seen.delete(seen.values().next().value!);
           if (finalTexts.length > 2048) finalTexts.shift();
         }
-        callbacks.onResult({ id, text: sentence.text.trim(), isFinal });
+        callbacks.onResult({ id, text: sentence.text.trim(), isFinal,...(Number.isFinite(sentence.begin_time)&&Number.isFinite(sentence.end_time)?{beginMs:sentence.begin_time,endMs:sentence.end_time}:{}) });
       }
     } catch (error) { void fail(new Error(`实时识别响应异常：${safeError(error).message}`)); }
   }

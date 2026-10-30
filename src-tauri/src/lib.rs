@@ -22,6 +22,7 @@ mod protection;
 mod screen_permissions;
 mod settings;
 mod speech;
+mod speaker;
 mod updater;
 #[cfg(target_os = "macos")]
 mod window_macos;
@@ -114,6 +115,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::UpdateState::default())
         .manage(speech::SpeechState::default())
+        .manage(speaker::SpeakerState::default())
         .manage(ai_settings::AiSettingsLock::default())
         .manage(data_store::DataState::default())
         .manage(OverlayState::default())
@@ -133,6 +135,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             speech::cmd_system_speech,
             speech::cmd_system_speech_stop,
+            speaker::cmd_speaker_status,
+            speaker::cmd_speaker_prepare,
+            speaker::cmd_speaker_enroll,
+            speaker::cmd_speaker_begin,
+            speaker::cmd_speaker_identify,
+            speaker::cmd_speaker_bind,
+            speaker::cmd_speaker_end,
+            speaker::cmd_speaker_clear,
             attachments::cmd_exam_store_images,
             attachments::cmd_exam_read_image,
             attachments::cmd_storage_layout,

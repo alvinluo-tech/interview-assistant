@@ -10,7 +10,7 @@ const KEY: &str = "ai.settings.v2";
 pub struct AiSettingsLock(Mutex<()>);
 
 #[cfg(windows)]
-fn crypt(input: &[u8], protect: bool) -> Result<Vec<u8>, String> {
+pub(crate) fn crypt(input: &[u8], protect: bool) -> Result<Vec<u8>, String> {
     use windows::{
         Win32::{
             Foundation::{HLOCAL, LocalFree},
@@ -57,11 +57,11 @@ fn crypt(input: &[u8], protect: bool) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 #[cfg(target_os = "macos")]
-fn crypt(input: &[u8], protect: bool) -> Result<Vec<u8>, String> {
+pub(crate) fn crypt(input: &[u8], protect: bool) -> Result<Vec<u8>, String> {
     crate::macos_secrets::crypt(input, protect)
 }
 #[cfg(not(any(windows, target_os = "macos")))]
-fn crypt(_: &[u8], _: bool) -> Result<Vec<u8>, String> {
+pub(crate) fn crypt(_: &[u8], _: bool) -> Result<Vec<u8>, String> {
     Err("此构建的密钥加密存储仅支持 Windows/macOS；免密本地连接不受影响".into())
 }
 fn transform_keys(config: &mut Value, encrypt: bool) -> Result<(), String> {

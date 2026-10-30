@@ -32,6 +32,8 @@ import { captureKnowledge } from '@/lib/knowledgeContext';
 import { cmd } from '@/lib/bridge';
 import { activeMockSession, mockMeta } from '@/lib/mock';
 import { MockReportDialog } from './MockReportDialog';
+import {SpeechProfilePanel} from './SpeechProfilePanel';
+import {useSpeechProfile} from '@/lib/speechPreferences';
 
 const DIFFICULTY = [
   { key: 'FRESH_GRADUATE', label: '应届生' },
@@ -48,6 +50,7 @@ async function openMockWindow(sessionId: string) {
 }
 
 export function MockPage() {
+  const [speechProfile,saveSpeechProfile]=useSpeechProfile('mock');
   const [sessions] = useData<InterviewSession[]>('interviewSessions', []);
   const resumes = useData<Resume[]>('resumes', [])[0];
   const materials = useData<Material[]>('materials', [])[0];
@@ -91,6 +94,7 @@ export function MockPage() {
         metadata: {
           mock: true,
           config: {
+            speechProfile,
             goalName: goal?.name,
             company: goal?.companyName,
             resumeSummary: resume?.summary,
@@ -124,6 +128,7 @@ export function MockPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <Card className="p-5"><SectionHeader title="语言与面试官声音" desc="选择训练语言和口音。实际可用的声音取决于配置的模型与地域；没有云语音配置时使用已安装的系统语音。"/><SpeechProfilePanel mock value={speechProfile} disabled={starting} onChange={value=>void saveSpeechProfile(value).catch(error=>showToast({type:'error',title:'语言设置保存失败',description:String(error)}))}/></Card>
       {pending && (
         <Card className="border-primary/40 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

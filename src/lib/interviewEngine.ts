@@ -36,6 +36,32 @@ import { joinTranscript } from './speechProtocol';
 import { buildKnowledgeContext,captureKnowledge,authorizedKnowledge,type KnowledgeSnapshot,type ContextSource } from './knowledgeContext';
 import {assembleInterviewHistory,assembleExamContext} from './aiContext';
 import type { RealtimeCapture } from './realtimeAsr';
+import {cmd} from './bridge';
+import {getSpeechProfile} from './speechPreferences';
+import {languagePrompt,recognitionLanguage} from './speechProfile';
+import {AudioTimeline,type SpeakerDecision} from './speakerRouting';
+import {identifySpeaker} from './speakerClient';
+import {translateSpeechText} from './speechTranslation';
+
+const audioTimeline=new AudioTimeline();let realtimeOriginMs=0,speakerOwner='';
+const translations=new Set<AbortController>();
+const roleChanges=new Map<string,number>();
+const knownInterviewer=(message:ChatMessage)=>message.role==='INTERVIEWER'&&!message.metadata?.superseded&&(!message.metadata?.speaker||message.metadata.speaker.role==='interviewer');
+const localSpeaker=()=>state.audio.source!=='SPEAKER'&&getSetting<string>('interview.speakerMode','manual')==='local';
+async function deliverPhoneSpeech(text:string,pcm:Int16Array|null,generation:number){
+ const id=crypto.randomUUID(),owner=speakerOwner;
+ let decision:SpeakerDecision={role:'unknown',score:0,revision:1,source:'local-match'};
+ if(localSpeaker()&&owner){try{decision=await identifySpeaker(owner,id,pcm);}catch(error){if(generation===captureGeneration)setState({errorMessage:`身份暂未确认：${String((error as Error).message||error)}`});}}
+ if(generation!==captureGeneration||state.status==='ended')return;
+ await deliverUtterance(text,decision,id);
+}
+async function translateMessage(id:string){
+ const language=getSpeechProfile('interview').translationLanguage;if(language==='none')return;
+ const source=state.messages.find(m=>m.id===id);if(!source)return;const sid=state.sessionId,controller=new AbortController();translations.add(controller);
+ try{const text=await translateSpeechText(source.text,language,controller.signal);if(controller.signal.aborted||state.sessionId!==sid)return;
+  setState({messages:state.messages.map(m=>m.id===id&&!m.metadata?.superseded?{...m,metadata:{...m.metadata,translation:{language,text,status:'ready'}}}:m)});await persistMessages(state.messages);
+ }catch{if(!controller.signal.aborted&&state.sessionId===sid){setState({messages:state.messages.map(m=>m.id===id?{...m,metadata:{...m.metadata,translation:{language,text:'',status:'failed',error:'辅助翻译失败，可继续使用原文。'}}}:m)});}}finally{translations.delete(controller);}
+}
 
 export interface LiveTranscript { id: number; text: string; phase: 'preview' | 'finalizing' | 'failed' }
 
@@ -182,6 +208,7 @@ function resetAudio() {
 
 function pushPcm(pcm: Int16Array, volume: number) {
   if (state.status !== 'listening' && state.status !== 'answering') return;
+  if(localSpeaker())audioTimeline.push(pcm);
   const now = performance.now();
   if (state.audio.recognitionMode === 'realtime') {
     realtimeCapture?.push(pcm);
@@ -356,6 +383,11 @@ async function recognizeUtterance(wavBlob: Blob, controller: AbortController, ge
     setState({ partial: '', errorMessage: '本段未识别到有效文字，请靠近麦克风说完整一句话后稍作停顿。' });
     return;
   }
+  if(state.audio.source!=='SPEAKER'){
+    let pcm:Int16Array|null=null;
+    if(localSpeaker()){const bytes=await wavBlob.arrayBuffer();const view=new DataView(bytes);if(bytes.byteLength>=44){pcm=new Int16Array((bytes.byteLength-44)/2);for(let i=0;i<pcm.length;i++)pcm[i]=view.getInt16(44+i*2,true);}}
+    await deliverPhoneSpeech(text,pcm,generation);return;
+  }
   if (text.length < 6 && liveId === undefined) {
     setState({ partial: text });
     window.setTimeout(() => {
@@ -371,21 +403,23 @@ async function recognizeUtterance(wavBlob: Blob, controller: AbortController, ge
 }
 
 /** 分句定稿：入列 + 自动作答 */
-async function deliverUtterance(text: string) {
+async function deliverUtterance(text: string,speaker?:SpeakerDecision,observationId?:string) {
   const sessionId=state.sessionId;
-  bus.emit('interviewer:utterance', text);
+  if(!speaker||speaker.role==='interviewer')bus.emit('interviewer:utterance', text);
   const msg: ChatMessage = {
     id: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-    role: 'INTERVIEWER',
+    role: speaker?.role==='candidate'?'ASSISTANT':'INTERVIEWER',
     text,
     createdAt: Date.now(),
-    metadata:{origin:'audio_transcript',revision:1},
+    metadata:{origin:speaker?.role==='candidate'?'candidate_response':'audio_transcript',revision:1,...(speaker?{speaker,observationId}:{})},
   };
-  msg.metadata!.questionId=msg.id;
+  msg.metadata!.questionId=speaker?.role==='candidate'?[...state.messages].reverse().find(m=>m.role==='INTERVIEWER'&&(!m.metadata?.speaker||m.metadata.speaker.role==='interviewer'))?.id:msg.id;
   const messages = [...state.messages, msg];
   setState({ messages });
   await persistMessages(messages);
   if(state.sessionId!==sessionId)return;
+  void translateMessage(msg.id);
+  if(speaker&&speaker.role!=='interviewer')return;
   if (getSetting('interview.autoAnswer', true)) {
     if (state.sessionId) {
       if (answerQueue.length >= 8) {
@@ -416,15 +450,29 @@ async function drainAnswers() {
 // ---------------- AI 作答 ----------------
 
 function interviewLang(): string {
-  const prefs = getSetting<Record<string, unknown>>('interviewPreference', {});
-  return String(prefs.lang ?? 'zh-CN');
+  return recognitionLanguage(getSpeechProfile('interview'));
+}
+
+export async function markTranscriptSpeaker(id:string,role:'candidate'|'interviewer'){
+ const sessionId=state.sessionId,generation=captureGeneration;
+ if(!sessionId||state.status==='ended')return;
+ const message=state.messages.find(m=>m.id===id);if(!message||!message.metadata?.speaker||message.metadata.superseded)return;
+ if(message.metadata.speaker.role===role)return;
+ const revision=(roleChanges.get(id)||0)+1;roleChanges.set(id,revision);
+ if(localSpeaker()&&speakerOwner&&message.metadata.observationId){try{await cmd('cmd_speaker_bind',{owner:speakerOwner,segmentId:message.metadata.observationId,role});}catch{setState({errorMessage:'这条文字的身份将更正；语音过短或已过期，未用它学习对方声纹。可在下一段较长的单人语音上再标记一次。'});}}
+ if(state.sessionId!==sessionId||captureGeneration!==generation||roleChanges.get(id)!==revision)return;
+ answerQueue.splice(0,answerQueue.length,...answerQueue.filter(item=>item.messageId!==id));
+ const existing=state.turns.filter(turn=>turn.questionId===id);for(const turn of existing)turn.abort?.abort();
+ const corrected={...message,role:role==='candidate'?'ASSISTANT' as const:'INTERVIEWER' as const,metadata:{...message.metadata,origin:role==='candidate'?'candidate_response' as const:'audio_transcript' as const,speaker:{...message.metadata.speaker,role,source:'manual' as const,revision:message.metadata.speaker.revision+1}}};
+ setState({turns:state.turns.map(t=>t.questionId===id?{...t,answerPending:false}:t),messages:state.messages.map(m=>m.id===id?corrected:m.metadata?.questionId===id&&m.metadata.origin==='model_generated'?{...m,pending:false,metadata:{...m.metadata,superseded:true}}:m)});
+ await persistMessages(state.messages);if(role==='interviewer'&&state.sessionId===sessionId&&roleChanges.get(id)===revision)await answerQuestion(message.text,{questionMessageId:id});
 }
 
 /** Optional correction of assumed speech; never requires confirming every suggested answer. */
 export async function recordCandidateResponse(text:string):Promise<void> {
   const sessionId=state.sessionId;
   if(!sessionId || state.status==='ended' || !text.trim())return;
-  const question=[...state.messages].reverse().find(message=>message.role==='INTERVIEWER'&&!message.metadata?.superseded);
+  const question=[...state.messages].reverse().find(knownInterviewer);
   const message:ChatMessage={id:`actual-${Date.now()}-${++answerSequence}`,role:'ASSISTANT',text:text.trim(),createdAt:Date.now(),
     metadata:{origin:'candidate_response',questionId:question?.metadata?.questionId || question?.id}};
   setState({messages:[...state.messages,message]});
@@ -439,10 +487,11 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
   }
   const sessionId = state.sessionId;
   if (!sessionId || getInterviewEngineState().status==='ended') return;
-  const latestQuestion=[...state.messages].reverse().find(message=>message.role==='INTERVIEWER'&&!message.metadata?.superseded);
+  const latestQuestion=[...state.messages].reverse().find(knownInterviewer);
   let source=opts?.questionMessageId?state.messages.find(message=>message.id===opts.questionMessageId):latestQuestion?.text===question?latestQuestion:undefined;
+  if(opts?.questionMessageId&&!source)return;
   if(opts?.correction){
-    source ??= [...state.messages].reverse().find(message=>message.role==='INTERVIEWER'&&!message.metadata?.superseded);
+    source ??= [...state.messages].reverse().find(knownInterviewer);
     state.turns.forEach(turn=>turn.abort?.abort());
     const questionId=source?.metadata?.questionId || source?.id;
     setState({turns:state.turns.map(turn=>({...turn,answerPending:false})),messages:state.messages.map(message=>message.id===source?.id||(questionId && message.metadata?.questionId===questionId)?{...message,pending:false,metadata:{...message.metadata,superseded:true}}:message.pending?{...message,pending:false,metadata:{...message.metadata,completionStatus:'cancelled'}}:message)});
@@ -471,7 +520,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
     text: '',
     createdAt: Date.now(),
     pending: true,
-    metadata:{origin:'model_generated',questionId:turn.questionId,revision:turn.revision,completionStatus:'unknown'},
+    metadata:{origin:'model_generated',questionId:turn.questionId,revision:turn.revision,completionStatus:'unknown',speechProfile:getSpeechProfile('interview')},
   };
   const messages = [...state.messages, assistantMsg];
   setState({ messages });
@@ -492,7 +541,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
       ],
       signal: turn.abort!.signal,
       onTrace:request=>{
-        if(current!==answerGeneration||state.sessionId!==sessionId)return;
+        if(current!==answerGeneration||state.sessionId!==sessionId||turn.abort?.signal.aborted)return;
         setState({messages:state.messages.map(message=>message.id===assistantMsg.id?{...message,metadata:{...message.metadata,request,completionStatus:request.completionStatus}}:message)});
       },
       onDelta: (delta) => {
@@ -532,6 +581,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
       status: state.status === 'answering' ? 'listening' : state.status,
     });
     await persistMessages(finalMessages);
+    void translateMessage(assistantMsg.id);
   } catch (e) {
     if (state.sessionId !== sessionId || state.status === 'ended' || current!==answerGeneration) return;
     const err = e as Error;
@@ -581,15 +631,16 @@ function buildSystemPromptForSession(question: string,throughMessageId:string): 
   const currentKnowledge={resume,goal,materials:chosen};
   sessionKnowledge ??= captureKnowledge(currentKnowledge);
   const cutoff=state.messages.findIndex(message=>message.id===throughMessageId);
-  const priorQuestion=[...state.messages.slice(0,Math.max(0,cutoff))].reverse().find(message=>message.role==='INTERVIEWER'&&!message.metadata?.superseded)?.text || '';
+  const priorQuestion=[...state.messages.slice(0,Math.max(0,cutoff))].reverse().find(knownInterviewer)?.text || '';
   const context = buildKnowledgeContext({...authorizedKnowledge(sessionKnowledge,currentKnowledge),query:`${question}\n${priorQuestion}`,maxChars:interviewContextBudget().reference});
-  const prompt = buildInterviewSystemPrompt({
+  let prompt = buildInterviewSystemPrompt({
     answerStyle: prefs.answerStyle ?? 'natural',
     customAnswerStyle: prefs.customAnswerStyle ?? '',
     goalName: goal?.name,
     goalCompany: goal?.companyName,
-    lang: interviewLang(),
+    lang: getSpeechProfile('interview').answerLanguage==='en-US'?'en-US':'zh-CN',
   });
+  prompt+='\n'+languagePrompt(getSpeechProfile('interview'));
   return { prompt, sources: context.sources,referenceBlock:[context.text,/(流程|第几轮|offer|面试结果)/i.test(question)?priorProgressBlock(goalId):'',solverMemoryBlock()].filter(Boolean).join('\n\n') };
 }
 
@@ -649,7 +700,7 @@ export async function startInterview(opts: {
     title: `${goal?.name ?? '面试'} · ${new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
     goalId: opts.goalId,
     resumeId: opts.resumeId,
-    metadata: { audioSource: opts.audioSource, materialIds: opts.materialIds,knowledgeSnapshot:snapshot,aiPolicyVersion:'2026-10-30.1' },
+    metadata: { audioSource: opts.audioSource, materialIds: opts.materialIds,knowledgeSnapshot:snapshot,aiPolicyVersion:'2026-10-30.1',speechProfile:getSpeechProfile('interview') },
   });
   if (generation !== sessionGeneration) {
     await completeSession(session.id);
@@ -707,6 +758,9 @@ let openingGeneration = 0;
 
 async function stopCapture(invalidate = true) {
   if (invalidate) captureGeneration++;
+  translations.forEach(controller=>controller.abort());translations.clear();
+  const owner=speakerOwner;speakerOwner='';if(owner)await cmd('cmd_speaker_end',{owner}).catch(()=>{});
+  audioTimeline.reset();realtimeOriginMs=0;
   realtimeOpening?.abort();realtimeOpening=null;
   transcriptionControllers.forEach(controller => controller.abort());
   transcriptionQueue = Promise.resolve();
@@ -736,6 +790,7 @@ export function beginListening(audioSource: AudioSource): Promise<void> {
     setState({ status: 'connecting', errorMessage: null, audio: { ...emptyAudio(), source: audioSource, recognitionMode: realtime ? 'realtime' : liveSpeechEnabled() ? 'segmented' : 'file' } });
     try {
       resolveAiRoute(getAiSettings(), 'stt');
+      if(localSpeaker()){speakerOwner=crypto.randomUUID();await cmd('cmd_speaker_begin',{owner:speakerOwner});if(generation!==captureGeneration)return;}
       if (realtime) {
         const controller = new AbortController();realtimeOpening=controller;
         const { openConfiguredRealtimeAsr } = await import('./realtimeAsr');
@@ -745,12 +800,13 @@ export function beginListening(audioSource: AudioSource): Promise<void> {
             if (!result.isFinal) { setState({ partial: result.text }); return; }
             const text = cleanTranscript(result.text);
             setState({ partial: '', audio: { ...state.audio, lastTranscriptAt: Date.now() } });
-            if (text && !isFillerSentence(text)) void deliverUtterance(text).catch(error => {
+            if (text && !isFillerSentence(text)) void (audioSource==='SPEAKER'?deliverUtterance(text):deliverPhoneSpeech(text,result.beginMs!==undefined&&result.endMs!==undefined?audioTimeline.range(realtimeOriginMs+result.beginMs,realtimeOriginMs+result.endMs):null,generation)).catch(error => {
               if (generation === captureGeneration) setState({ errorMessage: `转写文字已显示，但记录保存失败：${String(error.message || error)}` });
             });
           },
           onState: realtimeState => {
             if (generation !== captureGeneration) return;
+            if(realtimeState==='ready')realtimeOriginMs=audioTimeline.samples/16;
             setState({ ...(realtimeState === 'reconnecting' ? { partial: '', errorMessage: '实时语音连接中断，正在重新连接；中断期间的语音请稍后重说。' } : realtimeState === 'ready' ? { errorMessage: null } : {}),
               audio: { ...state.audio, realtimeState } });
           },
@@ -876,6 +932,7 @@ export async function interruptAnswer() {
 }
 
 export async function endInterview(complete = true) {
+  roleChanges.clear();
   answerQueue.length = 0;
   sessionGeneration++;
   const sessionId = state.sessionId;

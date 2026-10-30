@@ -3,8 +3,10 @@ import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
+import {evaluateFixture} from './compile-fixture.mjs';
+import {randomUUID} from 'node:crypto';
 
-function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false } = {}) {
+function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand } = {}) {
   let now = 1000;
   let processor;
   let resumed = 0;
@@ -25,13 +27,19 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     return () => { if (nativeListeners.get(event) === handler) nativeListeners.delete(event); };
   };
   const track = { label: 'Test microphone', enabled: true, getSettings: () => ({ deviceId: 'test' }), stop: () => stopped++ };
-  const settings = { 'interview.autoAnswer': autoAnswer, 'interview.silenceGateMs': 300 };
+  const settings = { 'interview.autoAnswer': autoAnswer, 'interview.silenceGateMs': 300,'interview.speakerMode':speakerMode };
+  const profile=evaluateFixture('src/lib/speechProfile.ts',{exports:{}});
   const mocks = {
+    './speechPreferences':{getSpeechProfile:()=>profile.normalizeSpeechProfile(settings['interview.speechProfile'])},
+    './speechProfile':profile,
+    './speakerRouting':evaluateFixture('src/lib/speakerRouting.ts',{exports:{},Int16Array}),
+    './speakerClient':{identifySpeaker:identify || (async()=>({role:speakerRole,score:0.9,revision:1}))},
+    './speechTranslation':{translateSpeechText:translation || (async()=> '辅助译文')},
     './aiSettings': { getAiSettings: () => realtime ? ({ speechInputMode: 'realtime' }) : ({}) },
     './realtimeAsr': { openConfiguredRealtimeAsr: async callbacks => { realtimeCallbacks = callbacks; return { push: () => { realtimeFrames++; }, close: async () => { realtimeCloses++; } }; } },
     './aiConfig': { isRoleConfigured: (_s, role) => role !== 'stt' || stt,
       resolveAiRoute() { if (speechRouteError) throw new Error(speechRouteError); if (!stt) throw new Error('尚未配置语音转写模型'); return {}; } },
-    './bridge': { onEvent: registerNative, listenEvent: async (event, handler) => registerNative(event, handler),
+    './bridge': {cmd:nativeCommand || (async()=>{}), onEvent: registerNative, listenEvent: async (event, handler) => registerNative(event, handler),
       startSystemAudioCapture: nativeStart ?? (async () => ({ devices: [{ id: 'speaker-a', name: '测试耳机', is_default: true }], sampleRate: 16000, channels: 1 })),
       stopSystemAudioCapture: async () => { nativeStops++; }, setSystemAudioExcludedOutputs: async () => {} },
     './ai': { liveSpeechEnabled: () => live, buildInterviewSystemPrompt: () => '', chatStream: chat ?? (async () => '测试回答'), transcribeAudio: async (wav, options) => { requests++; wavs.push(wav); return transcribe ? transcribe(wav, options) : '请介绍一下你的项目经历'; } },
@@ -55,7 +63,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       addEventListener() {}
       removeEventListener() {}
     },
-    performance: { now: () => now }, console, Blob, DOMException, AbortController, atob, btoa, setTimeout, clearTimeout,
+    performance: { now: () => now }, console, Blob, DOMException, AbortController, atob, btoa, setTimeout, clearTimeout,crypto:{randomUUID},
     Int16Array, Float32Array, Uint8Array, ArrayBuffer, DataView,
   };
   vm.createContext(sandbox);
@@ -98,10 +106,35 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       nativeListeners.get('system-audio-chunk')?.({ pcmBase64: Buffer.from(samples.buffer).toString('base64'), volume: Math.abs(amplitude) / 32768 * 800 });
     },
     feed(amplitude = 0.1) { now += 2048 / sampleRate * 1000; if (context.state === 'running') processor.onaudioprocess?.({ inputBuffer: { getChannelData: () => new Float32Array(2048).fill(amplitude) } }); },
-    async silence() { now += 1000; for (const tick of timers.values()) tick(); for (let i = 0; i < 10; i++) await Promise.resolve(); },
+    async silence() { now += 1000; for (const tick of timers.values()) tick(); await new Promise(resolve=>setImmediate(resolve)); },
     get timerCount() { return timers.size; },
   };
 }
+
+test('phone self speech is an actual candidate answer and cannot trigger generation',async()=>{
+ let answers=0;const h=harness({autoAnswer:true,speakerRole:'candidate',chat:async()=>{answers++;return 'must not run';}});await h.start('PHONE');for(let i=0;i<60;i++)h.feed();await h.silence();
+ const state=h.engine.getInterviewEngineState();assert.equal(answers,0);assert.equal(state.messages[0].role,'ASSISTANT');assert.equal(state.messages[0].metadata.origin,'candidate_response');await h.engine.endInterview(false);
+});
+test('late manual speaker binding cannot create a question after the session ends',async()=>{
+ let finish,answers=0;const h=harness({autoAnswer:true,speakerRole:'unknown',nativeCommand:async name=>{if(name==='cmd_speaker_bind')return new Promise(resolve=>{finish=resolve;});},chat:async()=>{answers++;return 'must not answer';}});
+ await h.start('PHONE');for(let i=0;i<60;i++)h.feed();await h.silence();const message=h.engine.getInterviewEngineState().messages[0];const binding=h.engine.markTranscriptSpeaker(message.id,'interviewer');assert.equal(typeof finish,'function');await h.engine.endInterview(false);finish();await binding;assert.equal(answers,0);assert.equal(h.engine.getInterviewEngineState().messages[0].metadata.speaker.role,'unknown');
+});
+test('unknown phone speech requires one explicit role selection and then becomes answerable',async()=>{
+ let answers=0;const h=harness({autoAnswer:true,speakerMode:'manual',chat:async()=>{answers++;return 'reference';}});await h.start('PHONE');for(let i=0;i<60;i++)h.feed();await h.silence();
+ const message=h.engine.getInterviewEngineState().messages[0];assert.equal(message.metadata.speaker.role,'unknown');assert.equal(answers,0);
+ await h.engine.markTranscriptSpeaker(message.id,'interviewer');assert.equal(answers,1);assert.equal(h.engine.getInterviewEngineState().messages[0].metadata.speaker.source,'manual');await h.engine.endInterview(false);
+});
+test('late speaker inference after ending a call cannot publish text or answers',async()=>{
+ let finish,answers=0;const h=harness({autoAnswer:true,identify:()=>new Promise(resolve=>{finish=resolve;}),chat:async()=>{answers++;return 'late';}});await h.start('PHONE');for(let i=0;i<60;i++)h.feed();await h.silence();assert.equal(typeof finish,'function');await h.engine.endInterview(false);finish({role:'interviewer',score:1,revision:1});await new Promise(resolve=>setImmediate(resolve));assert.equal(h.engine.getInterviewEngineState().messages.length,0);assert.equal(answers,0);
+});
+test('correcting a phone speaker cancels and fences an answer already streaming',async()=>{
+ let emit,finish;const h=harness({autoAnswer:true,chat:options=>{emit=options.onDelta;return new Promise(resolve=>{finish=resolve;});}});await h.start('PHONE');for(let i=0;i<60;i++)h.feed();await h.silence();const message=h.engine.getInterviewEngineState().messages[0];emit('wrong speaker answer');await h.engine.markTranscriptSpeaker(message.id,'candidate');emit(' stale');finish('late replacement');await new Promise(resolve=>setImmediate(resolve));
+ const state=h.engine.getInterviewEngineState();assert.equal(state.messages[0].metadata.origin,'candidate_response');const ai=state.messages.find(m=>m.metadata?.origin==='model_generated');assert.equal(ai.metadata.superseded,true);assert.doesNotMatch(ai.text,/stale|replacement/);await h.engine.endInterview(false);
+});
+test('answer language is independent of ASR and auxiliary translation never delays answering',async()=>{
+ let answerOptions,transcriptionOptions;const signals=[];const h=harness({autoAnswer:true,chat:async options=>{answerOptions=options;return 'English answer';},transcribe:async(_wav,options)=>{transcriptionOptions=options;return '请介绍你的项目';},translation:async(_text,_language,signal)=>{signals.push(signal);return new Promise(()=>{});}});
+ h.settings['interview.speechProfile']={inputLanguage:'auto',answerLanguage:'en-US',translationLanguage:'zh-CN'};await h.start('SPEAKER');for(let i=0;i<25;i++)h.systemFeed();await h.silence();assert.equal(transcriptionOptions.lang,'auto');assert.match(answerOptions.messages[0].content,/English|英语/);assert.ok(signals.length);await h.engine.endInterview(false);assert.ok(signals.every(signal=>signal.aborted));
+});
 
 test('continuous ASR sends live PCM, displays partial text and answers only finalized sentences', async () => {
   const h = harness({ realtime: true, autoAnswer: true }); await h.start();
@@ -316,7 +349,7 @@ test('end during microphone permission wait closes late capture without restarti
   let resolve;
   const h = harness({ permission: new Promise(r => { resolve = r; }) });
   const starting = h.start();
-  for (let i = 0; i < 15; i++) await Promise.resolve();
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(h.permissionRequests, 1);
   await h.engine.endInterview(false);
   resolve(); await starting;

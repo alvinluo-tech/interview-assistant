@@ -1,5 +1,6 @@
 import type { AiProvider } from './aiConfig.js';
 import { bailianRegion } from './realtimeAsrProtocol.js';
+import {availableVoices} from './speechCatalog.js';
 
 export type TtsService = 'mimo' | 'qwen' | 'bailian' | 'compatible';
 export function isSpeechSynthesisModel(model: string): boolean {
@@ -18,6 +19,7 @@ export function ttsService(provider: Pick<AiProvider, 'baseUrl'>, model: string)
   return 'compatible';
 }
 export function ttsVoices(provider: Pick<AiProvider, 'baseUrl'>, model: string): {id:string; name:string}[] {
+  const catalog=availableVoices(provider,model);if(catalog.length)return catalog.map(({id,name})=>({id,name}));
   const service = ttsService(provider, model);
   if (service === 'mimo') return ['苏打','冰糖','茉莉','白桦','Mia','Chloe','Milo','Dean'].map(id => ({id, name:id}));
   if (service === 'qwen') return [{id:'Cherry',name:'芊悦 · 女声'},{id:'Serena',name:'苏瑶 · 女声'},{id:'Ethan',name:'晨煦 · 男声'},{id:'Chelsie',name:'千雪 · 女声'}];

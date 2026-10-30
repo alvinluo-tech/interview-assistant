@@ -2,6 +2,10 @@ import { normalizeProvider, type AiProvider } from './aiConfig.js';
 import { aiHeaders, withAiRequest, type AiFetch } from './aiProtocol.js';
 import { bailianRegion } from './realtimeAsrProtocol.js';
 import { defaultTtsVoice, ttsService } from './ttsConfig.js';
+import {resolveSpeechVoice} from './speechCatalog.js';
+import type {SpeechRenderSpec} from './speechProfile';
+import {requestBailianSpeechSocket} from './ttsSocket.js';
+import type {RealtimeConnect} from './realtimeAsrProtocol';
 
 export interface SpeechAudioChunk { format: 'pcm16' | 'encoded'; bytes: Uint8Array; sampleRate?: number }
 export type SpeechConsumer = (chunk: SpeechAudioChunk) => void | Promise<void>;
@@ -60,14 +64,12 @@ async function downloadAudio(value: string, fetcher: AiFetch, signal: AbortSigna
 }
 
 export async function requestSpeech(provider: AiProvider, model: string, text: string, voice: string,
-  fetcher: AiFetch, timeoutMs: number, signal: AbortSignal | undefined, onAudio: SpeechConsumer): Promise<void> {
+  fetcher: AiFetch, timeoutMs: number, signal: AbortSignal | undefined, onAudio: SpeechConsumer,render?:SpeechRenderSpec,connect?:RealtimeConnect): Promise<void> {
   const normalized = normalizeProvider(provider), service = ttsService(normalized, model);
   if (/^mimo-.*tts-(?:voiceclone|voicedesign)/i.test(model)) throw new Error('此 MiMo 模型需要音色复刻或设计参数；请选择 mimo-v2.5-tts 使用预置音色。');
   if (service !== 'compatible' && /(?:^|-)realtime(?:-|$)/i.test(model)) throw new Error('此 realtime 模型需要独立的实时接口；请选择同系列不带 realtime 的语音合成模型。');
-  if (service === 'bailian' && /^cosyvoice/i.test(model) && bailianRegion(new URL(normalized.baseUrl).hostname) !== 'beijing') {
-    throw new Error('CosyVoice HTTP 合成目前仅适配北京地域；新加坡请选择 Qwen TTS 或 Qwen-Audio-TTS。');
-  }
-  const selectedVoice = voice === 'alloy' && service !== 'compatible' ? defaultTtsVoice(normalized,model) : voice.trim();
+  const resolved=render?resolveSpeechVoice(normalized,model,voice,render):undefined;
+  const selectedVoice = resolved?.voice || (voice === 'alloy' && service !== 'compatible' ? defaultTtsVoice(normalized,model) : voice.trim());
   if (!selectedVoice) throw new Error('请为语音模型填写可用的音色 ID。');
   let total = 0;
   const push: SpeechConsumer = async chunk => {
@@ -75,6 +77,11 @@ export async function requestSpeech(provider: AiProvider, model: string, text: s
     if (total > MAX_AUDIO_BYTES) throw new Error('语音音频超过 32 MB，请缩短问题。');
     if (chunk.bytes.length) await onAudio(chunk);
   };
+  if(service==='bailian'&&/^cosyvoice/i.test(model)&&bailianRegion(new URL(normalized.baseUrl).hostname)==='singapore'){
+    if(!connect)throw new Error('新加坡 CosyVoice 需要桌面 WebSocket 语音连接。');
+    for(const segment of splitSpeechText(text))await requestBailianSpeechSocket(normalized,model,segment,selectedVoice,render,resolved?.useInstruction?resolved.instruction:undefined,signal,push,timeoutMs,connect);
+    return;
+  }
   const segments = splitSpeechText(text);
   for (const segment of service === 'compatible' && segments.length ? [text.trim()] : segments) {
     signal?.throwIfAborted();
@@ -86,9 +93,11 @@ export async function requestSpeech(provider: AiProvider, model: string, text: s
     const headers = aiHeaders(normalized,true);
     if (native) headers['X-DashScope-SSE'] = 'enable';
     const body = service === 'mimo' ? {model,stream:true,messages:[
-      {role:'user',content:'请用自然、专业、友好的面试官语气朗读，只朗读给定文本，不添加内容。'},
+      {role:'user',content:(resolved?.instruction || '请用自然、专业、友好的面试官语气朗读，只朗读给定文本，不添加内容。')+(render?` 语速约为正常速度的 ${render.rate} 倍。`:'')},
       {role:'assistant',content:segment}],audio:{format:'pcm16',voice:selectedVoice}}
-      : native ? {model,input:{text:segment,voice:selectedVoice,...(service === 'bailian' ? {format:'pcm',sample_rate:24000} : {language_type:'Auto'})}}
+      : native ? {model,input:{text:segment,voice:selectedVoice,...(service === 'bailian' ? {format:'pcm',sample_rate:24000,
+          ...(render?{rate:render.rate,language_hints:[render.language==='en-US'?'en':'zh']}:{}),...(resolved?.useInstruction?{instruction:resolved.instruction}:{})}
+          : {language_type:resolved?.languageHint || 'Auto'})}}
         : {model,input:segment,voice:selectedVoice};
     await withAiRequest(target,endpoint,{method:'POST',headers,body:JSON.stringify(body)},timeoutMs,async (response, pending) => {
       if (service === 'compatible') {
