@@ -12,6 +12,7 @@ export async function requestInterviewStop(sessionId:string):Promise<void> {
   let timer:ReturnType<typeof setTimeout> | undefined;
   let resolve!:()=>void, reject!:(error:Error)=>void;
   const result=new Promise<void>((yes,no)=>{resolve=yes;reject=no;});
+  void result.catch(()=>{}); // A slow emit must not leave the deadline rejection unobserved.
   const off=await listenEvent<StopResult>('interview-stop-result',payload=>{
     if(payload.requestId!==requestId)return;
     if(payload.error)reject(new Error(payload.error));else resolve();
@@ -26,6 +27,7 @@ export async function requestInterviewStop(sessionId:string):Promise<void> {
 export function listenForInterviewStop():()=>void {
   let disposed=false, release:(()=>void)|undefined;
   void listenEvent<StopRequest>('interview-stop-request',async payload=>{
+    if(disposed)return;
     let error:string|undefined;
     try {
       const engine=await import('./interviewEngine');
@@ -36,6 +38,6 @@ export function listenForInterviewStop():()=>void {
       if(getSetting('interview.sessionId',null)===payload.sessionId)await setSetting('interview.sessionId',null);
     } catch(reason){error=String((reason as Error).message||reason);}
     await emitTo('main','interview-stop-result',{requestId:payload.requestId,error});
-  }).then(off=>{if(disposed)off();else release=off;});
+  }).then(off=>{if(disposed)off();else release=off;}).catch(error=>console.warn('[sessions] stop listener unavailable',error));
   return ()=>{disposed=true;release?.();};
 }

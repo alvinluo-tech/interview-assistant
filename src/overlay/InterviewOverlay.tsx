@@ -43,6 +43,7 @@ import { encodeWav, transcribeAudio } from '@/lib/ai';
 import { openMicrophone, type MicrophoneCapture } from '@/lib/microphone';
 import { setOverlaySize } from '@/lib/bridge';
 import { effectiveHotkeys, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
+import { showToast } from '@/ui/primitives';
 import { Md, mdToPlain } from './Md';
 import {
   DwellButton,
@@ -192,11 +193,13 @@ function InterviewShell({
         {/* 结束面试 */}
         <EndButton
           onEnd={async () => {
-            await endInterview(true);
             const { setSessionActive, hideOverlay, showMain } = await import('@/lib/bridge');
-            await setSessionActive(false);
-            await hideOverlay();
-            await showMain();
+            try {await endInterview(true);}
+            catch(error){showToast({type:'error',title:'面试已停止，但结束状态尚未保存',description:String((error as Error).message||error)});}
+            finally {
+              try {await setSessionActive(false);}
+              finally {try {await hideOverlay();} finally {await showMain();}}
+            }
           }}
         />
       </div>

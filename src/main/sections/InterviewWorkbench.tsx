@@ -24,6 +24,7 @@ import { startOverlayFlow } from '../MainWindow';
 import { ANSWER_STYLES, type AnswerStyle } from '@/lib/ai';
 import { MicrophoneCheck } from './MicrophoneCheck';
 import { requestInterviewStop } from '@/lib/interviewLifecycle';
+import { OutputExclusions } from './OutputExclusions';
 
 export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => void }) {
   const goals = useData<Goal[]>('goals', [])[0];
@@ -149,6 +150,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
           ))}
         </div>
 
+        {audioSource === 'SPEAKER' && <OutputExclusions active={activeSession} />}
         {audioSource !== 'SPEAKER' && <MicrophoneCheck enabled={!starting && !activeSession} />}
         {sttProvider && <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs" data-testid="speech-mode-summary">
           <div className="font-medium">{sttProvider.name} / {sttRoute?.modelId} · {aiSettings.speechInputMode === 'realtime' ? '持续实时语音流' : liveSpeech ? '分段实时字幕' : '停顿后识别'}</div>

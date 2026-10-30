@@ -105,6 +105,9 @@ jobs:
       - name: Test permission and native capture bridge
         run: pnpm test:platform
 
+      - name: Test session and overlay regression contracts
+        run: pnpm test:bug-review
+
       # Includes document context, realtime ASR and reliability with coverage gates.
       - name: Test core protocols with coverage
         run: pnpm test:core-coverage

@@ -101,15 +101,14 @@ pub fn cmd_set_action_hotkeys(
     let _registration = state.registration_lock.lock().map_err(|_| "快捷键注册锁异常")?;
     let panic = *state.panic_shortcut.lock().map_err(|_| "快捷键状态锁异常")?;
     // 先注销现有 action 快捷键
-    {
-        let mut map = state.action_map.lock().unwrap();
-        for sc in map.keys() {
-            if Some(*sc) != panic { let _ = app.global_shortcut().unregister(*sc); }
-        }
-        map.clear();
+    // OS registration dispatches to the UI thread. Never hold locks read by
+    // the shortcut handler while waiting for that dispatch to finish.
+    let previous = std::mem::take(&mut *state.action_map.lock().unwrap());
+    for sc in previous.keys() {
+        if Some(*sc) != panic { let _ = app.global_shortcut().unregister(*sc); }
     }
     let mut errors: Vec<String> = Vec::new();
-    let mut map = state.action_map.lock().unwrap();
+    let mut map = HashMap::new();
     for b in bindings {
         match Shortcut::from_str(&b.accelerator) {
             Ok(sc) if Some(sc) == panic => errors.push(format!("{}: 与应急隐藏快捷键冲突", b.action)),
@@ -122,8 +121,10 @@ pub fn cmd_set_action_hotkeys(
             Err(e) => errors.push(format!("{}: {e}", b.action)),
         }
     }
+    let count = map.len();
+    *state.action_map.lock().unwrap() = map;
     if errors.is_empty() {
-        log::info!("[hotkey] action hotkeys active: {} ok, 0 failed", map.len());
+        log::info!("[hotkey] action hotkeys active: {} ok, 0 failed", count);
         Ok(())
     } else {
         log::warn!("[hotkey] action hotkeys partially failed: {errors:?}");
@@ -143,12 +144,12 @@ pub fn cmd_set_panic_hotkey(
     if desired.is_some_and(|key| state.action_map.lock().unwrap().contains_key(&key)) {
         return Err("此快捷键已被浮窗动作占用，请选择其他组合。".into());
     }
-    let mut current = state.panic_shortcut.lock().map_err(|_| "快捷键状态锁异常")?;
+    let mut current = *state.panic_shortcut.lock().map_err(|_| "快捷键状态锁异常")?;
     let result = replace_panic_shortcut(&mut current, desired,
         |key| register_one(&app, key),
         |key| app.global_shortcut().unregister(key).map_err(|e| e.to_string()));
     let registered = current.is_some();
-    drop(current);
+    *state.panic_shortcut.lock().map_err(|_| "快捷键状态锁异常")? = current;
     let _ = app.emit_to("main", "panic-hotkey-status", PanicStatusPayload { registered });
     // Conflicts require user action. No detached retries survive a setting change.
     result.map_err(|e| format!("应急隐藏快捷键未生效，可能已被其他程序占用，请更换组合：{e}"))

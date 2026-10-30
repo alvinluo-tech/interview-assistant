@@ -30,7 +30,7 @@ function workbench(source) {
     'react':{useEffect(){},useState:initial=>[typeof initial==='function'?initial():initial,()=>{}]},
     'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':componentNames,'@/ui/primitives':componentNames,
     '@/lib/aiSettings':{useAiReady:()=>true,useAiSettings:()=>({routes:{},providers:[]})},
-    '@/lib/aiConfig':{usesLiveSpeech:()=>false},'@/lib/dualCamera':{},'./MicrophoneCheck':{},'../CodeVerificationPanel':{},'./DualScreenCard':{},
+    '@/lib/aiConfig':{usesLiveSpeech:()=>false},'@/lib/dualCamera':{},'./MicrophoneCheck':{},'./OutputExclusions':{},'../CodeVerificationPanel':{},'./DualScreenCard':{},
     '@/lib/bridge':{isTauri:()=>false,overlayShowSeq:async()=>1},
     '@/lib/ai':{ANSWER_STYLES:[]},
     '@/lib/store':{useSetting:(_key,fallback)=>[fallback,()=>{}],setSetting:async()=>{}},

@@ -19,7 +19,8 @@
     "test:reliability": "node --test tests/reliability.test.mjs",
     "test:core-coverage": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/documentIngest.cjs --test-coverage-include=**/artifacts/test-compiled/knowledgeContext.cjs --test-coverage-include=**/artifacts/test-compiled/realtimeAsrProtocol.cjs --test-coverage-include=**/artifacts/test-compiled/updateCheck.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/context-documents.test.mjs tests/realtime-asr.test.mjs tests/reliability.test.mjs tests/updater-client.test.mjs",
     "tauri": "tauri",
-    "test:experience": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/questionSpeaker.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs tests/question-speech.test.mjs tests/mock-cancellation.test.mjs"
+    "test:experience": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/questionSpeaker.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs tests/question-speech.test.mjs tests/mock-cancellation.test.mjs",
+    "test:bug-review": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/interviewLifecycle.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/bug-review.test.mjs tests/interview-lifecycle.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -34,7 +34,8 @@
 ## 审计与差距分析
 
 - [`docs/audit/gap-analysis.md`](docs/audit/gap-analysis.md) — 与官方 0.3.16 的逐功能全量差距清单（6 章约 90 个对照点：壳页面/浮窗/面试管线/笔试/设置面板/原生命令与 mac）
-- [`docs/audit/bug-findings.md`](docs/audit/bug-findings.md) — 已知缺陷清单（38 条，含 E2E 复现证据与静态扫描基线；仅记录不修复）
+- [`docs/audit/bug-findings.md`](docs/audit/bug-findings.md) — 原始审计清单（38 条，含 E2E 复现证据与静态扫描基线）
+- [`docs/audit/bug-revalidation.md`](docs/audit/bug-revalidation.md) — 逐项二次复核、修复结果、误报与产品差异说明、回归测试证据
 
 ## 技术栈
 

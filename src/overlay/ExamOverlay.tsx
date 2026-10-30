@@ -31,7 +31,7 @@ import {
 } from '@/lib/examEngine';
 import { setOverlaySize, setSessionActive, captureScreen } from '@/lib/bridge';
 import { effectiveHotkeys, hotkeyBadge, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
-import { isMac } from '@/lib/env';
+import { isMac, BRAND } from '@/lib/env';
 import { getSetting } from '@/lib/store';
 import { Md } from './Md';
 import {
@@ -162,7 +162,7 @@ function ExamShell({
         style={{ background: skin.surfaceBg, borderBottomColor: skin.borderColor }}
       >
         <DragHandle hoverMs={1000} />
-        <span className="ov-text-2 truncate text-[11px] font-medium">骆耀升老公酱面试助手</span>
+        <span className="ov-text-2 truncate text-[11px] font-medium">{BRAND}</span>
         <div className="flex-1" />
         <div className="flex items-center gap-1.5">
           <span className="ov-dot size-1.5 rounded-full" />
