@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { evaluateFixture } from './compile-fixture.mjs';
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
-function engine({ completionFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false } = {}) {
+function engine({ completionFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {} } = {}) {
   let resolveRequest, options, requests = 0;
   let resolveSession, resolveCapture, created = 0;
   const calls = [], saved = [];
+  const timers = new Set();
   const bridge = {
     cmd: async () => ['synthetic/turn/image.png'],
     captureScreen: async () => deferredCapture ? new Promise(resolve => { resolveCapture = resolve; }) : 'data:image/png;base64,synthetic',
@@ -16,10 +17,10 @@ function engine({ completionFails = false, deferred = true, deferredSession = fa
   };
   const api = evaluateFixture('src/lib/examEngine.ts', {
     exports: {}, console, Date: fixedTime ? class extends Date { static now() { return 1000; } } : Date, AbortController,
-    window: { setInterval: () => 1, clearInterval() {} },
+    window: { setInterval: () => { const id = {}; timers.add(id); return id; }, clearInterval(id) {timers.delete(id);} },
     require: name => {
       if (name === './bridge') return bridge;
-      if (name === './store') return { getSetting: (_key, fallback) => fallback, DEFAULT_EXAM_CUSTOMIZATION: {}, setSetting: async () => {} };
+      if (name === './store') return { getSetting: (key, fallback) => settings[key] ?? fallback, DEFAULT_EXAM_CUSTOMIZATION: {}, setSetting: async (key,value) => {settings[key] = value;} };
       if (name === './backend') return {
         readData: (_key, fallback) => fallback,
         createExamSession: async () => { created++; return deferredSession ? new Promise(resolve => { resolveSession = resolve; }) : { id: 'synthetic-session' }; },
@@ -34,7 +35,7 @@ function engine({ completionFails = false, deferred = true, deferredSession = fa
       throw new Error(`Unexpected dependency ${name}`);
     },
   });
-  return { api, calls, saved, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
+  return { api, calls, saved, settings, timers, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
     created: () => created, resolveSession: () => resolveSession?.({ id: 'synthetic-session' }), resolveCapture: () => resolveCapture?.('synthetic') };
 }
 
@@ -115,4 +116,39 @@ test('clearing a capture does not erase completed questions from the session', a
   const h = engine({ deferred: false });
   await h.api.solve({ screenshots: ['synthetic'] }); await h.api.abortSolve();
   assert.equal(h.api.getSolverState().turns.length, 1);
+});
+
+
+test('capture limit rejects extra pages instead of silently discarding them (B28)', async () => {
+  const h = engine();
+  for(let i=0;i<4;i++) await h.api.capturePage();
+  await assert.rejects(h.api.capturePage(), /4|最多|上限/);
+  assert.equal(h.api.getSolverState().pendingScreenshots.length,4);
+});
+
+test('answer-now preserves partial output and ignores late completion (B11)', async () => {
+  const h = engine(); const pending = h.api.solve({screenshots:['synthetic']}); await flush();
+  h.options().onDelta('<exam-answer>partial');
+  await h.api.answerNow();
+  assert.equal(h.options().signal.aborted,true);
+  assert.equal(h.api.getSolverState().phase,'done');
+  assert.equal(h.api.getSolverState().turns.at(-1).body,'partial');
+  h.resolve('late final'); await pending;
+  assert.equal(h.api.getSolverState().turns.at(-1).body,'partial');
+  assert.equal(h.saved.at(-1).questions[0].answer,'partial');
+});
+
+test('solver clocks stop on completion and abort (B12)', async () => {
+  const h = engine({deferred:false}); await h.api.solve({screenshots:['synthetic']});
+  assert.equal(h.timers.size,0);
+  await h.api.abortSolve(); assert.equal(h.timers.size,0);
+});
+
+test('interview solver mode does not overwrite exam settings (B33)', async () => {
+  const h = engine({settings:{'overlay.mode':'interview','exam.mode':'quick','interview.solverExamMode':'instant'}});
+  await h.api.startExamSession(null);
+  assert.equal(h.api.getSolverState().mode,'instant');
+  await h.api.setSolverMode('programming'); await flush();
+  assert.equal(h.settings['exam.mode'],'quick');
+  assert.equal(h.settings['interview.solverExamMode'],'programming');
 });

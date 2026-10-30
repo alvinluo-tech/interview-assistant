@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
 
-function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false } = {}) {
+function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false } = {}) {
   let now = 1000;
   let processor;
   let resumed = 0;
@@ -34,9 +34,9 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       startSystemAudioCapture: nativeStart ?? (async () => ({ devices: [{ id: 'speaker-a', name: '测试耳机', is_default: true }], sampleRate: 16000, channels: 1 })),
       stopSystemAudioCapture: async () => { nativeStops++; }, setSystemAudioExcludedOutputs: async () => {} },
     './ai': { liveSpeechEnabled: () => live, buildInterviewSystemPrompt: () => '', chatStream: chat ?? (async () => '测试回答'), transcribeAudio: async (wav, options) => { requests++; wavs.push(wav); return transcribe ? transcribe(wav, options) : '请介绍一下你的项目经历'; } },
-    './backend': { readData: (_key, fallback) => fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async () => {}, completeSession: async () => {} },
+    './backend': { readData: (key, fallback) => key === 'interviewSessions' ? sessions : fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async () => {}, completeSession: async () => { if(completionFails) throw new Error('Disk unavailable'); } },
     './examEngine': { getSolverState: () => ({ turns: [] }) },
-    './store': { getSetting: (key, fallback) => settings[key] ?? fallback },
+    './store': { getSetting: (key, fallback) => settings[key] ?? fallback, setSetting: async (key,value) => { settings[key] = value; } },
     './events': { bus: { emit() {} } },
   };
   const sandbox = {
@@ -378,4 +378,24 @@ test('final questions received during a streamed answer are queued instead of dr
   finish('第一个回答');
   for (let i = 0; i < 40; i++) await Promise.resolve();
   assert.equal(chatCalls, 2);
+});
+
+
+test('completed or mock records cannot be resumed as an active interview (B1/B13)', () => {
+  for (const session of [{id:'old',type:'INTERVIEW',status:'COMPLETED',messages:[]}, {id:'old',type:'MOCK_INTERVIEW',status:'ACTIVE',messages:[]}]) {
+    const h = harness({sessions:[session]});
+    assert.equal(h.engine.resumeInterviewSession('old',null,null), false);
+    assert.equal(h.engine.getInterviewEngineState().sessionId, null);
+  }
+  const h = harness({sessions:[{id:'active',type:'INTERVIEW',status:'ACTIVE',messages:[]}]});
+  assert.equal(h.engine.resumeInterviewSession('active',null,null),true);
+});
+
+test('completion failure releases the interview engine and capture (B9)', async () => {
+  const h = harness({completionFails:true}); await h.start();
+  await assert.rejects(h.engine.endInterview(true), /Disk unavailable/);
+  assert.equal(h.engine.getInterviewEngineState().sessionId, null);
+  assert.equal(h.engine.getInterviewEngineState().status, 'ended');
+  assert.equal(h.track.enabled, true);
+  assert.ok(h.stopped > 0);
 });
