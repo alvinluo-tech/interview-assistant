@@ -79,7 +79,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   vm.runInContext(code, sandbox);
   const engine = sandbox.exports;
   engine.exposeEngineDebug();
-  return { engine, sandbox, saved, wavs, track, get permissionRequests() { return permissionRequests; }, get resumed() { return resumed; }, get stopped() { return stopped; }, get requests() { return requests; },
+  return { engine, sandbox, saved, settings, wavs, track, get permissionRequests() { return permissionRequests; }, get resumed() { return resumed; }, get stopped() { return stopped; }, get requests() { return requests; },
     async start(source = 'MICROPHONE') { await engine.startInterview({ goalId: null, resumeId: null, materialIds: [], audioSource: source }); await engine.beginListening(source); },
     get nativeStops() { return nativeStops; },
     get realtimeFrames() { return realtimeFrames; },
@@ -411,4 +411,11 @@ test('streamed answers checkpoint before final completion (B14)', async()=>{
   for(let i=0;i<20;i++)await Promise.resolve();
   assert.ok(h.saved.some(record=>record.messages?.some(message=>message.text==='partial answer')));
   resolve('final answer');await pending;await h.engine.endInterview(false);
+});
+
+
+test('temporary overlay hide keeps the active recovery id for panic restore',async()=>{
+  const h=harness();await h.start();h.settings['interview.sessionId']='test-session';
+  await h.engine.endInterview(false);
+  assert.equal(h.settings['interview.sessionId'],'test-session');
 });

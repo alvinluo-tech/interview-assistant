@@ -109,3 +109,35 @@ test('global error diagnostics keep only the latest 400 entries (B35)',async()=>
   assert.equal(win.__errors.length,400);
   assert.equal(win.__errors.at(-1),'error 999');
 });
+
+
+test('stale-session cleanup clears recovery ids but preserves mock interviews (B13)',async()=>{
+  const data=new Map([['interviewSessions',[{id:'old',type:'INTERVIEW',status:'ACTIVE'},{id:'mock',type:'MOCK_INTERVIEW',status:'ACTIVE'}]]]);
+  const settings={'interview.sessionId':'old'};
+  const store={get:async key=>data.get(key),set:async(key,value)=>data.set(key,value),save:async()=>{}};
+  const api=evaluateFixture('src/lib/backend.ts',{exports:{},window:{},console,require:name=>{
+    if(name==='react')return {};
+    if(name==='@tauri-apps/plugin-store')return {load:async()=>store};
+    if(name==='@tauri-apps/api/event')return {emit:async()=>{}};
+    if(name==='./store')return {getSetting:(key,fallback)=>settings[key]??fallback,setSetting:async(key,value)=>{settings[key]=value;}};
+    throw new Error(name);
+  }});
+  await api.hydrateData();await api.closeStaleActiveSessions();
+  assert.equal(settings['interview.sessionId'],null);
+  assert.equal(data.get('interviewSessions').find(s=>s.id==='mock').status,'ACTIVE');
+});
+
+test('engine toasts reach the mounted notification viewport',()=>{
+  const updates=[];
+  const bus=evaluateFixture('src/lib/events.ts',{exports:{},console}).bus;
+  const jsx=(type,props)=>({type,props});
+  const api=evaluateFixture('src/ui/primitives.tsx',{exports:{},window:{setTimeout(){}},require:name=>{
+    if(name==='react')return {createContext:()=>({}),useEffect:fn=>fn(),useState:initial=>[initial,value=>updates.push(value)]};
+    if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};
+    if(name==='lucide-react')return {};
+    if(name==='../lib/events'||name==='@/lib/events')return {bus};
+    throw new Error(name);
+  }});
+  api.ToastViewport();bus.emit('toast',{type:'error',title:'save failure'});
+  assert.equal(updates.at(-1)?.at(-1)?.title,'save failure');
+});
