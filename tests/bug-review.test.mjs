@@ -64,3 +64,48 @@ test('ending from the workbench stops the owning interview engine (B24)',async()
   const h=workbench('src/main/sections/InterviewWorkbench.tsx');await h.click('InterviewWorkbench','结束面试');
   assert.ok(h.calls.includes('engine-stop'));
 });
+
+
+function examOverlay(body, clipboardFails=false) {
+  const notifications=[], bindings=new Map();
+  const jsx=(type,props)=>({type,props});
+  const names=new Proxy({}, {get:(_target,key)=>key==='showToast'?message=>notifications.push(message):String(key)});
+  const state={mode:'quick',phase:'done',pendingScreenshots:[],turns:body?[{id:'turn',body,followUpOptions:['Why this result?']}]:[],elapsedSec:0};
+  const modules={
+    'react':{useEffect:fn=>fn(),useMemo:fn=>fn(),useReducer:()=>[0,()=>{}],useRef:()=>({current:null}),useState:initial=>[initial,()=>{}]},
+    'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':names,'@/ui/primitives':names,'./Md':{},
+    '@/lib/overlayStyle':{normalizeStyle:style=>style,computeSkin:()=>({vars:{}})},
+    '@/lib/store':{DEFAULT_OVERLAY_STYLE:{examWidth:420,examHeight:520},useSetting:(_key,fallback)=>[fallback,()=>{}],getSetting:(_key,fallback)=>fallback},
+    '@/lib/examEngine':{getSolverState:()=>state,subscribeSolver:()=>()=>{},extractLastCodeBlock:()=>null,stripMarkdown:text=>text,examModeInfo:()=>({shortLabel:'quick',maxScreenshotPages:4})},
+    '@/lib/bridge':{setOverlaySize:async()=>{},setSessionActive:async()=>{}},
+    '@/lib/env':{isMac:()=>false,BRAND:'fixture'},'@/lib/hotkeys':{effectiveHotkeys:()=>({})},
+    './widgets':new Proxy({registerOverlayList(){}},{get:(target,key)=>key in target?target[key]:String(key)}),
+    './platform':{usePlatform:()=>({bindHotkey:(name,fn)=>{bindings.set(name,fn);return()=>{};}})},
+    '@tauri-apps/plugin-clipboard-manager':{writeText:async()=>{if(clipboardFails)throw new Error('clipboard unavailable');}},
+    '@/lib/events':{bus:{emit:(_event,message)=>notifications.push(message)}},
+  };
+  const api=evaluateFixture('src/overlay/ExamOverlay.tsx',{exports:{},console,require:name=>{if(!(name in modules))throw new Error(name);return modules[name];}});
+  const element=api.ExamOverlay({preview:false});
+  return {notifications,copy:async()=>{bindings.get('copy-code')();for(let i=0;i<30;i++)await Promise.resolve();},shell:()=>element.type(element.props)};
+}
+
+test('copy reports success, empty answers and clipboard errors (B10)', async()=>{
+  for(const [body,fails,type] of [['answer',false,'success'],['',false,'info'],['answer',true,'error']]){
+    const h=examOverlay(body,fails);await h.copy();assert.equal(h.notifications.at(-1)?.type,type);
+  }
+});
+
+test('parsed suggestions have visible follow-up actions (B29)',()=>{
+  const tree=examOverlay('answer').shell();
+  assert.ok(JSON.stringify(tree).includes('Why this result?'));
+});
+
+test('global error diagnostics keep only the latest 400 entries (B35)',async()=>{
+  const handlers=new Map(),win={addEventListener:(name,handler)=>handlers.set(name,handler)};
+  const jsx=()=>({});
+  const modules={react:{default:{StrictMode:'StrictMode'}},'react/jsx-runtime':{jsx,jsxs:jsx},'react-dom/client':{createRoot:()=>({render(){}})},'./index.css':{},'./lib/i18n':{applyDocumentLang(){},windowScene:()=> 'main'},'./lib/bridge':{isTauri:()=>false},'./lib/store':{},'./lib/backend':{},'./lib/aiSettings':{},'./App':{App(){}}};
+  evaluateFixture('src/main.tsx',{exports:{},window:win,document:{getElementById:()=>({}),documentElement:{classList:{toggle(){}}},body:{classList:{toggle(){}}}},console:{error(){}},require:name=>{if(!(name in modules))throw new Error(name);return modules[name];}});
+  for(let i=0;i<1000;i++)handlers.get('error')({message:'error '+i});
+  assert.equal(win.__errors.length,400);
+  assert.equal(win.__errors.at(-1),'error 999');
+});

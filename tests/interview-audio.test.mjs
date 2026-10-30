@@ -12,6 +12,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   let requests = 0;
   let permissionRequests = 0;
   const wavs = [];
+  const saved = [];
   let context;
   const timers = new Map();
   const nativeListeners = new Map();
@@ -34,7 +35,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       startSystemAudioCapture: nativeStart ?? (async () => ({ devices: [{ id: 'speaker-a', name: '测试耳机', is_default: true }], sampleRate: 16000, channels: 1 })),
       stopSystemAudioCapture: async () => { nativeStops++; }, setSystemAudioExcludedOutputs: async () => {} },
     './ai': { liveSpeechEnabled: () => live, buildInterviewSystemPrompt: () => '', chatStream: chat ?? (async () => '测试回答'), transcribeAudio: async (wav, options) => { requests++; wavs.push(wav); return transcribe ? transcribe(wav, options) : '请介绍一下你的项目经历'; } },
-    './backend': { readData: (key, fallback) => key === 'interviewSessions' ? sessions : fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async () => {}, completeSession: async () => { if(completionFails) throw new Error('Disk unavailable'); } },
+    './backend': { readData: (key, fallback) => key === 'interviewSessions' ? sessions : fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async (_id,patch) => {saved.push(patch);}, completeSession: async () => { if(completionFails) throw new Error('Disk unavailable'); } },
     './examEngine': { getSolverState: () => ({ turns: [] }) },
     './store': { getSetting: (key, fallback) => settings[key] ?? fallback, setSetting: async (key,value) => { settings[key] = value; } },
     './events': { bus: { emit() {} } },
@@ -78,7 +79,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   vm.runInContext(code, sandbox);
   const engine = sandbox.exports;
   engine.exposeEngineDebug();
-  return { engine, sandbox, wavs, track, get permissionRequests() { return permissionRequests; }, get resumed() { return resumed; }, get stopped() { return stopped; }, get requests() { return requests; },
+  return { engine, sandbox, saved, wavs, track, get permissionRequests() { return permissionRequests; }, get resumed() { return resumed; }, get stopped() { return stopped; }, get requests() { return requests; },
     async start(source = 'MICROPHONE') { await engine.startInterview({ goalId: null, resumeId: null, materialIds: [], audioSource: source }); await engine.beginListening(source); },
     get nativeStops() { return nativeStops; },
     get realtimeFrames() { return realtimeFrames; },
@@ -398,4 +399,16 @@ test('completion failure releases the interview engine and capture (B9)', async 
   assert.equal(h.engine.getInterviewEngineState().status, 'ended');
   assert.equal(h.track.enabled, true);
   assert.ok(h.stopped > 0);
+});
+
+
+test('streamed answers checkpoint before final completion (B14)', async()=>{
+  let options, resolve;
+  const h=harness({chat:async opts=>{options=opts;return new Promise(done=>{resolve=done;});}});
+  await h.start();const pending=h.engine.answerQuestion('question');
+  for(let i=0;i<20;i++)await Promise.resolve();
+  options.onDelta('partial answer');
+  for(let i=0;i<20;i++)await Promise.resolve();
+  assert.ok(h.saved.some(record=>record.messages?.some(message=>message.text==='partial answer')));
+  resolve('final answer');await pending;await h.engine.endInterview(false);
 });
