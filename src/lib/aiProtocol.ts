@@ -2,6 +2,11 @@ import { bailianConnection, isSpeechRecognitionModel, normalizeProvider, validat
 import { isSpeechSynthesisModel } from './ttsConfig.js';
 
 export type AiFetch = (url: string, init: RequestInit) => Promise<Response>;
+export type CompletionStatus = 'complete' | 'truncated' | 'refused' | 'unknown' | 'cancelled' | 'failed';
+export interface ChatCompletion {text:string;completionStatus:CompletionStatus;finishReason?:string;usage?:{inputTokens?:number;outputTokens?:number;cachedTokens?:number}}
+export class AiCompletionError extends Error {
+  constructor(message:string,public partialText:string,public completionStatus:CompletionStatus) {super(message);this.name='AiCompletionError';}
+}
 /** Transcription accepts ISO-639-1 (zh/en), while UI preferences use locales. */
 export function transcriptionLanguage(locale?: string): string | undefined {
   const language = locale?.trim().toLowerCase().split(/[-_]/)[0];
@@ -59,6 +64,8 @@ export async function withAiRequest<T>(
     return await consume(response, scope.signal);
   } catch (error) {
     if (scope.signal.aborted) throw scope.signal.reason ?? new DOMException('已取消请求', 'AbortError');
+    if (error instanceof AiCompletionError) throw new AiCompletionError(redactError(error.message,normalized.apiKey),
+      normalized.apiKey ? error.partialText.split(normalized.apiKey).join('[密钥已隐藏]') : error.partialText,error.completionStatus);
     if (error instanceof Error) throw new Error(redactError(error.message, normalized.apiKey));
     if (typeof error === 'string' && error.includes('url not allowed')) throw new Error('接口地址被桌面 HTTP 权限拦截，请使用已更新的客户端');
     throw new Error('无法连接接口，请检查地址、网络、证书和服务状态');
@@ -139,48 +146,68 @@ function extractText(value: unknown): string {
   return '';
 }
 /** One parser for both text and vision, including split UTF-8 and final unterminated lines. */
-export async function consumeChat(response: Response, onDelta?: (text: string) => void): Promise<string> {
+export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal): Promise<ChatCompletion> {
   if (!response.body) throw new Error('接口未返回响应内容');
   const type = response.headers.get('content-type') ?? '';
+  let full='',finishReason:string|undefined,ended=false,refused=false;
+  let usage:ChatCompletion['usage'];
+  const consume = (json: {error?:{message?:string};choices?:{finish_reason?:string;delta?:{content?:unknown;refusal?:unknown};message?:{content?:unknown;refusal?:unknown}}[];usage?:{prompt_tokens?:number;completion_tokens?:number;prompt_tokens_details?:{cached_tokens?:number}}}) => {
+    if(json.error)throw new Error(json.error.message || '模型请求失败');
+    const choice=json.choices?.[0];
+    if(choice?.finish_reason)finishReason=choice.finish_reason;
+    if(choice?.delta?.refusal || choice?.message?.refusal)refused=true;
+    const text=extractText(choice?.delta?.content ?? choice?.message?.content);
+    if(text){full+=text;if(full.length>2_000_000)throw new Error('回答过长，请缩小任务范围。');onDelta?.(text);}
+    if(json.usage)usage={inputTokens:json.usage.prompt_tokens,outputTokens:json.usage.completion_tokens,cachedTokens:json.usage.prompt_tokens_details?.cached_tokens};
+  };
   if (type.includes('application/json')) {
-    const json = await response.json();
-    if (json.error) throw new Error(typeof json.error.message === 'string' ? json.error.message : '模型请求失败');
-    const text = extractText(json.choices?.[0]?.message?.content);
-    if (!text) throw new Error('接口未返回可用的回答，请确认模型支持 Chat Completions');
-    onDelta?.(text);
-    return text;
-  }
+    consume(await response.json());
+  } else {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
-  let full = '';
-  let finished = false;
+  let buffer = '',eventData:string[]=[];
   const parseLine = (line: string) => {
-    if (!line.startsWith('data:')) return;
-    const data = line.slice(5).trim();
-    if (!data) return;
-    if (data === '[DONE]') { finished = true; return; }
+    if(line.startsWith('data:'))eventData.push(line.slice(5).trimStart());
+    else if(line!=='' || !eventData.length)return;
+    if(line!=='')return;
+    const data=eventData.join('\n').trim();eventData=[];
+    if(!data)return;
+    if (data === '[DONE]') { ended = true; return; }
     let json;
     try { json = JSON.parse(data); } catch { throw new Error('接口返回了无效的流式数据'); }
-    if (json.error) throw new Error(typeof json.error.message === 'string' ? json.error.message : '模型请求失败');
-    const text = extractText(json.choices?.[0]?.delta?.content);
-    if (text) { full += text; onDelta?.(text); }
+    consume(json);
   };
+  const abort=()=>{void reader.cancel().catch(()=>{});};
+  signal?.addEventListener('abort',abort,{once:true});
   try {
-    while (!finished) {
+    while (!ended) {
+      signal?.throwIfAborted();
       const { value, done } = await reader.read();
+      signal?.throwIfAborted();
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       if (buffer.length > 1_048_576) throw new Error('接口返回的单条流式消息过大');
       let newline;
-      while (!finished && (newline = buffer.indexOf('\n')) >= 0) {
+      while (!ended && (newline = buffer.indexOf('\n')) >= 0) {
         parseLine(buffer.slice(0, newline).replace(/\r$/, ''));
         buffer = buffer.slice(newline + 1);
       }
-      if (done) { if (!finished && buffer.trim()) parseLine(buffer.replace(/\r$/, '')); break; }
+      if(eventData.join('').length>1_048_576)throw new Error('接口返回的单条流式消息过大');
+      if (done) {if(buffer.trim())parseLine(buffer.replace(/\r$/,''));parseLine('');break;}
     }
-  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  } catch(error) {
+    if(full && !signal?.aborted)throw new AiCompletionError(String((error as Error).message || '输出中断'),full,'failed');
+    throw error;
+  } finally {signal?.removeEventListener('abort',abort);await reader.cancel().catch(() => {}); reader.releaseLock();}
+  }
+  const completionStatus:CompletionStatus=finishReason==='length'?'truncated':refused||finishReason==='content_filter'?'refused':finishReason==='stop'?'complete':'unknown';
+  if(completionStatus==='truncated')throw new AiCompletionError('回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。',full,'truncated');
+  if(completionStatus==='refused')throw new AiCompletionError('模型未能完成此请求，已保留已有内容。',full,'refused');
   if (!full) throw new Error('模型没有返回文本回答，请确认该模型支持此用途');
-  return full;
+  return {text:full,completionStatus,finishReason,usage};
+}
+/** Compatibility facade; task callers use consumeChatResult to retain completion metadata. */
+export async function consumeChat(response:Response,onDelta?:(text:string)=>void):Promise<string>{
+  return (await consumeChatResult(response,onDelta)).text;
 }
 export async function testChatModel(provider: AiProvider, modelId: string, fetcher: AiFetch, signal?: AbortSignal): Promise<{ latencyMs: number; sample: string }> {
   const selectedModel = validateModelId(modelId);

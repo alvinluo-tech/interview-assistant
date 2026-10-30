@@ -1,5 +1,6 @@
 /** Pure BYOK schema and validation, shared by settings, requests and regression tests. */
 import { bailianRegion, DEFAULT_REALTIME_ENDPOINT, isRealtimeAsrModel, validateRealtimeEndpoint } from './realtimeAsrProtocol.js';
+import type {ModelCapabilities} from './aiTaskPolicy.js';
 export const AI_ROLES = ['chat', 'vision', 'stt', 'tts'] as const;
 export type AiRole = typeof AI_ROLES[number];
 export const ROLE_LABELS: Record<AiRole, string> = {
@@ -16,6 +17,7 @@ export interface AiModel {
   id: string;
   name: string;
   source: 'discovered' | 'custom';
+  capabilities?:ModelCapabilities;
 }
 export interface AiProvider {
   id: string;
@@ -123,7 +125,21 @@ export function normalizeProvider(provider: AiProvider): AiProvider {
     if (seen.has(id)) throw new Error(`模型 ID 重复：${id}`);
     seen.add(id);
     if (!['custom', 'discovered'].includes(model.source)) throw new Error('模型来源无效');
-    return { id, name: (model.name || id).trim().slice(0, 160), source: model.source };
+    const capabilities=model.capabilities;
+    if(capabilities){
+      if(capabilities.contextWindow!==undefined&&(!Number.isInteger(capabilities.contextWindow)||capabilities.contextWindow<1024||capabilities.contextWindow>2000000))throw new Error('模型上下文窗口需为 1024–2000000 token');
+      if(capabilities.maxOutputTokens!==undefined&&(!Number.isInteger(capabilities.maxOutputTokens)||capabilities.maxOutputTokens<256||capabilities.maxOutputTokens>200000))throw new Error('模型输出上限需为 256–200000 token');
+      if(capabilities.outputParameter&&!['max_tokens','max_completion_tokens','none'].includes(capabilities.outputParameter))throw new Error('输出参数无效');
+      if(capabilities.structuredOutput&&!['text','json_object','json_schema'].includes(capabilities.structuredOutput))throw new Error('结构化输出模式无效');
+      if(capabilities.temperature!==undefined&&typeof capabilities.temperature!=='boolean')throw new Error('温度能力配置无效');
+    }
+    return { id, name: (model.name || id).trim().slice(0, 160), source: model.source,...(capabilities?{capabilities:{
+      ...(capabilities.contextWindow!==undefined?{contextWindow:capabilities.contextWindow}:{}),
+      ...(capabilities.maxOutputTokens!==undefined?{maxOutputTokens:capabilities.maxOutputTokens}:{}),
+      ...(capabilities.outputParameter?{outputParameter:capabilities.outputParameter}:{}),
+      ...(capabilities.structuredOutput?{structuredOutput:capabilities.structuredOutput}:{}),
+      ...(capabilities.temperature!==undefined?{temperature:capabilities.temperature}:{}),
+    }}:{}) };
   });
   if (models.length > 2000) throw new Error('单个连接最多保存 2000 个模型');
   return { id: provider.id, name, baseUrl: normalizeBaseUrl(provider.baseUrl), apiKey, authMode: provider.authMode, models, lastFetchedAt: provider.lastFetchedAt ?? null };
@@ -184,7 +200,7 @@ export function mergeDiscoveredModels(provider: AiProvider, ids: { id: string; n
   for (const model of ids) {
     const id = validateModelId(model.id);
     const old = previous.get(id);
-    result.set(id, old?.source === 'custom' ? old : { id, name: model.name || id, source: 'discovered' });
+    result.set(id, old?.source === 'custom' ? old : { id, name: model.name || id, source: 'discovered',...(old?.capabilities?{capabilities:old.capabilities}:{}) });
   }
   const assigned = new Set(Object.values(routes).filter(r => r?.providerId === provider.id).map(r => r!.modelId));
   for (const old of provider.models) {

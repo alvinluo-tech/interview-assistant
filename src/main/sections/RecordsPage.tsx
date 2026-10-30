@@ -22,6 +22,7 @@ import {
   type InterviewSession,
 } from '@/lib/backend';
 import { generateMockReport, mockMeta } from '@/lib/mock';
+import {currentMockKnowledge} from '@/lib/sessionKnowledge';
 import { useAiReady } from '@/lib/aiSettings';
 import { mdToPlain, Md } from '@/overlay/Md';
 import { MockReportDialog } from './MockReportDialog';
@@ -90,7 +91,8 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
       await updateSession(s.id, {
         metadata: { ...(s.metadata ?? {}), reportStatus: 'pending', reportError: undefined },
       });
-      const report = await generateMockReport(s.messages);
+      const config=mockMeta(s)?.config;
+      const report = await generateMockReport(s.messages,undefined,config?currentMockKnowledge(config):undefined);
       await updateSession(s.id, {
         metadata: { ...(s.metadata ?? {}), report, reportStatus: 'ready', reportError: undefined },
       });

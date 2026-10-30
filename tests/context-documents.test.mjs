@@ -31,11 +31,12 @@ test('answer prompts preserve the selected JD and relevant document excerpts rat
 
 test('mock interviewer receives the same full document context', async () => {
   let sent;
-  const mock = moduleFrom('src/lib/mock.ts', { './ai': { chatStream: async options => { sent = options.messages; return '请介绍一下你的支付幂等设计'; } } });
+  const mock = moduleFrom('src/lib/mock.ts', { './knowledgeContext': moduleFrom('src/lib/knowledgeContext.ts'), './ai': { chatStream: async options => { sent = options.messages; return '请介绍一下你的支付幂等设计'; } } });
   await mock.generateOpeningQuestion({ goalName: '后端', difficultyLabel: '3-5 年', turnBudget: 5, basicsRatio: 50, assistMode: false,
     knowledgeContext: '【J1】必须掌握支付幂等\n【R1】负责 Redis request_id 设计' });
-  assert.match(sent[0].content, /必须掌握支付幂等/);
-  assert.match(sent[0].content, /Redis request_id/);
+  assert.doesNotMatch(sent[0].content, /Redis request_id/);
+  assert.match(JSON.stringify(sent), /必须掌握支付幂等/);
+  assert.match(JSON.stringify(sent), /Redis request_id/);
 });
 
 test('a failed document save is rejected and does not appear in the local resume list', async () => {

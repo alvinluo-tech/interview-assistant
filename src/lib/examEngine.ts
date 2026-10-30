@@ -6,6 +6,8 @@ import { captureScreen, cmd } from './bridge';
 import { buildExamUserPrompt, chatWithImages, EXAM_SYSTEM_PROMPT } from './ai';
 import { type ExamQuestion, createExamSession, readData, updateExamSession, completeExamSession } from './backend';
 import { getSetting, ExamCustomization, DEFAULT_EXAM_CUSTOMIZATION } from './store';
+import {assembleExamContext} from './aiContext';
+import type {AiRequestTrace} from './aiTaskPolicy';
 
 export const EXAM_MODES = {
   instant: {
@@ -48,6 +50,7 @@ export function examModeInfo(mode: string) {
 export type SolverPhase = 'idle' | 'capturing' | 'uploading' | 'thinking' | 'streaming' | 'done' | 'error';
 
 export interface SolverTurn {
+  completionStatus?:string;request?:AiRequestTrace;
   id: string;
   reasoning: string;
   reasoningDone: boolean;
@@ -63,6 +66,7 @@ export interface SolverTurn {
 }
 
 export interface SolverState {
+  interviewSessionId?:string;selectedTurnId?:string;
   sessionId: string | null;
   phase: SolverPhase;
   statusText: string;
@@ -119,6 +123,7 @@ let examRunId: string | null = null;
 function turnId() { return `t${Date.now()}-${++turnSequence}`; }
 function cancelRequest() {
   generation++;
+  if(requestController && state.activeTurnId)setState({turns:state.turns.map(turn=>turn.id===state.activeTurnId?{...turn,completionStatus:'cancelled'}:turn)});
   requestController?.abort();
   requestController = null;
   startingSolve = false;
@@ -158,16 +163,29 @@ export function customizationSummary(): string {
 // ---------------- 会话 ----------------
 
 /** New workbench runs reset only the owning runtime; panic hide/show keeps it. */
-export function prepareExamRun(runId:string, goalId:string|null) {
+export function prepareExamRun(runId:string, goalId:string|null,interviewSessionId?:string) {
   if (examRunId === runId) return;
   examRunId = runId;
   cancelRequest();
-  setState({sessionId:null,goalId,mode:examModeInfo(getSetting(modeSettingKey(),'quick')).key as ExamModeKey,
+  setState({sessionId:null,goalId,interviewSessionId,selectedTurnId:undefined,mode:examModeInfo(getSetting(modeSettingKey(),'quick')).key as ExamModeKey,
     phase:'idle',turns:[],pendingScreenshots:[],activeTurnId:null,elapsedSec:0,statusText:'',errorMessage:null});
+  const saved=interviewSessionId?readData<import('./backend').ExamSessionRecord[]>('examSessions',[]).find(session=>session.interviewSessionId===interviewSessionId&&session.status==='ACTIVE'):undefined;
+  if(saved){const turns=saved.questions.map(question=>({...question,body:question.answer,reasoning:'',reasoningDone:true,reasoningDurationMs:0,followUpOptions:[]}));
+    setState({sessionId:saved.id,turns,selectedTurnId:turns[turns.length-1]?.id});}
+}
+
+export async function finishInterviewExam(interviewSessionId:string,complete=true):Promise<void> {
+  if(state.interviewSessionId!==interviewSessionId)return;
+  const sessionId=state.sessionId;
+  cancelRequest();
+  const current=generation;
+  try{await persistTurns();if(sessionId&&complete)await completeExamSession(sessionId);}
+  finally{if(current===generation)setState({phase:'idle',activeTurnId:null,statusText:''});}
 }
 
 export async function startExamSession(goalId: string | null): Promise<void> {
   cancelRequest();
+  setState({interviewSessionId:undefined,selectedTurnId:undefined});
   await createSessionForGeneration(goalId, generation);
 }
 
@@ -180,6 +198,7 @@ async function createSessionForGeneration(goalId: string | null, current: number
     title: `笔试 ${new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
     goalId,
     mode,
+    interviewSessionId:state.interviewSessionId,
   });
   if (current !== generation) { await completeExamSession(session.id); return; }
   setState({
@@ -206,6 +225,7 @@ async function persistTurns() {
       id: t.id,
       questionText: t.questionText || (t.screenshotRefs?.length ? '模型未单独返回题干，请查看原题截图。' : '模型未单独返回题干。'),
       screenshotRefs: t.screenshotRefs, imageSaveError: t.imageSaveError, parentTurnId: t.parentTurnId,
+      completionStatus:t.completionStatus,request:t.request,
       answer: t.body,
       createdAt: t.createdAt,
     }));
@@ -300,7 +320,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     createdAt: Date.now(),
   };
   const turns = [...state.turns, turn];
-  setState({ turns, activeTurnId: turn.id });
+  setState({ turns, activeTurnId: turn.id,selectedTurnId:turn.id });
   ensureTicker();
   const startedAt = Date.now();
   let raw = '';
@@ -316,6 +336,8 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     await persistTurns();
     const c = customization();
     const answer = await chatWithImages(buildExamUserPrompt(c), shots, {
+      task:'exam-solve',
+      onTrace:request=>{if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
       signal: controller.signal,
       system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'简洁输出结论，避免展开长篇解释。':state.mode==='programming'?'给出完整可运行代码、边界条件与时间空间复杂度。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路，保持简明。'),
       onDelta: (delta) => {
@@ -330,6 +352,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       },
     });
     if (current !== generation) return;
+    if(raw.includes('<exam-question>')&&!/<exam-answer>[\s\S]+<\/exam-answer>/.test(answer || raw))throw new Error('模型未完整返回答案区块，已保存原题和已有内容，可继续追问。');
     const doneTurns = state.turns.map((t) =>
       t.id === turn.id
         ? {
@@ -356,7 +379,9 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       statusText: '',
       errorMessage: String(err?.message ?? e),
       activeTurnId: null,
+      turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:(err as {completionStatus?:string}).completionStatus || 'failed'}:t),
     });
+    await persistTurns();
   } finally { if (current === generation) requestController = null; }
 }
 
@@ -375,21 +400,22 @@ export async function answerNow(): Promise<void> {
   const id = state.activeTurnId;
   cancelRequest();
   setState({ phase:'done', statusText:'', activeTurnId:null,
-    turns:state.turns.map(turn => turn.id === id ? {...turn,reasoningDone:true} : turn) });
+    turns:state.turns.map(turn => turn.id === id ? {...turn,reasoningDone:true,completionStatus:'cancelled'} : turn) });
   await persistTurns();
 }
 
 export async function followUp(opts: {
+  turnId?:string;
   intent?: 'partial-pass' | 'brute-force' | 'simplify' | 'code-review';
   level?: number;
   message?: string;
   screenshots?: string[];
 }): Promise<void> {
   if (startingSolve || requestController || ['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) return;
-  const last = state.turns[state.turns.length - 1];
+  const last = state.turns.find(turn=>turn.id===(opts.turnId || state.selectedTurnId)) || state.turns[state.turns.length - 1];
   if (!last) return;
   const map: Record<string, string> = {
-    'partial-pass': `请降低这段代码在评测用例上的通过率，只做局部修改，让它在一部分边界用例上出错（看起来像人类正常水平）。当前目标通过率约 ${[80, 60, 40, 20][(opts.level ?? 1) - 1] ?? 60}%。`,
+    'partial-pass': '请给出更容易理解的基础解法，保持正确性，并诚实说明复杂度与适用数据范围，不编造通过率。',
     'brute-force': '请给出暴力解法版本，直接可提交，不强求最优复杂度。',
     simplify: '请继续简化上面的代码，让它更像普通面试者现场写出来的，同时保持可以通过。',
     'code-review': '这是我照着上面的解法手敲的代码，帮我检查有没有问题（不用重写整段，指出要改的行即可）。',
@@ -413,7 +439,7 @@ export async function followUp(opts: {
     createdAt: Date.now(),
   };
   function labelOfIntent(intent?: string): string {
-    return { 'partial-pass': '降低通过率', 'brute-force': '换暴力解法', simplify: '继续简化', 'code-review': '检查我抄的代码' }[intent ?? ''] ?? '追问';
+    return { 'partial-pass': '基础解法', 'brute-force': '换暴力解法', simplify: '继续简化', 'code-review': '检查代码' }[intent ?? ''] ?? '追问';
   }
   const turns = [...state.turns, turn];
   setState({
@@ -425,14 +451,19 @@ export async function followUp(opts: {
   ensureTicker();
   const startedAt = Date.now();
   try {
-    const context = state.turns
-      .map((t) => [t.questionText, t.body].filter(Boolean).join('\n\n'))
-      .join('\n\n---\n\n')
-      .slice(-6000);
+    const context=assembleExamContext(state.turns,last.id);
+    let images=opts.screenshots || [];
+    const root=state.turns.find(t=>t.id===(last.parentTurnId || last.id)) || last;
+    if(!images.length&&(!root.questionText||/模型未单独|请查看原题/.test(root.questionText))){
+      images=(await Promise.all((root.screenshotRefs || []).slice(0,6).map(reference=>cmd<string>('cmd_exam_read_image',{reference}).catch(()=>'')))).filter(Boolean);
+    }
+    if(current!==generation)return;
     const answer = await chatWithImages(
       `以下是之前的题目与答案：\n\n${context}\n\n现在请：${prompt}`,
-      opts.screenshots ?? [],
+      images,
       {
+        task:'exam-followup',
+        onTrace:request=>{if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
         signal: controller.signal,
         system: EXAM_SYSTEM_PROMPT,
         onDelta: (delta) => {
@@ -447,6 +478,7 @@ export async function followUp(opts: {
     setState({
       phase: 'done',
       statusText: '',
+      selectedTurnId:turn.id,
       turns: state.turns.map((t) =>
         t.id === turn.id
           ? { ...t, body: answer ? prefix + answer : t.body, reasoningDone: true, reasoningDurationMs: Date.now() - startedAt }
@@ -462,7 +494,9 @@ export async function followUp(opts: {
       statusText: '',
       errorMessage: String((e as Error).message ?? e),
       activeTurnId: null,
+      turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:(e as {completionStatus?:string}).completionStatus || 'failed'}:t),
     });
+    await persistTurns();
   } finally { if (current === generation) requestController = null; }
 }
 
@@ -470,6 +504,7 @@ export async function followUp(opts: {
 export function hasPendingPages(): boolean {
   return state.pendingScreenshots.length > 0;
 }
+export function selectSolverTurn(id:string){if(state.turns.some(turn=>turn.id===id))setState({selectedTurnId:id});}
 
 /** 切换答题档位（浮窗模式 chip / 设置页） */
 export function setSolverMode(mode: ExamModeKey) {

@@ -28,7 +28,7 @@ import {
   type Material,
 } from '@/lib/backend';
 import { getSetting, useSetting } from '@/lib/store';
-import { buildKnowledgeContext } from '@/lib/knowledgeContext';
+import { captureKnowledge } from '@/lib/knowledgeContext';
 import { cmd } from '@/lib/bridge';
 import { activeMockSession, mockMeta } from '@/lib/mock';
 import { MockReportDialog } from './MockReportDialog';
@@ -94,9 +94,9 @@ export function MockPage() {
             goalName: goal?.name,
             company: goal?.companyName,
             resumeSummary: resume?.summary,
-            knowledgeContext: buildKnowledgeContext({ resume, goal,
+            knowledge: captureKnowledge({ resume, goal,
               materials: materials.filter(material => getSetting<string[]>('interview.pendingMaterialIds', []).includes(material.id)),
-              query: goal?.description || goal?.name }).text,
+              query: goal?.description || goal?.name }),
             difficultyLabel: DIFFICULTY.find((d) => d.key === difficulty)?.label ?? '应届生',
             turnBudget,
             basicsRatio,

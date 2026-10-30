@@ -105,6 +105,9 @@ jobs:
       - name: Test permission and native capture bridge
         run: pnpm test:platform
 
+      - name: AI context and task policy coverage
+        run: pnpm test:ai
+
       - name: Test session and overlay regression contracts
         run: pnpm test:bug-review
 

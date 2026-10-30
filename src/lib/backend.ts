@@ -158,7 +158,10 @@ export interface ChatMessage {
   role: ChatRole;
   text: string;
   createdAt: number;
-  metadata?: { turnKind?: 'NEW' | 'CONT' | 'SKIP'; webSearch?: { queries: string[]; sources: string[] } };
+  metadata?: { turnKind?: 'NEW' | 'CONT' | 'SKIP'; webSearch?: { queries: string[]; sources: string[] };
+    origin?:'audio_transcript'|'typed'|'model_generated'|'candidate_response'|'legacy_unknown';
+    questionId?:string;revision?:number;contextCutoffId?:string;superseded?:boolean;completionStatus?:string;hintUsed?:boolean;
+    sources?:import('./knowledgeContext').ContextSource[];request?:import('./aiTaskPolicy').AiRequestTrace };
   pending?: boolean;
 }
 
@@ -178,6 +181,8 @@ export interface InterviewSession {
 }
 
 export interface ExamQuestion {
+  completionStatus?:string;
+  request?:import('./aiTaskPolicy').AiRequestTrace;
   screenshotRefs?: string[];
   imageSaveError?: string;
   parentTurnId?: string;
@@ -188,6 +193,7 @@ export interface ExamQuestion {
 }
 
 export interface ExamSessionRecord {
+  interviewSessionId?:string;
   id: string;
   title: string;
   goalId?: string | null;
@@ -222,6 +228,7 @@ export interface MaterialEntry {
   id: string;
   question: string;
   answer: string;
+  origin?:'model_generated'|'manual'|'legacy_unknown';
 }
 
 export interface Material {
@@ -406,7 +413,7 @@ export async function deleteMaterial(id: string) {
   await persist('materials', materials.filter((m) => m.id !== id));
 }
 
-export async function saveEntry(materialId: string, entry: { id?: string; question: string; answer: string }) {
+export async function saveEntry(materialId: string, entry: { id?: string; question: string; answer: string;origin?:MaterialEntry['origin'] }) {
   const materials = readData<Material[]>('materials', []);
   const next = materials.map((m) => {
     if (m.id !== materialId) return m;
@@ -420,7 +427,7 @@ export async function saveEntry(materialId: string, entry: { id?: string; questi
     return {
       ...m,
       updatedAt: Date.now(),
-      entries: [...m.entries, { ...entry, id: uid('entry') }],
+        entries: [...m.entries, { ...entry,origin:entry.origin || 'manual', id: uid('entry') }],
     };
   });
   await persist('materials', next);

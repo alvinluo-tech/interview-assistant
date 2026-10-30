@@ -27,6 +27,8 @@ import {
 import { updateSession, useData, type ChatMessage, type InterviewSession } from '@/lib/backend';
 import { AvatarMark } from './AvatarMark';
 import { questionSpeaker } from '@/lib/questionSpeech';
+import {currentMockKnowledge} from '@/lib/sessionKnowledge';
+import {retryDelay} from '@/lib/aiTaskPolicy';
 import type { SpeechPhase } from '@/lib/questionSpeaker';
 import './room.css';
 
@@ -39,7 +41,7 @@ function newMessage(role: ChatMessage['role'], text: string, turnKind?: 'NEW' | 
     role,
     text,
     createdAt: Date.now(),
-    ...(turnKind ? { metadata: { turnKind } } : {}),
+    metadata:{...(turnKind?{turnKind}:{}),origin:role==='INTERVIEWER'?'model_generated':'candidate_response'},
   };
 }
 
@@ -75,6 +77,8 @@ function MockRoom() {
   const [elapsed, setElapsed] = useState(0);
   /** 出题失败的自动重试计数：提交/开场失败后触发 effect 重跑 */
   const [retryTick, setRetryTick] = useState(0);
+  const [questionError,setQuestionError]=useState('');
+  const retryAttempts=useRef(0),retryBlocked=useRef(false);
   const recorderRef = useRef<VoiceRecording|null>(null);
   const [voicePreview,setVoicePreview] = useState('');
   const [voiceStatus,setVoiceStatus] = useState('');
@@ -84,6 +88,12 @@ function MockRoom() {
   const requestGeneration = useRef(0);
   const questionRequest = useRef<AbortController | null>(null);
   const retryTimer = useRef<number | null>(null);
+  const scheduleQuestionRetry=(error:unknown)=>{
+    const delay=retryDelay(error,retryAttempts.current);
+    setQuestionError(String((error as Error).message || error));
+    if(delay===null){retryBlocked.current=true;return;}
+    retryAttempts.current++;retryTimer.current=window.setTimeout(()=>setRetryTick(t=>t+1),delay);
+  };
   const aiReady = useAiReady('chat');
   const speechSettings = useAiSettings();
 
@@ -101,23 +111,24 @@ function MockRoom() {
 
   // Opening/resume requests are cancelled when the room ends or unmounts.
   useEffect(() => {
-    if (!session || !config || done || busyRef.current) return;
+    if (!session || !config || done || busyRef.current || retryBlocked.current) return;
     const msgs = session.messages;
     if (msgs[msgs.length - 1]?.role === 'INTERVIEWER' || !aiReady) return;
     const generation = ++requestGeneration.current;
     const controller = new AbortController(); questionRequest.current = controller;
-    busyRef.current = true; setThinking(true);
+    busyRef.current = true; setThinking(true);setQuestionError('');
     void (async () => {
       try {
         const reply = msgs.length === 0
-          ? {question: await generateOpeningQuestion(config, controller.signal), turnKind:'NEW' as const}
-          : await generateNextQuestion(config, msgs, controller.signal);
+          ? {question: await generateOpeningQuestion(currentMockKnowledge(config), controller.signal), turnKind:'NEW' as const}
+          : await generateNextQuestion(currentMockKnowledge(config), msgs, controller.signal);
         if (controller.signal.aborted || generation !== requestGeneration.current) return;
         await updateSession(session.id, {messages:[...msgs, newMessage('INTERVIEWER',reply.question,reply.turnKind)]});
+        retryAttempts.current=0;
       } catch (error) {
         if (controller.signal.aborted || generation !== requestGeneration.current) return;
         showToast({type:'error',title:'面试官出题失败',description:String((error as Error).message || error)});
-        retryTimer.current = window.setTimeout(() => setRetryTick(t => t + 1), 1500);
+        scheduleQuestionRetry(error);
       } finally {
         if (generation === requestGeneration.current) {busyRef.current = false; setThinking(false);}
       }
@@ -147,7 +158,7 @@ function MockRoom() {
     setHints((h) => ({ ...h, [currentQuestion.id]: '' }));
     void (async () => {
       try {
-        const hint = await generateHint(config, currentQuestion.text, controller.signal);
+        const hint = await generateHint(currentMockKnowledge(config), currentQuestion.text, controller.signal);
         if (!controller.signal.aborted) setHints((h) => ({ ...h, [currentQuestion.id]: hint }));
       } catch {
         if (controller.signal.aborted) return;
@@ -300,7 +311,7 @@ function MockRoom() {
       setGeneratingReport(true);
       const reportRequest = new AbortController(); questionRequest.current = reportRequest;
       try {
-        const text = await generateMockReport(finalMessages, reportRequest.signal);
+        const text = await generateMockReport(finalMessages, reportRequest.signal,config?currentMockKnowledge(config):undefined);
         if (reportRequest.signal.aborted) return;
         await updateSession(session.id, {
           metadata: { ...(session.metadata ?? {}), report: text, reportStatus: 'ready', reportError: undefined },
@@ -333,6 +344,7 @@ function MockRoom() {
     try {
       const base = session.messages;
       const answer = newMessage('ASSISTANT', text);
+      answer.metadata={...answer.metadata,questionId:currentQuestion?.id,hintUsed:assistEnabled&&!!(currentQuestion&&hints[currentQuestion.id])};
       await updateSession(session.id, { messages: [...base, answer] });
       answerSaved = true;
       if (controller.signal.aborted || generation !== requestGeneration.current) return;
@@ -342,16 +354,17 @@ function MockRoom() {
         await finish(withAnswer);
         return;
       }
-      const next = await generateNextQuestion(config, withAnswer, controller.signal);
+      const next = await generateNextQuestion(currentMockKnowledge(config), withAnswer, controller.signal);
       if (controller.signal.aborted || generation !== requestGeneration.current) return;
       await updateSession(session.id, {
         messages: [...withAnswer, newMessage('INTERVIEWER', next.question, next.turnKind)],
       });
+      retryAttempts.current=0;setQuestionError('');
     } catch (e) {
       if (controller.signal.aborted || generation !== requestGeneration.current) return;
       if (!answerSaved) setDraft(text);
       showToast({ type: 'error', title: answerSaved ? '回答已保存，正在重试出题' : '回答未保存，请重试', description: String((e as Error).message ?? e) });
-      if (answerSaved) retryTimer.current = window.setTimeout(() => setRetryTick((t) => t + 1), 1500);
+      if (answerSaved) scheduleQuestionRetry(e);
     } finally {
       if (generation === requestGeneration.current) {busyRef.current = false; setThinking(false);}
     }
@@ -432,6 +445,7 @@ function MockRoom() {
           <div className="mock-question" aria-live="polite"><span className="mock-question-label">{thinking ? '面试官正在思考' : '当前问题'}</span><p>{currentQuestion?.text || (thinking ? '面试官正在准备开场问题…' : '准备好后开始对话。')}</p>
             {currentQuestion && <button disabled={recording || transcribing || thinking} title={speechPhase !== 'idle' ? '停止本次朗读，自动播报开关保持不变' : '重新朗读当前问题；已生成的云端音频优先从本场缓存播放'} aria-label={speechPhase !== 'idle' ? '停止朗读' : '朗读当前问题'} onClick={() => {if (speechPhase !== 'idle') player.stop();else if (!ttsOn) setTtsOn(true);else void player.speak(currentQuestion.text);}}>{speechPhase === 'preparing' ? <Loader2 size={16} className="animate-spin" /> : speechPhase === 'speaking' ? <Square size={16} /> : <Volume2 size={16} />}</button>}
           </div>
+          {questionError&&<div role="alert" className="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200"><p>{questionError}</p><Button size="sm" variant="outline" className="mt-2" disabled={thinking} onClick={()=>{retryBlocked.current=false;retryAttempts.current=0;if(retryTimer.current)window.clearTimeout(retryTimer.current);setQuestionError('');setRetryTick(t=>t+1);}}>重试出题</Button></div>}
           {assistEnabled && currentQuestion && hints[currentQuestion.id] && <div className="mock-hint"><Sparkles size={14} /><p>{hints[currentQuestion.id]}</p></div>}
           <button className={`mock-assist-toggle ${assistEnabled ? 'enabled' : ''}`} aria-pressed={assistEnabled} onClick={() => setAssistOverride(!assistEnabled)}><Sparkles size={14} /> AI 辅助 {assistEnabled ? '已开启' : '已关闭'}</button>
         </section>

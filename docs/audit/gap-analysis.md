@@ -3,8 +3,59 @@
 > 方法：以 `_recon/spec/00-05.md`（约 235KB 逆向规格）为权威清单，逐项对照本仓库 `src/`、`src-tauri/src/` 实现。
 > 每一项给出：官方行为（spec 出处）→ 复刻现状（文件:行）→ 判定（✅ 对齐 / ⚠️ 部分 / ❌ 缺失 / 🔵 有意不做）→ 借鉴建议与优先级。
 > 与 `docs/original-app-gap-analysis.md`（能力质量视角）、`docs/gap-2026-10-28.md`（16 项总表）互补；本文是**逐功能全量清单**，粒度到控件/交互/文案级。
-> 比对基线：官方 `original-app/app.exe` 0.3.16（h5 热补丁，`_recon/frontend*/`）；复刻仓库当前工作区（2026-10-30）。
+> 比对基线：官方 `original-app/app.exe` 0.3.16（**UI 热补丁已更新至 0.3.16-h13**，2026-10-30 下发；h5→h13 全量语义 diff 见第 0 章，提取件 `_recon/frontend-h13/`）；复刻仓库当前工作区（2026-10-30）。
 > 规模：6 章约 90 个对照点，覆盖 spec 00-05 全部功能面 + 42 个原生命令 + emit 事件 + store 键 + mac 端能力；配套 bug 清单见 [bug-findings.md](bug-findings.md)（38 条）。
+
+
+## 第 0 章 热补丁基线更新：h5 → h13（2026-10-30 重新逆向）
+
+原生 exe 未变（0.3.16，2026-10-27 10:46，22,418,376 字节）；UI 热补丁从 h5 连续更新到 h13（本机 hotpatch/versions 保留 h7/h8/h9/h10/h11/h13，current.json → 0.3.16-h13）。
+方法：git diff --no-index -U3 对 h5/h13 两个美化 bundle（tauri-cmds 27k 行、bootstrap 54k 行）做 unified diff，再按「混淆重命名归一化」过滤（semantic diff：tauri-cmds 269 对、bootstrap 1125 对，纯新增 178+523 行，中文纯删除 0 行——**无功能被移除，全部为新增/重构**）。
+
+### 0.1 h6→h13 官方 changelog 全录（tauri-cmds h13 行 19041-19174）
+
+| 日期 | 类型 | 内容 | 对复刻的意义 |
+|---|---|---|---|
+| 10-26 | fixed | 一题一卡模式下，同一题里面试官接着追问，浮窗会翻到新的这一句 | turnCards 行为规则（若补 2.3.2 必须实现） |
+| 10-26 | fixed | 一题一卡模式下往回翻看时，答完一题不会再把浮窗拽走 | turnCards 行为规则：用户回看中不自动跳最新卡 |
+| 10-27 | improved | 笔试图形推理题换新一代看图模型 | 🔵 服务端模型升级 |
+| 10-27 | fixed | 鼠标停在浮窗按钮上不动时不会再自己触发，语音提问不会被提前结束 | **已含在 0.3.16 exe 基线**（exe mtime 10/27 10:46）；KT hook h5/h13 逐行一致，复刻已实现同款「一次性触发+冷却+离开重进」语义 |
+| 10-27 | fixed | 原生笔试窗口部分网络连不上自动换线路（requires: native-exam-window-fallback，win） | 原生 OSD（4.6）新增要求：多线路重试 |
+| 10-27 | fixed | 原生笔试窗口跟随界面语言（requires: native-exam-window-i18n，win） | 原生 OSD（4.6）新增要求：i18n |
+| 10-28 | improved/fixed | 副屏光标大小可调 / 防双指缩放（exam-dual-screen，china） | 手机副屏网页端（4.7） |
+| 10-28 | improved | 面试中截屏解过的题，追问时语音回答能接上 | ✅ 复刻已有（solverMemoryBlock，interviewEngine.ts:572） |
+| 10-28 | fixed | 声纹注册没收到足够声音时不再保存不可靠声纹 | 🔵 云端声纹；getUserMedia 约束可借鉴（0.2.4） |
+| 10-29 | **new** | **面试剩 5 分钟时浮窗出现「续时」，微信扫码付完接着面**（china） | 新功能，见 0.2.1 |
+| 10-29 | fixed | 面试中途买了时长，这一场不再按原时间断开 | 续时配套：付款后重拉 expiresAt 续倒计时 |
+| 10-30 | improved | 被问到资料没写的工具和项目数据，回答直接给出答案不再绕开 | **可借鉴**：system prompt 行为约定，见 0.2.6 |
+| 10-30 | improved | 资料没写的工具/项目数据/薪资/家庭情况，按经历补成具体答案不再回避 | **可借鉴**：同上 |
+
+### 0.2 代码级新功能清单（bootstrap/tauri-cmds h13 证据）
+
+| # | 功能 | 官方实现（h13 行号） | 对复刻的建议 | 优先级 |
+|---|---|---|---|---|
+| 0.2.1 | **面试续时（renew）** | 门控 `active && !session.isTrial && 0 < remainingSec <= 300 && !hasQuota`（bootstrap 52870，At=`VU(asset)` Pro 判定）；头部「续时」按钮（51151-51157，悬停 1400ms，zoneId `iv-renew`）；RenewCard 状态机 `pick→creating→pay→paid/error`（52275-52437）：`pay.createOrder.mutate({id, channel:wxpay, from:desktop-interview-renew})` → `{checkoutUrl, orderNumber}` → 104px 白底二维码 → **每 2s 轮询 `pay.checkOrderStatus`** 至 `PAID` → 「已到账，这一场续上了」3s 自动收起 → onPaid 重拉 sessionStatus 续 expiresAt；错误态「去浏览器付款」（hint「会打开浏览器，共享屏幕时对方看得到」，开 `desktop-interview-renew` 外链）；套餐文案「¥{price/100} · {n} 分钟 / {n} 天不限时」，固定三档 | 🔵 支付是云端能力，本地版不实现；**可借鉴 UI 模式**：会话临近结束的浮窗内引导（本地版可做无支付提示条） | P3 |
+| 0.2.2 | **音频探针（audio probe）** | `session.reportAudioProbe`（h13 新增，h5=0）：每秒统计 sys/mic 两组 {sec, loudSec(≥15), quietSec(3-14), peak(0-1000)}，mic 状态机 `off/starting/on/unavailable`+error，`micLoudSysSilentSec`（麦响系统静自检），第 10s 首报、之后每 60s（bootstrap 49174-49249） | 借鉴为本地诊断：复刻 AudioInputFeedback 可加自动判定——micLoudSysSilent → 「听到你的麦克风但没听到系统声音，请检查会议软件扬声器」 | P2 |
+| 0.2.3 | 麦克风检测空文案 | 「没收到足够的声音。请确认系统默认麦克风是你正对着说话的那支，靠近一些再重试」（49143 empty case） | MicrophoneCheck 文案对齐 | P3 |
+| 0.2.4 | 声纹注册 noVoice | 45s 内有效发声不足（enroll 6s/verify 2.5s，阈值 15/800）→ 不提交，`voiceprint.noVoice` + error 态；getUserMedia 显式约束（16k/mono/echoCancellation:false/noiseSuppression:true/autoGainControl:true）；错误全 i18n（uploadFailed/submitFailed/micDenied/recordFailed/noVoice）（35498-35601） | 🔵 无声纹体系；getUserMedia 约束借鉴到 microphone.ts（当前未显式关回声消除） | P3 |
+| 0.2.5 | 面试引擎错误文案 i18n | `interview.connectFailed` / `interview.startFailed` / `interview.noAudioPermission`（49568 区） | interviewEngine 的 errorMessage 对齐这三条 | P3 |
+| 0.2.6 | **回答风格：不回避未知** | changelog 10-30 两条 improved：资料未覆盖的工具/项目数据/薪资/家庭 → 按经历补成具体答案、直接回答不绕开 | **直接可借鉴**：加进 buildInterviewSystemPrompt（ai.ts）——「资料未提及的工具、项目数据、薪资、家庭情况，按用户经历合理补全具体内容直接回答，不要回避或说资料里没有」 | **P2** |
+| 0.2.7 | turnCards 行为规则 | 10-26 两条 fixed：同一题内追问→翻到新卡；回看历史卡时答完不跳最新卡 | 补 2.3.2 时的两条必做规则；复刻的自动跳最新卡要加「用户回看中」抑制 | P2（挂 2.3.2） |
+| 0.2.8 | 副端 aria | 「副端」标记加 aria-label（51136-51142） | 复刻无副端概念 | 🔵 |
+| 0.2.9 | 新能力门控名 | native-exam-window-fallback / native-exam-window-i18n | 记入 4.6 原生 OSD 验收要求 | 记录 |
+| 0.2.10 | 商业套餐表扩充 | 网申月卡/季卡、求职早报、畅享周卡、求职季无限卡等（52097 区） | 🔵 商业能力 | 🔵 |
+| 0.2.11 | i18n 全语种补齐 | 续时/支付/声纹等 9 语种新翻译（tauri-cmds diff 大头） | 复刻 i18n 扩展时注意新 key | 记录 |
+| 0.2.12 | 内部重构（无用户可见变化） | 面试引擎 hook 化（beginInterview/syncExpiry/endSentence/forceSend/prewarmManualAnswer/correctAndResend/feedInterviewerUtterance/canForceSend API 面 + interview.started/serviceStatus 事件）、turn 槽位重组器（claimTurn/drain）、录音分片 16ms 批 flush、answerSlot 与复盘录音（enableReplay metadata 门控 LK） | 架构参考；复刻 interviewEngine 已覆盖同等功能面 | 记录 |
+
+### 0.3 复刻行动项汇总（h13 增量）
+
+1. **P2**：buildInterviewSystemPrompt 增加「不回避未知」行为约定（0.2.6）——成本一行，回答风格与官方 10-30 后一致。
+2. **P2**：AudioInputFeedback 增加 micLoudSysSilent 自动判定（0.2.2 简化版：本地已有双路音量，直接比对）。
+3. **P2（挂靠）**：turnCards UI（gap 2.3.2）实现时带上 10-26 两条行为规则（0.2.7）。
+4. **P3**：microphone.ts 的 getUserMedia 显式约束（关回声消除）；interviewEngine 三条错误文案对齐（0.2.4/0.2.5）。
+5. **记录**：续时/声纹/副屏网页细节为云端或平台能力，本地版不实现；原生 OSD 若做，验收含 fallback + i18n。
+
+---
 
 ## 状态图例
 
@@ -232,6 +283,7 @@
 | 4.9 | 配色两段确认 | 1.4s → 确认 1.2s | ❌ 单段（→ bug B30） | ❌ | P2 |
 | 4.10 | 免责声明 | 禁考列表 | ✅ UsageNotice 逐条一致 | ✅ | — |
 | 4.11 | dwell 时长表 | 全表 | ✅（配色确认除外） | ✅ | — |
+| 4.12 | **代码沙箱验证** | 编程模式答题前服务端跑代码验证样例+边界（多语言）；快速模式仅计算题触发；客户端零执行 | ❌ 复刻解题链路未接自动验证（本地 Docker 沙箱已有但仅手动入口，examEngine「样例可手动验证」） | ❌ | 机制分析与接入路径见 [official-code-verification.md](official-code-verification.md)；P1 |
 
 ## 第 5 章 设置面板（spec 05，子代理核对 2026-10-30）
 

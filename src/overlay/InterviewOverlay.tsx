@@ -1,3 +1,6 @@
+import {recordCandidateResponse} from '@/lib/interviewEngine';
+import {GenerationDetails} from './GenerationDetails';
+import {selectSolverTurn} from '@/lib/examEngine';
 /*
  * 面试浮窗（原版 Yq/Zq/Aq/wq）：头部（拖拽/状态/剩余时长/穿透切换/结束）、
  * 对话视图（转写竖线气泡 + AI markdown 流式）、底部操作（开始/暂停/
@@ -349,6 +352,9 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
   const followNewRound = useSetting('interview.followNewRound', true)[0];
   const followStreaming = useSetting('interview.followStreaming', false)[0];
   const following = useRef(true);
+  const {interactive,toggleInteractive}=usePlatform();
+  const [editingQuestion,setEditingQuestion]=useState<{id:string;text:string}|null>(null);
+  const [actualAnswer,setActualAnswer]=useState<string|null>(null);
 
   useEffect(() => {
     registerOverlayList(listRef.current);
@@ -421,11 +427,17 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         key={m.id}
                         className="ov-line-strong ov-text-2 ov-body-sm flex items-start gap-1 whitespace-pre-wrap border-l-2 pl-1.5"
                       >
-                        {m.text}
+                        <div className="min-w-0 flex-1">{m.text}
+                          {m.metadata?.superseded ? <span className="ov-text-3 ml-2 text-[10px]">已更正</span> : <DwellButton id={`correct-${m.id}`} compact hoverMs={1200} onTrigger={()=>{if(!interactive)toggleInteractive();setEditingQuestion({id:m.id,text:m.text});}}>更正并重答</DwellButton>}
+                        </div>
                       </div>
                     ) : (
                       <div key={m.id} className="ov-text ov-body relative">
+                        {m.metadata?.superseded && <div className="ov-text-3 mb-1 text-[10px]">更正前的参考答案</div>}
+                        {m.metadata?.origin==='candidate_response' && <div className="ov-text-3 text-[10px]">我的实际回答</div>}
                         <Md text={m.text} />
+                        {!m.pending && <GenerationDetails status={m.metadata?.completionStatus} request={m.metadata?.request}/>}
+                        {!!m.metadata?.sources?.length && <details className="ov-text-3 mt-1 text-[10px]"><summary className="cursor-pointer">本轮参考资料</summary>{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</details>}
                         {m.pending && (
                           <span className="ov-text-3 mt-0.5 inline-block size-3 animate-spin rounded-full border border-current border-t-transparent" />
                         )}
@@ -452,6 +464,15 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
           </div>
         )}
       </div>
+      {engine.sessionId && <DwellButton id="record-actual-answer" compact hoverMs={1500} onTrigger={()=>{if(!interactive)toggleInteractive();setActualAnswer(actualAnswer===null?'':null);}}>补充我的实际回答</DwellButton>}
+      {actualAnswer!==null && <form className="ov-chip mx-1 mt-2 rounded-md border p-2" onSubmit={event=>{event.preventDefault();if(!actualAnswer.trim())return;void recordCandidateResponse(actualAnswer).then(()=>setActualAnswer(null)).catch(error=>showToast({type:'error',title:'实际回答未保存',description:String(error)}));}}>
+        <label className="ov-text-2 text-[11px]">实际说法与参考答案不同时，可在这里补充<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={actualAnswer} onChange={event=>setActualAnswer(event.target.value)}/></label>
+        <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!actualAnswer.trim()}>保存补充</button><button type="button" onClick={()=>setActualAnswer(null)}>取消</button></div>
+      </form>}
+      {editingQuestion && <form className="ov-chip mx-1 mt-2 rounded-md border p-2" onSubmit={event=>{event.preventDefault();const target=editingQuestion;if(!target.text.trim())return;setEditingQuestion(null);void answerQuestion(target.text,{correction:true,questionMessageId:target.id});}}>
+        <label className="ov-text-2 text-[11px]">更正识别内容<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={editingQuestion.text} onChange={event=>setEditingQuestion({...editingQuestion,text:event.target.value})}/></label>
+        <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!editingQuestion.text.trim()}>更正并重新回答</button><button type="button" onClick={()=>setEditingQuestion(null)}>取消</button></div>
+      </form>}
       <ScrollEdgePillProxy id="scroll-down" direction="down" label="悬停看新" hotkey={hotkeys['scroll-down']} />
     </>
   );
@@ -472,7 +493,7 @@ function SolverView({
     registerOverlayList(listRef.current);
     return () => registerOverlayList(null);
   }, []);
-  const last = solver.turns[solver.turns.length - 1];
+  const last = solver.turns.find(turn=>turn.id===solver.selectedTurnId) || solver.turns[solver.turns.length - 1];
   return (
     <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1">
       {solver.turns.length === 0 ? (
@@ -484,7 +505,9 @@ function SolverView({
         </div>
       ) : (
         <div className="ov-text ov-body">
+          <div className="mb-2 flex flex-wrap gap-1">{solver.turns.map((turn,index)=><DwellButton key={turn.id} id={`select-${turn.id}`} compact hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)}>{index+1}{turn.parentTurnId?' · 追问':' · 原题'}{turn.id===last?.id?' ✓':''}</DwellButton>)}</div>
           <Md text={last?.body ?? ''} />
+          <GenerationDetails status={last?.completionStatus} request={last?.request}/>
         </div>
       )}
       {solver.statusText && (

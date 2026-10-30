@@ -32,6 +32,7 @@ import {
 } from '@/lib/hotkeys';
 import { useAiSettings, useAiReady } from '@/lib/aiSettings';
 import { AiServicesTab } from './AiServicesTab';
+import {PromptWorkbench} from './PromptWorkbench';
 import { onEvent, panicHotkeyStatus, setActionHotkeys, setPanicHotkey } from '@/lib/bridge';
 import { APP_VERSION } from '@/lib/env';
 import { LOCALE_NAMES, LOCALES, currentLocale, switchLocale, systemLocale } from '@/lib/i18n';
@@ -44,7 +45,7 @@ import { UpdateStatusButton } from '../UpdateNotice';
 import { DeveloperInfo } from './DeveloperInfo';
 import { StorageSettings } from './StorageSettings';
 
-type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'storage' | 'changelog' | 'about';
+type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'prompts' | 'storage' | 'changelog' | 'about';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overlay-style', label: '浮窗样式' },
@@ -52,6 +53,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'hotkeys', label: '快捷键' },
   { key: 'stealth', label: '隐蔽' },
   { key: 'ai', label: 'AI 服务' },
+  { key: 'prompts',label:'AI 指令' },
   { key: 'changelog', label: '更新日志' },
   { key: 'storage', label: '存储' },
   { key: 'about', label: '关于' },
@@ -69,7 +71,7 @@ export function SettingsPage() {
           <button
             key={t.key}
             type="button"
-            onClick={() => { if (tab === 'ai' && aiDirty && t.key !== 'ai') setPendingTab(t.key); else setTab(t.key); }}
+            onClick={() => { if ((tab === 'ai' || tab==='prompts') && aiDirty && t.key !== tab) setPendingTab(t.key); else setTab(t.key); }}
             className={`rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
               tab === t.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent'
             }`}
@@ -84,11 +86,12 @@ export function SettingsPage() {
         {tab === 'hotkeys' && <HotkeysTab />}
         {tab === 'stealth' && <StealthTab />}
         {tab === 'ai' && <AiServicesTab onDirtyChange={setAiDirty} />}
+        {tab === 'prompts' && <PromptWorkbench onDirtyChange={setAiDirty}/>}
         {tab === 'changelog' && <ChangelogTab />}
         {tab === 'about' && <AboutTab />}
       {tab === 'storage' && <StorageSettings />}
       </div>
-      <ConfirmDialog open={pendingTab !== null} title="放弃未保存的 AI 配置？" body="模型列表、密钥和用途分配的更改还没有保存。" confirmText="放弃修改" onCancel={() => setPendingTab(null)} onConfirm={() => { if (pendingTab) setTab(pendingTab); setPendingTab(null); setAiDirty(false); }} />
+      <ConfirmDialog open={pendingTab !== null} title="放弃未保存的 AI 设置？" body="当前 AI 配置或表达偏好的更改还没有保存。" confirmText="放弃修改" onCancel={() => setPendingTab(null)} onConfirm={() => { if (pendingTab) setTab(pendingTab); setPendingTab(null); setAiDirty(false); }} />
     </div>
   );
 }

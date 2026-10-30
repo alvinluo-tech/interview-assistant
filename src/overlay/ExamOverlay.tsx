@@ -1,3 +1,5 @@
+import {GenerationDetails} from './GenerationDetails';
+import {selectSolverTurn} from '@/lib/examEngine';
 /*
  * 笔试浮窗（原版 gJ + tG 壳）：顶栏（拖拽/品牌/题号/状态/档位）、
  * 滚动边缘、markdown 正文、追问 chips、底栏（模式/解题/加页/重置/退出、
@@ -87,7 +89,7 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
 /** 复制答案（热键路径，与浮窗内按钮同一逻辑） */
 async function copyAnswerToClipboard(body?:string) {
   const s = getSolverState();
-  const lastBody = body ?? s.turns[s.turns.length - 1]?.body ?? '';
+  const lastBody = body ?? (s.turns.find(turn=>turn.id===s.selectedTurnId) || s.turns[s.turns.length - 1])?.body ?? '';
   if (!lastBody.trim()) {showToast({type:'info',title:'答案还没写完，写完再复制'});return;}
   const code = extractLastCodeBlock(lastBody);
   try {
@@ -132,7 +134,8 @@ function ExamShell({
     solver.phase === 'capturing' ||
     solver.phase === 'uploading';
 
-  const copy = () => copyAnswerToClipboard(solver.turns[solver.turns.length-1]?.body ?? '');
+  const selected=solver.turns.find(turn=>turn.id===solver.selectedTurnId) || solver.turns[solver.turns.length-1];
+  const copy = () => copyAnswerToClipboard(selected?.body ?? '');
 
   const doSolve = async () => {
     if (multiPage) {
@@ -202,6 +205,7 @@ function ExamShell({
             )}
             {solver.turns.map((turn, i) => (
               <div key={turn.id} className="mb-3">
+                <DwellChip id={`select-${turn.id}`} hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)} label={`${i+1} · ${turn.parentTurnId?'追问':'原题'}${selected?.id===turn.id?' · 当前追问对象':' · 选择此题追问'}`} />
                 {turn.body.startsWith('> ') && (
                   <div className="ov-text-3 mb-1 text-[11px] italic opacity-80">
                     {turn.body.split('\n')[0].slice(2)}
@@ -209,6 +213,7 @@ function ExamShell({
                 )}
                 <div data-overlay-scroll-anchor={i === solver.turns.length - 1 || undefined}>
                   <Md text={turn.body.replace(/^> .*\n\n/, '')} />
+                  <GenerationDetails status={turn.completionStatus} request={turn.request}/>
                 </div>
               </div>
             ))}
@@ -226,7 +231,7 @@ function ExamShell({
       {/* 追问 chips */}
       {solver.turns.length > 0 && !multiPage && !solving && (
         <div className="mt-2 flex flex-wrap gap-1.5 px-2">
-          {[...new Set(solver.turns[solver.turns.length-1]?.followUpOptions ?? [])].slice(0,3).map((option,index)=><DwellChip
+          {[...new Set(selected?.followUpOptions ?? [])].slice(0,3).map((option,index)=><DwellChip
             key={option} id={`suggested-${index}`} hoverMs={HOVER_MS.followUp} label={option}
             onTrigger={() => void followUp({message:option})} />)}
           {showCopyCode && (

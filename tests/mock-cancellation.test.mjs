@@ -4,7 +4,8 @@ import {evaluateFixture} from './compile-fixture.mjs';
 test('mock interviewer requests forward cancellation to the AI transport', async () => {
   const calls = [];
   const api = evaluateFixture('src/lib/mock.ts', {exports:{}, require: name => {
-    assert.equal(name,'./ai'); return {chatStream: async options => {calls.push(options); return '你好';}};
+    if(name==='./knowledgeContext') return {};
+    assert.equal(name,'./ai'); return {chatStream: async options => {calls.push(options); return options.schema ? '{"question":"你好","kind":"NEW"}' : '你好';}};
   }});
   const controller = new AbortController();
   const config = {difficultyLabel:'测试', turnBudget:8, basicsRatio:50, assistMode:false};

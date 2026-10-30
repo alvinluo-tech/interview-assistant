@@ -15,7 +15,7 @@ await writeFile('artifacts/experience-vite.config.mjs', `import base from '../vi
 export default()=>{const config=base();return {...config,cacheDir:'node_modules/.vite-experience-ui',plugins:[...config.plugins,{name:'synthetic-speech-transport',enforce:'pre',transform(_code,id){if(id.replaceAll('\\\\','/').endsWith('/src/lib/aiTransport.ts'))return {code:'export const aiFetch=(url,init)=>window.__ttsFetch(url,init);',map:null};}}],resolve:{...config.resolve,alias:{'@/lib/mock':fileURLToPath(new URL('./mock-lifecycle-fixture.ts',import.meta.url)),...config.resolve.alias}}};};`);
 await writeFile('artifacts/experience-fixture.html', `<!doctype html><html><meta charset="utf-8"><div id="root"></div><script>
 window.__errors=[]; addEventListener('error',e=>__errors.push(e.message)); addEventListener('unhandledrejection',e=>__errors.push(String(e.reason)));
-window.__ttsCalls=[];window.__audioStarts=0;window.__ttsFetch=async(url,init)=>{__ttsCalls.push({url,init});return new Response(new ReadableStream({start(controller){window.__ttsStream=controller;},cancel(){window.__ttsCancelled=true;}}),{headers:{'content-type':'text/event-stream'}});};
+window.__ttsCalls=[];window.__audioStarts=0;window.__ttsFetch=async(url,init)=>{if(url.endsWith('/chat/completions')&&!JSON.parse(init.body).audio)return new Response(JSON.stringify({choices:[{message:{content:'合成参考回答：沿用缓存方案。'},finish_reason:'stop'}]}),{headers:{'content-type':'application/json'}});__ttsCalls.push({url,init});return new Response(new ReadableStream({start(controller){window.__ttsStream=controller;},cancel(){window.__ttsCancelled=true;}}),{headers:{'content-type':'text/event-stream'}});};
 window.AudioContext=class{state='running';get currentTime(){return performance.now()/1000;}destination={};resume(){return Promise.resolve();}close(){this.state='closed';return Promise.resolve();}createBuffer(_channels,length,rate){return {length,duration:length/rate,getChannelData:()=>new Float32Array(length)};}createBufferSource(){return {connect(){},disconnect(){},start(){__audioStarts++;this.timer=setTimeout(()=>this.onended?.(),80);},stop(){clearTimeout(this.timer);}};}};
 window.__test={callbacks:new Map(),events:new Map(),calls:[],data:{},revision:0};
 window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:()=>{}};
@@ -23,6 +23,9 @@ window.__TAURI_INTERNALS__={metadata:{currentWindow:{label:'mock'},currentWebvie
 __test.calls.push({name,args});
 if(name==='plugin:event|listen'){__test.events.set(args.event,args.handler);return args.handler;}
 if(name==='plugin:store|load')return 1;
+if(name==='plugin:store|get')return [__test.settings?.[args.key],Object.hasOwn(__test.settings||{},args.key)];
+if(name==='plugin:store|set'){(__test.settings||={})[args.key]=args.value;return;}
+if(name==='plugin:store|delete'){delete (__test.settings||{})[args.key];return;}
 if(name==='cmd_data_commit'){__test.data[args.key]=args.value;return {revision:++__test.revision,data:__test.data};}
 if(name==='cmd_data_read')return {revision:__test.revision,data:__test.data};
 if(name==='cmd_system_speech'){const handler=__test.callbacks.get(__test.events.get('system-speech-state'));handler?.({payload:{id:args.id,speaking:true}});setTimeout(()=>handler?.({payload:{id:args.id,speaking:false}}),60);}
@@ -32,7 +35,7 @@ return null;}};
 </script><script type="module" src="/artifacts/experience-fixture.tsx"></script></html>`);
 await writeFile('artifacts/experience-fixture.tsx', `import React,{useState} from 'react';import{createRoot}from'react-dom/client';
 import '/src/index.css';import{MockApp}from'/src/mock/MockApp.tsx';import{RecordsPage}from'/src/main/sections/RecordsPage.tsx';
-import{DeveloperInfo}from'/src/main/sections/DeveloperInfo.tsx';import{StorageSettings}from'/src/main/sections/StorageSettings.tsx';import{AiServicesTab}from'/src/main/sections/AiServicesTab.tsx';
+import{PromptWorkbench}from'/src/main/sections/PromptWorkbench.tsx';import{InterviewOverlay}from'/src/overlay/InterviewOverlay.tsx';import{SimulatedPlatform}from'/src/overlay/platform.tsx';import*as engine from'/src/lib/interviewEngine.ts';window.__engine=engine;import{DeveloperInfo}from'/src/main/sections/DeveloperInfo.tsx';import{StorageSettings}from'/src/main/sections/StorageSettings.tsx';import{AiServicesTab}from'/src/main/sections/AiServicesTab.tsx';
 import{writeData}from'/src/lib/backend.ts';import{saveAiSettings}from'/src/lib/aiSettings.ts';import{defaultAiSettings}from'/src/lib/aiConfig.ts';import{setSetting}from'/src/lib/store.ts';
 await saveAiSettings({...defaultAiSettings(),providers:[{id:'fixture',name:'测试连接',baseUrl:'http://127.0.0.1:9/v1',apiKey:'',authMode:'none',models:[{id:'test-chat',name:'测试模型',source:'custom'}],lastFetchedAt:null}],routes:{chat:{providerId:'fixture',modelId:'test-chat'},vision:null,stt:null,tts:null}});
 await writeData('interviewSessions',[{id:'mock_session',type:'MOCK_INTERVIEW',title:'模拟面试样例',createdAt:Date.now()-62000,status:'ACTIVE',messages:[{id:'opening',role:'INTERVIEWER',text:'你好，我们开始吧。能结合你最熟悉的项目，讲讲一次性能优化的经历吗？',createdAt:Date.now(),metadata:{turnKind:'NEW'}}],metadata:{mock:true,config:{goalName:'后端开发',company:'项目深挖',difficultyLabel:'3–5 年',turnBudget:8,basicsRatio:40,assistMode:false}}},{id:'real',type:'INTERVIEW',title:'真实面试样例',status:'COMPLETED',createdAt:Date.now(),messages:[]}]);
@@ -40,7 +43,7 @@ await writeData('examSessions',[{id:'exam',title:'笔试样例',status:'COMPLETE
 window.__resetOpening=()=>writeData('interviewSessions',window.__test.data.interviewSessions.map(s=>s.id==='mock_session'?{...structuredClone(s),messages:[],status:'ACTIVE'}:s));
 window.__refreshOpening=()=>writeData('interviewSessions',window.__test.data.interviewSessions.map(s=>s.id==='mock_session'?{...structuredClone(s),title:'刷新后的模拟面试'}:s));
 window.__ttsRoom=async()=>{await setSetting('mock.speechEnabled',true);return writeData('interviewSessions',window.__test.data.interviewSessions.map(s=>s.id==='mock_session'?{...structuredClone(s),status:'ACTIVE',messages:[{id:'tts-question',role:'INTERVIEWER',text:'请介绍项目中的技术难题。',createdAt:Date.now()}]}:s));};
-function Fixture(){const[view,setView]=useState('room');window.__view=setView;return view==='room'?<MockApp/>:<div className="min-h-screen bg-background p-6">{view==='records'?<RecordsPage/>:view==='about'?<DeveloperInfo/>:view==='storage'?<StorageSettings/>:<AiServicesTab/>}</div>;}createRoot(document.getElementById('root')).render(<Fixture/>);
+function Fixture(){const[view,setView]=useState('room');window.__view=setView;return view==='room'?<MockApp/>:<div className="min-h-screen bg-background p-6">{view==='records'?<RecordsPage/>:view==='about'?<DeveloperInfo/>:view==='storage'?<StorageSettings/>:view==='prompts'?<PromptWorkbench/>:view==='interview'?<SimulatedPlatform mode="interview"><InterviewOverlay preview/></SimulatedPlatform>:<AiServicesTab/>}</div>;}createRoot(document.getElementById('root')).render(<Fixture/>);
 `);
 const url = 'http://127.0.0.1:1441/artifacts/experience-fixture.html#mock?sid=mock_session';
 const server = spawn(process.execPath,['node_modules/vite/bin/vite.js','--config','artifacts/experience-vite.config.mjs','--host','127.0.0.1','--port','1441','--strictPort'],{windowsHide:true,stdio:'ignore'});
@@ -128,6 +131,22 @@ try {
   await cdp.evaluate("(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'我先定位瓶颈，再做对照验证。');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
   await cdp.click('提交回答');await cdp.waitFor('__ttsCalls.at(-1).init.signal.aborted');
   assert.deepEqual(await cdp.evaluate('__errors'), []);
+  // New AI controls use isolated stores and fixed transport replies, without microphone access.
+  await cdp.evaluate("__view('prompts')");await cdp.waitFor("document.body.innerText.includes('基础规则')");
+  await cdp.evaluate("(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'先给结论，再解释取舍。');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await cdp.click('保存本任务');await cdp.waitFor("Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='保存本任务')?.disabled");
+  await cdp.evaluate("__view('ai')");await cdp.waitFor("document.body.innerText.includes('模型兼容选项')");
+  assert.ok(await cdp.evaluate("document.querySelector('input[aria-label=\"上下文窗口\"]')!==null"));
+  await cdp.evaluate("(async()=>{await __engine.startInterview({goalId:null,resumeId:null,materialIds:[],audioSource:'PHONE'});await __engine.answerQuestion('原来的问题');__view('interview');})()");
+  await cdp.waitFor("document.body.innerText.includes('更正并重答')");await cdp.click('更正并重答');
+  await cdp.waitFor("!!document.querySelector('textarea')");
+  await cdp.evaluate("(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'更正后的问题');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await cdp.click('更正并重新回答');await cdp.waitFor("document.body.innerText.includes('更正前的参考答案')&&document.body.innerText.includes('更正后的问题')");
+  assert.ok(await cdp.evaluate("__engine.getInterviewEngineState().messages.some(message=>message.metadata?.revision===2)"));
+  await cdp.click('补充我的实际回答');await cdp.waitFor("!!document.querySelector('textarea')");
+  await cdp.evaluate("(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'我实际采用本地缓存');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await cdp.click('保存补充');await cdp.waitFor("document.body.innerText.includes('我的实际回答')");
+  await cdp.evaluate("__engine.endInterview()");assert.deepEqual(await cdp.evaluate('__errors'),[]);
   // Phone transport uses synthetic sockets, so there is no LAN traffic.
   await cdp.command('Page.enable', {});
   await cdp.command('Page.addScriptToEvaluateOnNewDocument', {source:`window.confirm=()=>true;window.__phone={sent:[]};window.WebSocket=class{constructor(url){this.readyState=1;if(url.includes('/ws?'))__phone.socket=this;setTimeout(()=>this.onopen?.(),0)}send(value){__phone.sent.push(JSON.parse(value))}close(){this.readyState=3;this.onclose?.()}addEventListener(){}};`});
@@ -145,5 +164,5 @@ try {
   await cdp.evaluate("__phone.socket.onmessage({data:JSON.stringify({t:'state',data:__phone.snapshot})});document.getElementById('end').click()");
   assert.equal(await cdp.evaluate('__phone.sent.at(-1).id'),'end-session');
   await cdp.evaluate("__phone.socket.onmessage({data:JSON.stringify({t:'ended'})})"); assert.equal(await cdp.evaluate('__phone.socket.readyState'),3);
-  console.log('PASS: mock room/system speech; MiMo and Aliyun voice defaults; cancellable speech preparation; streamed playback; cached replay; answer interrupts speech; separate history; seven source/answer/image records; storage; phone return/resume/end.');
+  console.log('PASS: task preference save; provider capability controls; question correction UI; actual-answer supplement; mock room/system speech; MiMo and Aliyun voice defaults; cancellable speech preparation; streamed playback; cached replay; answer interrupts speech; separate history; seven source/answer/image records; storage; phone return/resume/end.');
 } finally {if(cdp.socket){await cdp.command('Browser.close',{}).catch(()=>{});cdp.close();}browser.kill();server.kill();}

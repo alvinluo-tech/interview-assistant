@@ -12,6 +12,7 @@ import { questionSpeaker } from '@/lib/questionSpeech';
 import { DEFAULT_REALTIME_ENDPOINT, isRealtimeAsrModel } from '@/lib/realtimeAsrProtocol';
 import { defaultTtsVoice, isSpeechSynthesisModel, ttsService, ttsVoices } from '@/lib/ttsConfig';
 import type { SpeechPhase } from '@/lib/questionSpeaker';
+import type {ModelCapabilities} from '@/lib/aiTaskPolicy';
 
 type Status = { kind: 'success' | 'error' | 'info'; text: string } | null;
 const roleDescriptions: Record<AiRole, string> = {
@@ -91,7 +92,8 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
   }
   function patchProvider(patch: Partial<AiProvider>) {
     cancel(); setStatus(null);
-    setDraft(value => ({ ...value, providers: value.providers.map(p => p.id === selectedId ? { ...p, ...patch } : p) }));
+    setDraft(value => ({ ...value, providers: value.providers.map(p => p.id === selectedId ? { ...p, ...patch,
+      ...(patch.baseUrl!==undefined&&patch.baseUrl!==p.baseUrl?{models:p.models.map(({capabilities:_capabilities,...model})=>model)}:{}) } : p) }));
   }
   function addProvider() {
     if (draft.providers.length >= 20) { setError('最多保存 20 个连接'); return; }
@@ -264,13 +266,15 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
                 <div className="mt-3 max-h-[280px] overflow-y-auto rounded-md border">
                   {!filtered.length && <p className="p-4 text-xs leading-relaxed text-muted-foreground">{search ? '没有匹配的模型。' : '还没有模型。获取接口模型列表，或在下方手动添加。'}</p>}
                   {filtered.slice(0, limit).map(model => <div key={model.id} className="flex items-center justify-between gap-2 border-b px-3 py-2 last:border-b-0">
-                    <div className="min-w-0"><div className="truncate font-mono text-xs" title={model.id}>{model.id}</div><div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground"><span>{model.source === 'custom' ? '自定义' : '接口发现'}</span>{model.name !== model.id && <span className="truncate">{model.name}</span>}</div></div>
+                    <div className="min-w-0 flex-1"><div className="truncate font-mono text-xs" title={model.id}>{model.id}</div><div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground"><span>{model.source === 'custom' ? '自定义' : '接口发现'}</span>{model.name !== model.id && <span className="truncate">{model.name}</span>}</div>
+                      {!isSpeechRecognitionModel(model.id) && !isSpeechSynthesisModel(model.id) && <ModelOptions value={model.capabilities || {}} disabled={!!busy} onChange={capabilities=>patchProvider({models:provider.models.map(item=>item.id===model.id?{...item,capabilities}:item)})}/>}
+                    </div>
                     <div className="flex shrink-0 items-center"><Button size="sm" variant="ghost" disabled={!!busy || isSpeechRecognitionModel(model.id) || isSpeechSynthesisModel(model.id)} title={isSpeechSynthesisModel(model.id) ? '语音合成模型：分配到语音合成、选择音色并保存后试听。' : isRealtimeAsrModel(model.id) ? '实时语音模型：分配到语音转写、启用持续实时模式并保存后，在工作台开始收音验证字幕。' : isSpeechRecognitionModel(model.id) ? '语音识别模型不能进行文字对话测试。持续实时识别请选择已适配的 fun-asr-realtime。' : undefined} onClick={() => void networkAction('test', model.id)}>{isSpeechRecognitionModel(model.id) || isSpeechSynthesisModel(model.id) ? '语音专用' : busy === 'test' && testingId === model.id ? '测试中…' : '测试对话'}</Button><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`移除模型 ${model.id}`} disabled={!!busy} onClick={() => deleteModel(model.id)}><Trash2 size={12} /></Button></div>
                   </div>)}
                   {filtered.length > limit && <Button size="sm" variant="ghost" className="w-full" onClick={() => setLimit(v => v + 50)}>再显示 {Math.min(50, filtered.length - limit)} 个</Button>}
                 </div>
                 <p className="mt-2 text-[10px] text-muted-foreground">对话测试会发送一条短消息，服务商可能计费。语音识别模型不执行此测试。</p>
-                {filtered.some(model => isSpeechRecognitionModel(model.id)) && <p className="mt-2 rounded-md border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">fun-asr、fun-asr-flash 是文件识别模型。持续实时识别请把 fun-asr-realtime 分配到「语音转写」，在「请求与语音选项」启用持续实时模式并保存，再到面试助手选择「模拟练习」开始收音、说话查看字幕。「测试麦克风」仅检查本地音量，不验证云端语音服务。</p>}
+                {filtered.some(model => isSpeechRecognitionModel(model.id)) && <p className="mt-2 rounded-md border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">fun-asr、fun-asr-flash 是文件识别模型。持续实时识别请把 fun-asr-realtime 分配到「语音转写」，在「请求与语音选项」启用持续实时模式并保存，再到面试助手选择「电话面试」开始收音、说话查看字幕。「测试麦克风」仅检查本地音量，不验证云端语音服务。</p>}
                 <form className="mt-4 rounded-md bg-muted/35 p-3" onSubmit={e => { e.preventDefault(); addCustomModel(); }}>
                   <h4 className="text-xs font-medium">添加自定义模型</h4><p className="mt-1 text-[11px] text-muted-foreground">接口不提供模型列表，或列表中没有你的模型时，直接填写精确 ID。</p>
                   <div className="mt-3 grid gap-2 min-[1120px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
@@ -337,4 +341,20 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
       }} />
     </div>
   );
+}
+
+
+function ModelOptions({value,onChange,disabled}:{value:ModelCapabilities;onChange:(value:ModelCapabilities)=>void;disabled:boolean}) {
+  const patch=(update:Partial<ModelCapabilities>)=>onChange({...value,...update});
+  return <details className="mt-2 text-[11px] text-muted-foreground">
+    <summary className="cursor-pointer">模型兼容选项</summary>
+    <p className="my-2 leading-relaxed">按服务商文档填写；留空使用任务默认值。严格 JSON 只在确认模型支持时启用，不会通过付费请求自动探测。</p>
+    <div className="grid gap-2 sm:grid-cols-2">
+      <label>上下文窗口（tokens）<Input aria-label="上下文窗口" type="number" min={1024} max={2000000} value={value.contextWindow ?? ''} disabled={disabled} onChange={event=>patch({contextWindow:event.target.value?Number(event.target.value):undefined})}/></label>
+      <label>最大输出（tokens）<Input aria-label="最大输出" type="number" min={256} max={200000} value={value.maxOutputTokens ?? ''} disabled={disabled} onChange={event=>patch({maxOutputTokens:event.target.value?Number(event.target.value):undefined})}/></label>
+      <label>输出长度参数<Select value={value.outputParameter || 'max_tokens'} disabled={disabled} onChange={event=>patch({outputParameter:event.target.value as ModelCapabilities['outputParameter']})}><option value="max_tokens">max_tokens（默认）</option><option value="max_completion_tokens">max_completion_tokens</option><option value="none">不发送长度参数</option></Select></label>
+      <label>结构化输出<Select value={value.structuredOutput || 'text'} disabled={disabled} onChange={event=>patch({structuredOutput:event.target.value as ModelCapabilities['structuredOutput']})}><option value="text">普通文本＋本地校验</option><option value="json_object">JSON 对象</option><option value="json_schema">严格 JSON Schema</option></Select></label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={value.temperature!==false} disabled={disabled} onChange={event=>patch({temperature:event.target.checked})}/>允许发送温度参数</label>
+    </div>
+  </details>;
 }

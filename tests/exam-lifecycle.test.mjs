@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { evaluateFixture } from './compile-fixture.mjs';
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
-function engine({ completionFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {} } = {}) {
+function engine({ completionFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[] } = {}) {
   let resolveRequest, options, requests = 0;
   let resolveSession, resolveCapture, created = 0;
-  const calls = [], saved = [];
+  const calls = [], saved = [],prompts=[],createdInputs=[];
   const timers = new Set();
   const bridge = {
     cmd: async () => ['synthetic/turn/image.png'],
@@ -19,23 +19,24 @@ function engine({ completionFails = false, deferred = true, deferredSession = fa
     exports: {}, console, Date: fixedTime ? class extends Date { static now() { return 1000; } } : Date, AbortController,
     window: { setInterval: () => { const id = {}; timers.add(id); return id; }, clearInterval(id) {timers.delete(id);} },
     require: name => {
+      if (name === './aiContext') return evaluateFixture('src/lib/aiContext.ts',{exports:{}});
       if (name === './bridge') return bridge;
       if (name === './store') return { getSetting: (key, fallback) => settings[key] ?? fallback, DEFAULT_EXAM_CUSTOMIZATION: {}, setSetting: async (key,value) => {settings[key] = value;} };
       if (name === './backend') return {
-        readData: (_key, fallback) => fallback,
-        createExamSession: async () => { created++; return deferredSession ? new Promise(resolve => { resolveSession = resolve; }) : { id: 'synthetic-session' }; },
+        readData: (_key, fallback) => _key==='examSessions'?records:fallback,
+        createExamSession: async input => { createdInputs.push(input);created++; return deferredSession ? new Promise(resolve => { resolveSession = resolve; }) : { id: 'synthetic-session' }; },
         updateExamSession: async (_id, record) => { calls.push('persist'); saved.push(record); },
         completeExamSession: async () => { if (completionFails) throw new Error('Disk unavailable'); calls.push('complete'); },
       };
       if (name === './ai') return { EXAM_SYSTEM_PROMPT: '', buildExamUserPrompt: () => 'test', chatWithImages: async (_prompt, _images, opts) => {
-        requests++; options = opts;
+        requests++;prompts.push(_prompt); options = opts;
         if (deferred) return new Promise(resolve => { resolveRequest = resolve; });
         opts.onDelta?.('answer'); return 'answer';
       } };
       throw new Error(`Unexpected dependency ${name}`);
     },
   });
-  return { api, calls, saved, settings, timers, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
+  return { api, calls, saved, settings, timers,prompts,createdInputs, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
     created: () => created, resolveSession: () => resolveSession?.({ id: 'synthetic-session' }), resolveCapture: () => resolveCapture?.('synthetic') };
 }
 
@@ -151,4 +152,26 @@ test('interview solver mode does not overwrite exam settings (B33)', async () =>
   await h.api.setSolverMode('programming'); await flush();
   assert.equal(h.settings['exam.mode'],'quick');
   assert.equal(h.settings['interview.solverExamMode'],'programming');
+});
+
+
+test('selecting an earlier question scopes a real follow-up request to that question',async()=>{
+  const h=engine();
+  const first=h.api.solve({screenshots:['synthetic']});await flush();h.resolve('<exam-question>第一题约束十万项</exam-question><exam-answer>第一题代码</exam-answer>');await first;
+  const firstId=h.api.getSolverState().turns[0].id;
+  const second=h.api.solve({screenshots:['synthetic']});await flush();h.resolve('<exam-question>第二题SQL</exam-question><exam-answer>SELECT 1</exam-answer>');await second;
+  h.api.selectSolverTurn(firstId);const follow=h.api.followUp({message:'优化复杂度'});await flush();
+  assert.match(h.prompts.at(-1),/十万项/);assert.match(h.prompts.at(-1),/第一题代码/);assert.doesNotMatch(h.prompts.at(-1),/第二题|SELECT/);
+  h.resolve('优化答案');await follow;
+  assert.equal(h.api.getSolverState().turns.at(-1).parentTurnId,firstId);
+});
+
+test('embedded exam restores only the owning interview and stops when that interview ends',async()=>{
+  const record={id:'embedded',interviewSessionId:'interview-A',status:'ACTIVE',questions:[{id:'q',questionText:'已保存原题',answer:'已保存代码',createdAt:1}]};
+  const h=engine({records:[record]});h.api.prepareExamRun('interview:interview-A',null,'interview-A');
+  assert.equal(h.api.getSolverState().turns[0].body,'已保存代码');
+  const request=h.api.followUp({message:'继续检查'});await flush();await h.api.finishInterviewExam('interview-A');
+  assert.equal(h.options().signal.aborted,true);h.options().onDelta('迟到文本');h.resolve('迟到文本');await request;
+  assert.ok(!h.api.getSolverState().turns.some(turn=>turn.body.includes('迟到文本')));assert.ok(h.calls.includes('complete'));
+  h.api.prepareExamRun('interview:interview-B',null,'interview-B');assert.equal(h.api.getSolverState().turns.length,0);
 });

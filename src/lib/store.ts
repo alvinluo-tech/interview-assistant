@@ -40,16 +40,23 @@ export async function hydrateStore() {
 }
 
 /** 写设置（持久化 + 广播 + 跨窗口同步） */
-export async function setSetting<T>(key: string, value: T) {
-  cache.set(key, value);
-  listeners.forEach((l) => l());
+export async function setSetting<T>(key: string, value: T,options?:{strict?:boolean}) {
+  if(!options?.strict){cache.set(key, value);listeners.forEach((l) => l());}
+  let previous:unknown,changed=false;
   try {
     const store = await getStore();
+    if(options?.strict)previous=await store.get(key);
     await store.set(key, value);
+    changed=true;
     await store.save();
   } catch (e) {
+    if(options?.strict){
+      if(changed){const store=await getStore();if(previous===undefined)await store.delete(key);else await store.set(key,previous);}
+      throw new Error(`设置未保存，请检查存储位置和磁盘权限：${String((e as Error).message || e)}`);
+    }
     console.warn('[store] persist failed', e);
   }
+  if(options?.strict){cache.set(key,value);listeners.forEach(listener=>listener());}
   // 跨窗口同步：主窗口的改动要立刻反映到浮窗（各自独立 JS 上下文）
   try {
     const { emit } = await import('@tauri-apps/api/event');
@@ -163,6 +170,7 @@ export const DEFAULT_EXAM_CUSTOMIZATION: ExamCustomization = {
 };
 
 export const ALL_KEYS = [
+  'ai.taskPreferences',
   'updates.repository',
   'updates.reminder',
   'mock.speechEnabled',

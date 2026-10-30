@@ -34,10 +34,12 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
   const [goalId, setGoalId] = useSetting<string | null>('exam.goalId', goals[0]?.id ?? null);
   const [resumeId, setResumeId] = useState<string>(resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '');
   const [materialIds, setMaterialIds] = useSetting<string[]>('interview.pendingMaterialIds', []);
-  const [audioSource, setAudioSource] = useSetting<'SPEAKER' | 'PHONE' | 'MICROPHONE'>(
+  const [savedAudioSource, setAudioSource] = useSetting<'SPEAKER' | 'PHONE' | 'MICROPHONE'>(
     'interview.audioSource',
     'SPEAKER',
   );
+  // The former microphone practice card is a legacy phone-mode selection, not the AI mock room.
+  const audioSource = savedAudioSource === 'SPEAKER' ? 'SPEAKER' : 'PHONE';
   const [silenceGateMs, setSilenceGateMs] = useSetting<number>('interview.silenceGateMs', 1600);
   const [autoAnswer, setAutoAnswer] = useSetting<boolean>('interview.autoAnswer', true);
   const [prefsState, setPrefsState] = useSetting<Record<string, unknown>>('interviewPreference', {});
@@ -134,12 +136,12 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
         <div className="mb-4 grid grid-cols-2 gap-3">
           {[
             { key: 'SPEAKER', title: '线上面试', desc: '听电脑里播放的声音（腾讯会议 / 飞书等）' },
-            { key: 'MICROPHONE', title: '模拟练习', desc: '用麦克风，对着 AI 练习回答' },
+            { key: 'PHONE', title: '电话面试', desc: '通过麦克风采集电话外放声音，实时获取参考回答' },
           ].map((c) => (
             <button
               key={c.key}
               type="button"
-              onClick={() => setAudioSource(c.key as 'SPEAKER' | 'MICROPHONE')}
+              onClick={() => setAudioSource(c.key as 'SPEAKER' | 'PHONE')}
               className={`rounded-lg border p-3 text-left transition-colors ${
                 audioSource === c.key ? 'border-primary/50 bg-primary/10' : 'hover:bg-accent'
               }`}
@@ -151,7 +153,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
         </div>
 
         {audioSource === 'SPEAKER' && <OutputExclusions active={activeSession} />}
-        {audioSource !== 'SPEAKER' && <MicrophoneCheck enabled={!starting && !activeSession} />}
+        {audioSource === 'PHONE' && <><MicrophoneCheck enabled={!starting && !activeSession} /><p className="mb-4 text-xs leading-relaxed text-muted-foreground">请确保麦克风能听到电话另一端的声音。当前未进行说话人识别，自动作答会处理采集到的有效发言；需要时可关闭自动回答、手动选择问题。与 AI 对练请使用独立的「模拟面试」入口。</p></>}
         {sttProvider && <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs" data-testid="speech-mode-summary">
           <div className="font-medium">{sttProvider.name} / {sttRoute?.modelId} · {aiSettings.speechInputMode === 'realtime' ? '持续实时语音流' : liveSpeech ? '分段实时字幕' : '停顿后识别'}</div>
           <div className="mt-1 text-muted-foreground">{aiSettings.speechInputMode === 'realtime' ? '持续发送音频，实时显示部分字幕，句子定稿后流式回答。断线后会重连并提示中断。' : liveSpeech ? '约每 2.5 秒更新字幕；停顿后校正整句并流式回答。预览会增加转写用量。' : '等待说话停顿后转写，AI 回答逐步显示。'}</div>
@@ -289,7 +291,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
           <div className="mb-1 text-xs font-medium text-muted-foreground">额外回答要求</div>
           <Textarea
             rows={2}
-            maxLength={20000}
+            maxLength={2000}
             placeholder="例如：回答尽量控制在 1 分钟内，多提订单系统项目"
             value={String(prefsState.customAnswerStyle ?? '')}
             onChange={(e) => setPrefsState({ ...prefsState, customAnswerStyle: e.target.value })}

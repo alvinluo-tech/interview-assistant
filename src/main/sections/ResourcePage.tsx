@@ -14,6 +14,7 @@ import {
   DialogTitle,
   Input,
   SectionHeader,
+  Select,
   Textarea,
   showToast,
 } from '@/ui/primitives';
@@ -31,7 +32,7 @@ import {
   type Material,
   type Resume,
 } from '@/lib/backend';
-import { chatStream } from '@/lib/ai';
+import {generatePreparation} from '@/lib/preparation';
 import { DocumentImportDialog } from '../DocumentImportDialog';
 import { DOCUMENT_ACCEPT } from '@/lib/documentIngest';
 
@@ -303,6 +304,10 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const [a, setA] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
+  const [preparationResumes]=useData<Resume[]>('resumes',[]);
+  const [preparationGoals]=useData<Goal[]>('goals',[]);
+  const [preparationResumeId,setPreparationResumeId]=useState('');
+  const [preparationGoalId,setPreparationGoalId]=useState('');
   const [generating, setGenerating] = useState(false);
 
   if (!material) return null;
@@ -457,7 +462,11 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
       {genOpen && (
         <Dialog open onClose={() => setGenOpen(false)}>
           <DialogTitle>AI 生成问答</DialogTitle>
-          <DialogDesc>根据你的简历和目标岗位预测高频面试题并写好参考答案。</DialogDesc>
+          <DialogDesc>选择简历与岗位生成练习题。结果是 AI 准备建议，不代表真实题频或已确认个人经历。</DialogDesc>
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <label className="text-xs">参考简历<Select aria-label="出题参考简历" value={preparationResumeId} onChange={e=>setPreparationResumeId(e.target.value)}><option value="">不使用个人简历</option>{preparationResumes.map(resume=><option key={resume.id} value={resume.id}>{resume.title}</option>)}</Select></label>
+            <label className="text-xs">目标岗位<Select aria-label="出题目标岗位" value={preparationGoalId} onChange={e=>setPreparationGoalId(e.target.value)}><option value="">通用技术练习</option>{preparationGoals.map(goal=><option key={goal.id} value={goal.id}>{goal.name}</option>)}</Select></label>
+          </div>
           <div className="flex gap-2">
             {[5, 8, 12].map((n) => (
               <Button
@@ -468,29 +477,11 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
                 onClick={async () => {
                   setGenerating(true);
                   try {
-                    const { readData } = await import('@/lib/backend');
-                    const resumes = readData<Resume[]>('resumes', []);
-                    const goals = readData<Goal[]>('goals', []);
-                    const resume = resumes.find((r) => !r.isSample) ?? resumes[0];
-                    const goal = goals[0];
-                    const raw = await chatStream({
-                      messages: [
-                        {
-                          role: 'system',
-                          content:
-                            '你是面试教练。根据简历与目标岗位，生成高频面试题与参考答案。只输出 JSON 数组，格式：[{"question":"...","answer":"..."}]，不要 markdown 围栏。',
-                        },
-                        {
-                          role: 'user',
-                          content: `生成 ${n} 条。简历：${resume?.summary ?? '无'}；岗位：${goal?.name ?? '通用后端'}。`,
-                        },
-                      ],
-                      temperature: 0.5,
-                    });
-                    const jsonText = raw.replace(/```json|```/g, '').trim();
-                    const parsed = JSON.parse(jsonText) as { question: string; answer: string }[];
+                    const parsed=await generatePreparation({count:n,
+                      resume:preparationResumes.find(resume=>resume.id===preparationResumeId),
+                      goal:preparationGoals.find(goal=>goal.id===preparationGoalId),materials:material?[material]:[]});
                     for (const item of parsed.slice(0, n)) {
-                      await saveEntry(id, { question: item.question, answer: item.answer });
+                      await saveEntry(id, { question: item.question, answer: item.answer,origin:'model_generated' });
                     }
                     showToast({ type: 'success', title: `已生成 ${Math.min(parsed.length, n)} 条问答` });
                     setGenOpen(false);

@@ -36,7 +36,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       stopSystemAudioCapture: async () => { nativeStops++; }, setSystemAudioExcludedOutputs: async () => {} },
     './ai': { liveSpeechEnabled: () => live, buildInterviewSystemPrompt: () => '', chatStream: chat ?? (async () => '测试回答'), transcribeAudio: async (wav, options) => { requests++; wavs.push(wav); return transcribe ? transcribe(wav, options) : '请介绍一下你的项目经历'; } },
     './backend': { readData: (key, fallback) => key === 'interviewSessions' ? sessions : fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async (_id,patch) => {saved.push(patch);}, completeSession: async () => { if(completionFails) throw new Error('Disk unavailable'); } },
-    './examEngine': { getSolverState: () => ({ turns: [] }) },
+    './examEngine': { getSolverState: () => ({ turns: [] }), prepareExamRun: () => {}, finishInterviewExam: async () => {} },
     './store': { getSetting: (key, fallback) => settings[key] ?? fallback, setSetting: async (key,value) => { settings[key] = value; } },
     './events': { bus: { emit() {} } },
   };
@@ -76,6 +76,10 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   const knowledgeCode = ts.transpileModule(readFileSync('src/lib/knowledgeContext.ts', 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   vm.runInContext(`(function(exports){ ${knowledgeCode}\n})(knowledgeModule.exports)`, sandbox);
   mocks['./knowledgeContext'] = knowledgeModule.exports;
+  const contextModule={exports:{}};sandbox.contextModule=contextModule;
+  const contextCode=ts.transpileModule(readFileSync('src/lib/aiContext.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+  vm.runInContext(`(function(exports){ ${contextCode}\n})(contextModule.exports)`,sandbox);
+  mocks['./aiContext']=contextModule.exports;
   vm.runInContext(code, sandbox);
   const engine = sandbox.exports;
   engine.exposeEngineDebug();
@@ -418,4 +422,32 @@ test('temporary overlay hide keeps the active recovery id for panic restore',asy
   const h=harness();await h.start();h.settings['interview.sessionId']='test-session';
   await h.engine.endInterview(false);
   assert.equal(h.settings['interview.sessionId'],'test-session');
+});
+
+
+test('interview answer continuity uses prior AI suggestions and optional actual-answer corrections',async()=>{
+  const calls=[];const h=harness({chat:async options=>{calls.push(options);return calls.length===1?'采用 Redis 缓存，更新后删除缓存':'按前文解释';}});await h.start('PHONE');
+  await h.engine.answerQuestion('缓存怎么设计');
+  await h.engine.recordCandidateResponse('我实际采用本地缓存，刚才没有说 Redis');
+  await h.engine.answerQuestion('那一致性如何保证');
+  const request=JSON.stringify(calls[1].messages);
+  assert.match(request,/Redis 缓存/);assert.match(request,/实际回答.*本地缓存/);
+  assert.equal(calls[1].messages.filter(message=>message.content==='那一致性如何保证').length,1);
+  await h.engine.endInterview();
+});
+
+test('correcting a question cancels and fences old streamed output while preserving revisions',async()=>{
+  const requests=[];const resolvers=[];
+  const h=harness({chat:options=>{requests.push(options);return new Promise(resolve=>resolvers.push(resolve));}});await h.start();
+  const first=h.engine.answerQuestion('原来的错题');await Promise.resolve();
+  const source=h.engine.getInterviewEngineState().messages.find(message=>message.role==='INTERVIEWER');
+  const corrected=h.engine.answerQuestion('更正后的问题',{correction:true,questionMessageId:source.id});await Promise.resolve();
+  assert.equal(requests[0].signal.aborted,true);
+  requests[0].onDelta('旧输出');resolvers[0]('旧答案');await first;
+  requests[1].onDelta('新答案');resolvers[1]('新答案');await corrected;
+  const messages=h.engine.getInterviewEngineState().messages;
+  assert.equal(messages.find(message=>message.id===source.id).metadata.superseded,true);
+  assert.equal(messages.find(message=>message.text==='更正后的问题').metadata.revision,2);
+  assert.equal(messages.at(-1).text,'新答案');assert.ok(!messages.some(message=>message.text.includes('旧输出')));
+  await h.engine.endInterview();
 });

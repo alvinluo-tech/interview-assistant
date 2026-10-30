@@ -237,7 +237,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
               <div className="mb-1 text-xs font-medium text-muted-foreground">补充要求</div>
               <Textarea
                 rows={3}
-                maxLength={20000}
+                maxLength={2000}
                 placeholder="补充要求：希望答案更短 / 多给步骤 / 按考试格式输出…"
                 value={String(customization.customRequirements ?? '')}
                 onChange={(e) => setCustomization({ ...customization, customRequirements: e.target.value })}

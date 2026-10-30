@@ -10,7 +10,7 @@
     "test:byok": "node scripts/test-byok.mjs",
     "test:audio": "node --test tests/interview-audio.test.mjs",
     "test:tts": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/tts*.cjs --test-coverage-include=**/artifacts/test-compiled/questionSpeaker.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/tts.test.mjs tests/question-speech.test.mjs",
-    "test:platform": "node --test tests/native-platform.test.mjs tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs tests/question-speech.test.mjs tests/tts.test.mjs tests/mock-cancellation.test.mjs",
+    "test:platform": "node --test tests/native-platform.test.mjs tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs tests/question-speech.test.mjs tests/tts.test.mjs tests/mock-cancellation.test.mjs tests/ai-optimization.test.mjs",
     "test:dev-services": "node --test tests/dev-service.test.mjs",
     "test:release": "node --test tests/release.test.mjs",
     "test:updater": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/updateCheck.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/updater-client.test.mjs tests/updater-secrets.test.mjs",
@@ -20,7 +20,8 @@
     "test:core-coverage": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/documentIngest.cjs --test-coverage-include=**/artifacts/test-compiled/knowledgeContext.cjs --test-coverage-include=**/artifacts/test-compiled/realtimeAsrProtocol.cjs --test-coverage-include=**/artifacts/test-compiled/updateCheck.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/context-documents.test.mjs tests/realtime-asr.test.mjs tests/reliability.test.mjs tests/updater-client.test.mjs",
     "tauri": "tauri",
     "test:experience": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/questionSpeaker.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs tests/question-speech.test.mjs tests/mock-cancellation.test.mjs",
-    "test:bug-review": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/interviewLifecycle.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/bug-review.test.mjs tests/interview-lifecycle.test.mjs"
+    "test:bug-review": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/interviewLifecycle.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/bug-review.test.mjs tests/interview-lifecycle.test.mjs",
+    "test:ai": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/aiContext.cjs --test-coverage-include=**/artifacts/test-compiled/aiTaskPolicy.cjs --test-coverage-include=**/artifacts/test-compiled/taskPrompts.cjs --test-coverage-include=**/artifacts/test-compiled/preparation.cjs --test-coverage-include=**/artifacts/test-compiled/sessionKnowledge.cjs --test-coverage-include=**/artifacts/test-compiled/knowledgeContext.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/ai-optimization.test.mjs tests/context-documents.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

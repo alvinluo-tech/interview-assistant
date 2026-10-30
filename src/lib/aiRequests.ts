@@ -1,7 +1,10 @@
 import { getAiSettings, getAiLoadError } from './aiSettings';
 import { resolveAiRoute, usesLiveSpeech, type AiRole } from './aiConfig';
 import { aiFetch } from './aiTransport';
-import { aiHeaders, consumeChat, withAiRequest } from './aiProtocol';
+import { aiHeaders, consumeChatResult, withAiRequest } from './aiProtocol';
+import {PROMPT_VERSION,outputLimit,checkInputBudget,type AiTask,type AiRequestTrace} from './aiTaskPolicy';
+import {applyTaskInstructions,type TaskPreferences} from './taskPrompts';
+import {getSetting} from './store';
 import { recognizeSpeech, type TranscriptionOptions } from './speechProtocol';
 import { requestSpeech, type SpeechConsumer } from './ttsProtocol';
 
@@ -15,31 +18,50 @@ export interface ChatOptions {
   onDelta?: (text: string) => void;
   temperature?: number;
   maxTokens?: number;
+  task?:AiTask;
+  schema?:{name:string;schema:Record<string,unknown>};
+  onTrace?:(trace:AiRequestTrace)=>void;
 }
 function route(role: AiRole) {
   if (getAiLoadError()) throw new Error('AI 配置读取失败，请到「设置 → AI 服务」查看并重试');
   const settings = getAiSettings();
   return { settings, ...resolveAiRoute(settings, role) };
 }
-function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<string> {
+async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<string> {
   const { settings, provider, modelId } = route(role);
-  return withAiRequest(provider, 'chat/completions', {
+  const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
+  const task=opts.task || (role==='vision'?'exam-solve':'interview-answer');
+  const messages=applyTaskInstructions(opts.messages,task,getSetting<TaskPreferences>('ai.taskPreferences',{}));
+  const trace:AiRequestTrace={id:globalThis.crypto?.randomUUID?.() || `req-${Date.now()}-${Math.random()}`,task,promptVersion:PROMPT_VERSION,providerId:provider.id,modelId,startedAt:Date.now(),elapsedMs:0,completionStatus:'unknown'};
+  const limit=Math.min(opts.maxTokens || outputLimit(task,capabilities),capabilities?.maxOutputTokens || Infinity);
+  const outputParameter=capabilities?.outputParameter || 'max_tokens';
+  const format=opts.schema&&capabilities?.structuredOutput==='json_schema'?{type:'json_schema',json_schema:{...opts.schema,strict:true}}:
+    opts.schema&&capabilities?.structuredOutput==='json_object'?{type:'json_object'}:undefined;
+  try {
+  checkInputBudget(messages,limit,capabilities);
+  return await withAiRequest(provider, 'chat/completions', {
     method: 'POST', headers: aiHeaders(provider, true),
-    body: JSON.stringify({ model: modelId, messages: opts.messages, stream: true,
-      ...(opts.temperature === undefined ? {} : { temperature: opts.temperature }),
-      ...(opts.maxTokens === undefined ? {} : { max_tokens: opts.maxTokens }),
+    body: JSON.stringify({ model: modelId, messages, stream: true,
+      ...(opts.temperature === undefined || capabilities?.temperature===false ? {} : { temperature: opts.temperature }),
+      ...(outputParameter==='none'?{}:{[outputParameter]:limit}),...(format?{response_format:format}:{}),
     }),
-  }, settings.timeoutMs, r => consumeChat(r, opts.onDelta), aiFetch, opts.signal);
+  }, settings.timeoutMs, async (response,pending) => {
+    const result=await consumeChatResult(response,delta=>{trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending);
+    trace.completionStatus=result.completionStatus;trace.finishReason=result.finishReason;Object.assign(trace,result.usage);
+    return result.text;
+  }, aiFetch, opts.signal);
+  }catch(error){trace.completionStatus=opts.signal?.aborted?'cancelled':(error as {completionStatus?:string}).completionStatus || 'failed';throw error;}
+  finally {trace.elapsedMs=Date.now()-trace.startedAt;opts.onTrace?.({...trace});}
 }
 export async function chatStream(opts: ChatOptions) { return stream('chat', opts); }
-export async function chatWithImages(prompt: string, imageDataUrls: string[], opts?: { signal?: AbortSignal; onDelta?: (t: string) => void; system?: string }) {
+export async function chatWithImages(prompt: string, imageDataUrls: string[], opts?: Omit<ChatOptions,'messages'> & {system?:string}) {
   const messages: ChatMessage[] = [];
   if (opts?.system) messages.push({ role: 'system', content: opts.system });
   messages.push({ role: 'user', content: [
     { type: 'text', text: prompt },
     ...imageDataUrls.map(url => ({ type: 'image_url' as const, image_url: { url } })),
   ] });
-  return stream('vision', { messages, signal: opts?.signal, onDelta: opts?.onDelta });
+  return stream('vision', { ...opts,messages });
 }
 export function liveSpeechEnabled() { return usesLiveSpeech(getAiSettings()); }
 export async function transcribeAudio(wav: Blob, opts: TranscriptionOptions = {}): Promise<string> {
