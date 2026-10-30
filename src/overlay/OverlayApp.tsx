@@ -147,6 +147,7 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
     const unlisteners: (() => void)[] = [];
     const off = onEvent<{ action: string; pressed: boolean }>('action-hotkeys', async (p) => {
       if (!p.pressed) return;
+      const currentStyle = normalizeStyle(getSetting('overlay.style', style));
       const sizeKey = mode === 'interview' ? 'interview' : 'exam';
       const patch: Partial<OverlayStyle> = {};
       switch (p.action) {
@@ -157,8 +158,8 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
           await moveOverlay(p.action);
           return;
         case 'size-up': {
-          const w = sizeKey === 'interview' ? style.interviewWidth : style.examWidth;
-          const h = sizeKey === 'interview' ? style.interviewHeight : style.examHeight;
+          const w = sizeKey === 'interview' ? currentStyle.interviewWidth : currentStyle.examWidth;
+          const h = sizeKey === 'interview' ? currentStyle.interviewHeight : currentStyle.examHeight;
           const nw = clampDim(Math.round(Math.max(w, h) * 1.1));
           if (sizeKey === 'interview') {
             patch.interviewWidth = nw;
@@ -170,8 +171,8 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
           break;
         }
         case 'size-down': {
-          const w = sizeKey === 'interview' ? style.interviewWidth : style.examWidth;
-          const h = sizeKey === 'interview' ? style.interviewHeight : style.examHeight;
+          const w = sizeKey === 'interview' ? currentStyle.interviewWidth : currentStyle.examWidth;
+          const h = sizeKey === 'interview' ? currentStyle.interviewHeight : currentStyle.examHeight;
           const nw = clampDim(Math.round(Math.max(w, h) / 1.1));
           if (sizeKey === 'interview') {
             patch.interviewWidth = nw;
@@ -184,8 +185,8 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
         }
         case 'opacity-up':
         case 'opacity-down': {
-          const step = style.hotkeyOpacityStep;
-          const cur = sizeKey === 'interview' ? style.interviewBgOpacity : style.examBgOpacity;
+          const step = currentStyle.hotkeyOpacityStep;
+          const cur = sizeKey === 'interview' ? currentStyle.interviewBgOpacity : currentStyle.examBgOpacity;
           const next = Math.min(1, Math.max(0, cur + (p.action === 'opacity-up' ? step : -step)));
           if (sizeKey === 'interview') patch.interviewBgOpacity = next;
           else patch.examBgOpacity = next;
@@ -193,8 +194,8 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
         }
         case 'text-opacity-up':
         case 'text-opacity-down': {
-          const step = style.hotkeyOpacityStep;
-          const cur = sizeKey === 'interview' ? style.interviewTextOpacity : style.examTextOpacity;
+          const step = currentStyle.hotkeyOpacityStep;
+          const cur = sizeKey === 'interview' ? currentStyle.interviewTextOpacity : currentStyle.examTextOpacity;
           const next = Math.min(1, Math.max(0, cur + (p.action === 'text-opacity-up' ? step : -step)));
           if (sizeKey === 'interview') patch.interviewTextOpacity = next;
           else patch.examTextOpacity = next;
@@ -203,7 +204,7 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
         default:
           return;
       }
-      const merged = normalizeStyle({ ...style, ...patch });
+      const merged = normalizeStyle({ ...currentStyle, ...patch });
       await setSetting('overlay.style', merged);
       const { emit } = await import('@tauri-apps/api/event');
       await emit('overlay-style-hotkey-patch', patch);

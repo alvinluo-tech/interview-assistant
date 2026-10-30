@@ -7,6 +7,8 @@ import { useDwell, usePlatform } from './platform';
 import { hotkeyBadge } from '@/lib/hotkeys';
 import { isMac } from '@/lib/env';
 import { onEvent as onTauriEvent } from '@/lib/bridge';
+import { DEFAULT_OVERLAY_STYLE, useSetting } from '@/lib/store';
+import { normalizeStyle } from '@/lib/overlayStyle';
 
 /** 大悬停按钮（原版 kW） */
 export function DwellButton({
@@ -31,6 +33,7 @@ export function DwellButton({
   compact?: boolean;
 }) {
   const { interactive, registerZone } = usePlatform();
+  const showHints = useSetting('interview.showHotkeyHints', true)[0];
   const progress = useDwell(id, hoverMs, onTrigger, { disabled: disabled || interactive });
   const [refEl, setRefEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -55,7 +58,7 @@ export function DwellButton({
     >
       <span className="flex max-w-full items-center justify-center gap-1 truncate">
         <span className="truncate text-[12.5px]">{children}</span>
-        {hotkey && showHotkeyHints() && (
+        {hotkey && showHints && (
           <span className="ov-text-3 shrink-0 whitespace-nowrap text-[9px] opacity-65">
             {hotkeyBadge(hotkey, isMac())}
           </span>
@@ -194,9 +197,13 @@ export function ScrollEdgePill({
   label: string;
   hotkey?: string;
 }) {
-  const { bindHotkeyHold, registerZone } = usePlatform();
+  const { bindHotkeyHold, registerZone, activeZoneId, interactive } = usePlatform();
+  const showHints = useSetting('interview.showHotkeyHints', true)[0];
+  const speed = normalizeStyle(useSetting('overlay.style', DEFAULT_OVERLAY_STYLE)[0]).scrollSpeed;
   const [refEl, setRefEl] = useState<HTMLElement | null>(null);
   const [held, setHeld] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const scrolling = held || (interactive ? hovered : activeZoneId === id);
   useEffect(() => {
     registerZone(id, refEl);
     return () => registerZone(id, null);
@@ -206,24 +213,28 @@ export function ScrollEdgePill({
   }, [bindHotkeyHold, direction]);
   // 按住热键时持续滚动
   useEffect(() => {
-    if (!held) return;
+    if (!scrolling) return;
     let raf = 0;
     let last = performance.now();
+    const started = last;
     const step = (now: number) => {
-      scrollOverlayList(direction, (3 + 6) * (Math.min((now - last) / 16.7, 3)) * 1);
+      const velocity = 3 + 6 * Math.min(1, (now - started) / 1000);
+      scrollOverlayList(direction, velocity * Math.min((now - last) / 16.7, 3) * speed);
       last = now;
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [held, direction]);
+  }, [scrolling, direction, speed]);
   return (
     <div
       ref={setRefEl as (el: HTMLDivElement | null) => void}
-      className="ov-pill pointer-events-none relative mx-2 flex h-6 items-center justify-center gap-1 rounded-full border text-[10px] font-medium"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="ov-pill relative mx-2 flex h-6 items-center justify-center gap-1 rounded-full border text-[10px] font-medium"
     >
       <span className="ov-text-2 flex items-center gap-1">
-        {hotkey && showHotkeyHints() ? (
+        {hotkey && showHints ? (
           <span className="ov-text-3">{hotkeyBadge(hotkey, isMac())}</span>
         ) : (
           <span>{label}</span>
@@ -244,16 +255,21 @@ export function scrollOverlayList(direction: 'up' | 'down', amountPx: number) {
   overlayListEl.scrollTop += direction === 'up' ? -amountPx : amountPx;
 }
 
-function showHotkeyHints(): boolean {
-  // 惰性读取设置（渲染层无法用 hook 的场景）
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = (window as unknown as { __ml_getSetting?: <T>(k: string, d: T) => T }).__ml_getSetting;
-    if (mod) return mod('interview.showHotkeyHints', true);
-  } catch {
-    // ignore
-  }
-  return true;
+/** First dwell arms the action; a separate visible target confirms it. */
+export function ConfirmPaletteButton({id, onApply}: {id:string; onApply:()=>Promise<void>}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = window.setTimeout(() => setArmed(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+  return <div className="relative flex items-center">
+    <DwellIconButton id={id} hoverMs={HOVER_MS.palette} label="一键配色" icon={<span aria-hidden="true">◐</span>}
+      onTrigger={() => setArmed(true)} disabled={armed} />
+    {armed && <div className="absolute right-0 top-full z-20 mt-1 w-28 rounded-md bg-background p-1 shadow-lg">
+      <DwellButton id={`${id}-confirm`} hoverMs={HOVER_MS.paletteConfirm} onTrigger={() => {setArmed(false);void onApply();}}>确认配色</DwellButton>
+    </div>}
+  </div>;
 }
 
 export const HOVER_MS = {

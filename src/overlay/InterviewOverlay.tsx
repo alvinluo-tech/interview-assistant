@@ -9,7 +9,6 @@ import {
   Columns2,
   Mic,
   MousePointerClick,
-  Palette,
   Square,
 } from 'lucide-react';
 import { computeSkin, normalizeStyle } from '@/lib/overlayStyle';
@@ -47,6 +46,8 @@ import { effectiveHotkeys, type ActionKey, type HotkeyScheme } from '@/lib/hotke
 import { Md, mdToPlain } from './Md';
 import {
   DwellButton,
+  DwellIconButton,
+  ConfirmPaletteButton,
   DragHandle,
   HOVER_MS,
   ScrollEdgePill,
@@ -182,14 +183,10 @@ function InterviewShell({
         <span className="ov-text-2 truncate text-[11px] font-semibold">{statusInfo.text}</span>
         <div className="flex-1" />
         {/* 穿透/窗口切换 */}
-        <button
-          type="button"
-          className="ov-text-2 flex h-6.5 w-6.5 items-center justify-center rounded-md"
-          title={interactive ? '切回穿透模式' : '悬停或点击切到窗口模式'}
-          onClick={() => toggleInteractive()}
-        >
-          {interactive ? <MousePointerClick size={13} /> : <Columns2 size={13} />}
-        </button>
+        <DwellIconButton id="iv-mode" hoverMs={HOVER_MS.switchInteractive}
+          label={interactive ? '切回穿透模式' : '悬停切到窗口模式'}
+          icon={interactive ? <MousePointerClick size={13} /> : <Columns2 size={13} />}
+          onTrigger={toggleInteractive} />
         {/* 一键配色 */}
         <PaletteBtn />
         {/* 结束面试 */}
@@ -348,6 +345,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
   const answerFirst = useSetting('interview.answerFirst', false)[0];
   const followNewRound = useSetting('interview.followNewRound', true)[0];
   const followStreaming = useSetting('interview.followStreaming', false)[0];
+  const following = useRef(true);
 
   useEffect(() => {
     registerOverlayList(listRef.current);
@@ -357,18 +355,16 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
   // 自动跟随：新回合 / 流式
   useEffect(() => {
     const el = listRef.current;
-    if (!el) return;
+    if (!el || !followNewRound || !following.current) return;
     const live = el.querySelector('[data-testid=live-transcript]:last-child');
     const anchor = live ?? el.querySelector('[data-overlay-scroll-anchor]');
-    if (followNewRound && anchor) {
+    if (anchor) {
       anchor.scrollIntoView({ block: live ? 'end' : 'start' });
-    } else {
-      el.scrollTop = el.scrollHeight;
     }
   }, [engine.messages.length, engine.liveTranscripts.length, followNewRound]);
 
   useEffect(() => {
-    if (!followStreaming) return;
+    if (!followStreaming || !following.current) return;
     const el = listRef.current;
     if (!el) return;
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) {
@@ -390,7 +386,10 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
   return (
     <>
       <ScrollEdgePillProxy id="scroll-up" direction="up" label="悬停回看" hotkey={hotkeys['scroll-up']} />
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1">
+      <div ref={listRef} onScroll={() => {
+        const el = listRef.current;
+        if (el) following.current = newestFirst ? el.scrollTop < 160 : el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+      }} className="min-h-0 flex-1 overflow-y-auto px-1">
         {engine.messages.length === 0 && engine.partial === '' && engine.liveTranscripts.length === 0 ? (
           <div className="ov-text-2 flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
             <div className="ov-text text-[13px] font-medium">
@@ -410,7 +409,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
           <div className="flex flex-col gap-2">
             {ordered.map((group, gi) => {
               const msgs = answerFirst && newestFirst ? [...group].reverse() : group;
-              const isLatest = gi === ordered.length - 1;
+              const isLatest = newestFirst ? gi === 0 : gi === ordered.length - 1;
               return (
                 <div key={gi} className="flex flex-col gap-1.5" data-overlay-scroll-anchor={isLatest || undefined}>
                   {msgs.map((m) =>
@@ -718,29 +717,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
 }
 
 function PaletteBtn() {
-  const { interactive, registerZone } = usePlatform();
-  const progress = useDwell('iv-auto-palette', HOVER_MS.palette, () => void applyIvPalette(), {
-    disabled: interactive,
-  });
-  const [refEl, setRefEl] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    registerZone('iv-auto-palette', refEl);
-    return () => registerZone('iv-auto-palette', null);
-  }, [refEl, registerZone]);
-  return (
-    <button
-      ref={setRefEl as (el: HTMLButtonElement | null) => void}
-      type="button"
-      className="ov-text-2 relative flex h-6 w-6 items-center justify-center rounded-md"
-      title="一键配色：按浮窗背后的画面自动换一身配色"
-      onClick={interactive ? () => void applyIvPalette() : undefined}
-    >
-      <Palette size={13} />
-      {!interactive && progress > 0 && (
-        <span className="ov-bar absolute bottom-0 left-0 h-[2px]" style={{ width: `${progress * 100}%` }} />
-      )}
-    </button>
-  );
+  return <ConfirmPaletteButton id="iv-auto-palette" onApply={applyIvPalette} />;
 }
 
 async function applyIvPalette() {

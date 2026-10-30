@@ -4,7 +4,7 @@
  * 多页收集态）。文案与悬停时长对齐原版。
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Copy, Palette, Puzzle } from 'lucide-react';
+import { Copy, Puzzle } from 'lucide-react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import {
   computeSkin,
@@ -33,6 +33,7 @@ import { isMac } from '@/lib/env';
 import { Md } from './Md';
 import {
   DwellButton,
+  ConfirmPaletteButton,
   DragHandle,
   HOVER_MS,
   ScrollEdgePill,
@@ -414,29 +415,7 @@ function DwellChip({
 
 /** 一键配色：截屏采样背景色 → 推导主题（本地版 overlay.suggestPalette） */
 function PaletteButton() {
-  const { interactive, registerZone } = usePlatform();
-  const progress = useDwell('auto-palette', HOVER_MS.palette, () => void applyPalette(), {
-    disabled: interactive,
-  });
-  const [refEl, setRefEl] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    registerZone('auto-palette', refEl);
-    return () => registerZone('auto-palette', null);
-  }, [refEl, registerZone]);
-  return (
-    <button
-      ref={setRefEl as (el: HTMLButtonElement | null) => void}
-      type="button"
-      className="ov-text-2 relative flex h-6 w-6 items-center justify-center rounded-md"
-      title="一键配色：按浮窗背后的画面自动换一身配色"
-      onClick={interactive ? () => void applyPalette() : undefined}
-    >
-      <Palette size={13} />
-      {!interactive && progress > 0 && (
-        <span className="ov-bar absolute bottom-0 left-0 h-[2px]" style={{ width: `${progress * 100}%` }} />
-      )}
-    </button>
-  );
+  return <ConfirmPaletteButton id="auto-palette" onApply={applyPalette} />;
 }
 
 async function applyPalette() {

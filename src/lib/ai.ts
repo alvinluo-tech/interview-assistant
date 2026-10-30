@@ -93,12 +93,16 @@ export const EXAM_SYSTEM_PROMPT = [
 ].join('\n');
 
 export function buildExamUserPrompt(customization?: {
+  answerLanguage?: string;
   programmingLanguage?: string;
   codeMode?: string;
   codeQuality?: string;
   customRequirements?: string;
 }): string {
   const parts: string[] = ['以下是屏幕截图，请识别题目并作答。'];
+  if (customization?.answerLanguage && customization.answerLanguage !== 'auto') {
+    parts.push(`使用 ${customization.answerLanguage.slice(0, 40)} 作答；保留题干中的专有名词与代码。`);
+  }
   if (customization?.programmingLanguage && customization.programmingLanguage !== 'auto') {
     parts.push(`编程题使用 ${customization.programmingLanguage}。`);
   }

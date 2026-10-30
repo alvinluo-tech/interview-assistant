@@ -132,7 +132,7 @@ function ensureTicker() {
 }
 
 function modeSettingKey(): 'exam.mode' | 'interview.solverExamMode' {
-  return getSetting('overlay.mode', 'exam') === 'interview' ? 'interview.solverExamMode' : 'exam.mode';
+  return getSetting<string>('overlay.mode', 'exam') === 'interview' ? 'interview.solverExamMode' : 'exam.mode';
 }
 
 function customization(): ExamCustomization {

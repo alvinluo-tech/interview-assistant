@@ -178,6 +178,9 @@ export interface CapturedKey {
 
 /** keydown 事件 → Tauri accelerator（设置页录键用） */
 export function keyEventToAccelerator(e: KeyboardEvent): CapturedKey {
+  if (!e.code || /^(Control|Alt|Shift|Meta|OS)(Left|Right)?$/.test(e.code)) {
+    return { accelerator: '', error: '修饰键需与其他键组合' };
+  }
   const parts: string[] = [];
   if (e.ctrlKey) parts.push('Control');
   if (e.metaKey) parts.push('Super');
@@ -191,16 +194,17 @@ export function keyEventToAccelerator(e: KeyboardEvent): CapturedKey {
     // 保留 F1-F24
   } else {
     const map: Record<string, string> = {
-      Enter: 'Enter', Escape: 'Esc', Backspace: 'Backspace', Delete: 'Delete',
+      Enter: 'Enter', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete',
       Insert: 'Insert', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
       Tab: 'Tab', Space: 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left',
       ArrowRight: 'Right', Equal: '=', Minus: '-', BracketLeft: '[', BracketRight: ']',
       Semicolon: ';', Quote: "'", Backslash: '\\', Comma: ',', Period: '.', Slash: '/',
       Backquote: '`', CapsLock: 'CapsLock', PrintScreen: 'PrintScreen', ScrollLock: 'ScrollLock',
-      Pause: 'Pause', ContextMenu: 'Menu', NumpadAdd: 'numadd', NumpadSubtract: 'numsub',
-      NumpadMultiply: 'nummult', NumpadDivide: 'numdiv', NumpadDecimal: 'numdec',
+      Pause: 'Pause', ContextMenu: 'ContextMenu', NumpadAdd: 'NumpadAdd', NumpadSubtract: 'NumpadSubtract',
+      NumpadMultiply: 'NumpadMultiply', NumpadDivide: 'NumpadDivide', NumpadDecimal: 'NumpadDecimal', NumpadEnter:'NumpadEnter',
     };
-    key = map[key] ?? key;
+    if (!map[key]) return { accelerator:'', error:'暂不支持此按键，请选择字母、数字或常用功能键' };
+    key = map[key];
   }
   if (['Control', 'Alt', 'Shift', 'Super'].includes(key)) {
     return { accelerator: '', error: '修饰键需与其他键组合' };

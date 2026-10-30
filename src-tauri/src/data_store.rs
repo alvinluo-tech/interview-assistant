@@ -12,6 +12,7 @@ const KEYS: &[&str] = &[
     "interviewPreference",
     "questionBanks",
     "feedback",
+    "jobProgress",
 ];
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
 #[derive(Default)]
@@ -218,7 +219,9 @@ pub fn cmd_data_commit(
     if value.to_string().len() as u64 > MAX_BYTES || expected.to_string().len() as u64 > MAX_BYTES {
         return Err("数据集合过大。".into());
     }
-    if !matches!(key.as_str(), "localUser" | "interviewPreference") {
+    if matches!(key.as_str(), "localUser" | "interviewPreference" | "jobProgress") {
+        if !value.is_object() { return Err("数据集合必须是对象。".into()); }
+    } else {
         let rows = value.as_array().ok_or("数据集合必须是记录列表。")?;
         let mut ids = BTreeSet::new();
         if rows.len() > 100000
