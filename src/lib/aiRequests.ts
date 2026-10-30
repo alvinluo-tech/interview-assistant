@@ -3,6 +3,7 @@ import { resolveAiRoute, usesLiveSpeech, type AiRole } from './aiConfig';
 import { aiFetch } from './aiTransport';
 import { aiHeaders, consumeChat, withAiRequest } from './aiProtocol';
 import { recognizeSpeech, type TranscriptionOptions } from './speechProtocol';
+import { requestSpeech, type SpeechConsumer } from './ttsProtocol';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -52,10 +53,26 @@ export async function transcribeAudio(wav: Blob, opts: TranscriptionOptions = {}
 export async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<ArrayBuffer | null> {
   // TTS is explicitly optional; configured-but-failed requests still surface errors.
   if (!getAiSettings().routes.tts) return null;
-  const { settings, provider, modelId } = route('tts');
-  return withAiRequest(provider, 'audio/speech', { method: 'POST', headers: aiHeaders(provider, true),
-    body: JSON.stringify({ model: modelId, input: text, voice: settings.ttsVoice }),
-  }, settings.timeoutMs, r => r.arrayBuffer(), aiFetch, signal);
+  const chunks: Uint8Array[] = []; let pcm = true, size = 0;
+  await streamSpeech(text,signal,chunk => {pcm = pcm && chunk.format === 'pcm16';chunks.push(chunk.bytes);size += chunk.bytes.length;});
+  if (!size) return null;
+  if (pcm && size % 2) throw new Error('语音音频数据不完整，请重新朗读。');
+  if (!pcm && chunks.length > 1) throw new Error('长问题包含多个音频文件，请使用面试官的流式播放入口。');
+  // Keep the legacy whole-file API usable by callers outside the streaming interviewer.
+  const output = new Uint8Array(size + (pcm ? 44 : 0));let offset = pcm ? 44 : 0;
+  for (const chunk of chunks) {output.set(chunk,offset);offset += chunk.length;}
+  if (pcm) {
+    const view = new DataView(output.buffer);
+    for (const [at,value] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']] as const) for(let i=0;i<value.length;i++) output[at+i]=value.charCodeAt(i);
+    view.setUint32(4,size+36,true);view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+    view.setUint32(24,24000,true);view.setUint32(28,48000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);view.setUint32(40,size,true);
+  }
+  return output.buffer;
+}
+
+export async function streamSpeech(text: string, signal: AbortSignal | undefined, consume: SpeechConsumer): Promise<void> {
+  const {settings,provider,modelId} = route('tts');
+  await requestSpeech(provider,modelId,text,settings.ttsVoice,aiFetch,settings.timeoutMs,signal,consume);
 }
 
 export { createQuestionSpeaker } from './questionSpeaker';

@@ -40,6 +40,7 @@ export interface AiSettings {
 export const PROVIDER_PRESETS = [
   { id: 'compatible', name: 'OpenAI 兼容接口', baseUrl: '', authMode: 'bearer' as const },
   { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', authMode: 'bearer' as const },
+  { id: 'mimo', name: '小米 MiMo', baseUrl: 'https://api.xiaomimimo.com/v1', authMode: 'bearer' as const },
   { id: 'dashscope', name: '阿里云百炼（北京）', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', authMode: 'bearer' as const },
   { id: 'dashscope-sg', name: '阿里云百炼（新加坡）', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', authMode: 'bearer' as const },
   { id: 'ollama', name: '本地 Ollama', baseUrl: 'http://localhost:11434/v1', authMode: 'none' as const },
@@ -51,11 +52,18 @@ export function defaultAiSettings(): AiSettings {
 export function createProvider(presetId = 'compatible'): AiProvider {
   const preset = PROVIDER_PRESETS.find(p => p.id === presetId) ?? PROVIDER_PRESETS[0];
   return { id: crypto.randomUUID(), name: preset.name, baseUrl: preset.baseUrl, apiKey: '', authMode: preset.authMode,
-    models: presetId === 'dashscope' ? [
+    models: presetId === 'mimo' ? [{id:'mimo-v2.5-tts',name:'MiMo 面试官语音',source:'custom'}] : presetId === 'dashscope' ? [
       { id: 'fun-asr-realtime', name: 'Fun-ASR 实时识别', source: 'custom' },
       { id: 'fun-asr-realtime-2026-02-28', name: 'Fun-ASR 实时识别（2026-02-28）', source: 'custom' },
       { id: 'paraformer-realtime-v2', name: 'Paraformer 实时识别 v2', source: 'custom' },
-    ] : presetId === 'dashscope-sg' ? [{ id: 'fun-asr-realtime', name: 'Fun-ASR 实时识别', source: 'custom' }] : [], lastFetchedAt: null };
+      { id: 'qwen3-tts-flash', name: 'Qwen 面试官语音', source: 'custom' },
+      { id: 'qwen-audio-3.1-tts-flash', name: 'Qwen Audio 语音', source: 'custom' },
+      { id: 'cosyvoice-v3-flash', name: 'CosyVoice 语音', source: 'custom' },
+    ] : presetId === 'dashscope-sg' ? [
+      { id: 'fun-asr-realtime', name: 'Fun-ASR 实时识别', source: 'custom' },
+      { id: 'qwen3-tts-flash', name: 'Qwen 面试官语音', source: 'custom' },
+      { id: 'qwen-audio-3.1-tts-flash', name: 'Qwen Audio 语音', source: 'custom' },
+    ] : [], lastFetchedAt: null };
 }
 /** Recognize only official HTTPS compatibility endpoints; never redirect a proxy's credentials. */
 export function bailianConnection(baseUrl: string) {

@@ -55,3 +55,30 @@ test('blank text does not request audio and configured service failures are visi
   await speaker.speak('  '); assert.equal(requests, 0);
   await speaker.speak('问题'); assert.equal(errors.length, 1);
 });
+
+test('streaming cloud speech shows preparation, starts before synthesis completes and aborts immediately', async () => {
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController});
+  const phases = [], errors = []; let complete, signal, changed, released = 0;
+  const speaker = api.createQuestionSpeaker({configured: () => true,
+    cloud: async () => {throw new Error('must use streaming driver');}, play: () => () => {}, system: async () => () => {},
+    cloudStream: (_text, state, _error, pending) => {
+      signal = pending; changed = state;
+      return new Promise(resolve => {complete = () => resolve(() => {released++;});});
+    },
+  }, () => {}, error => errors.push(error), phase => phases.push(phase));
+  const pending = speaker.speak('请介绍你的项目');
+  assert.equal(phases.at(-1), 'preparing');
+  changed(true); assert.equal(phases.at(-1), 'speaking');
+  speaker.stop(); assert.equal(signal.aborted, true); assert.equal(phases.at(-1), 'idle');
+  changed(true); complete(); await pending;
+  assert.equal(phases.at(-1), 'idle'); assert.equal(released, 1); assert.deepEqual(errors, []);
+});
+
+test('a playback failure is reported once and all later state callbacks are ignored', async () => {
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports:{},AbortController});
+  const errors=[],states=[];let signal;
+  const speaker=api.createQuestionSpeaker({configured:()=>true,cloud:async()=>null,play:()=>()=>{},system:async()=>()=>{},
+    cloudStream:async(_text,changed,failed,pending)=>{signal=pending;failed(new Error('speaker disconnected'));changed(true);throw new Error('same failure');},
+  },state=>states.push(state),error=>errors.push(error));
+  await speaker.speak('问题');assert.equal(errors.length,1);assert.equal(signal.aborted,true);assert.equal(states.at(-1),false);
+});

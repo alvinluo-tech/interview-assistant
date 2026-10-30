@@ -1,4 +1,5 @@
 import { bailianConnection, isSpeechRecognitionModel, normalizeProvider, validateModelId, type AiProvider } from './aiConfig.js';
+import { isSpeechSynthesisModel } from './ttsConfig.js';
 
 export type AiFetch = (url: string, init: RequestInit) => Promise<Response>;
 /** Transcription accepts ISO-639-1 (zh/en), while UI preferences use locales. */
@@ -43,7 +44,7 @@ export async function responseError(response: Response, key: string): Promise<Er
 /** Apply timeout through body consumption too, not just response headers. */
 export async function withAiRequest<T>(
   provider: AiProvider, endpoint: string, init: RequestInit, timeoutMs: number,
-  consume: (response: Response) => Promise<T>, fetcher: AiFetch, signal?: AbortSignal,
+  consume: (response: Response, signal: AbortSignal) => Promise<T>, fetcher: AiFetch, signal?: AbortSignal,
 ): Promise<T> {
   const normalized = normalizeProvider(provider);
   const scope = requestScope(timeoutMs, signal);
@@ -55,7 +56,7 @@ export async function withAiRequest<T>(
       throw new Error('当前连接是本地测试服务，只会返回固定内容，无法用于真实问答或语音识别。请到「设置 → AI 服务」配置真实接口。');
     }
     if (!response.ok) throw await responseError(response, normalized.apiKey);
-    return await consume(response);
+    return await consume(response, scope.signal);
   } catch (error) {
     if (scope.signal.aborted) throw scope.signal.reason ?? new DOMException('已取消请求', 'AbortError');
     if (error instanceof Error) throw new Error(redactError(error.message, normalized.apiKey));
@@ -184,6 +185,7 @@ export async function consumeChat(response: Response, onDelta?: (text: string) =
 export async function testChatModel(provider: AiProvider, modelId: string, fetcher: AiFetch, signal?: AbortSignal): Promise<{ latencyMs: number; sample: string }> {
   const selectedModel = validateModelId(modelId);
   if (isSpeechRecognitionModel(selectedModel)) throw new Error('该模型用于语音识别，不能执行文字对话测试。请在「语音转写」中配置，并使用实际音频验证。');
+  if (isSpeechSynthesisModel(selectedModel)) throw new Error('该模型用于语音合成，不能执行文字对话测试。请分配到「语音合成」后试听。');
   const start = performance.now();
   const sample = await withAiRequest(provider, 'chat/completions', {
     method: 'POST', headers: aiHeaders(provider, true),

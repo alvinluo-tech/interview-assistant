@@ -26,10 +26,12 @@ test('native preview exercises the production card without application installat
     assert.match(source, /SetOutPath "\$PLUGINSDIR"/);
   }
   assert.throws(() => previewSource('C:/fixture', 'preview.exe', 'invalid'));
-  const hero = readFileSync('src-tauri/windows/branding/update-hero.bmp');
-  assert.equal(hero.readInt32LE(18), 1120);
-  assert.equal(hero.readInt32LE(22), 420);
-  assert.equal(hero.readUInt16LE(28), 24);
+  for (const name of ['update-hero', 'update-hero-en']) {
+    const hero = readFileSync(`src-tauri/windows/branding/${name}.bmp`);
+    assert.equal(hero.readInt32LE(18), 1120);
+    assert.equal(hero.readInt32LE(22), 280);
+    assert.equal(hero.readUInt16LE(28), 24);
+  }
 });
 
 test('installer and uninstaller use supported 24-bit branding bitmaps', () => {
@@ -67,12 +69,16 @@ test('the custom installer reverses exactly to the pinned upstream engine', () =
   assert.throws(() => customizeTemplate(restoreTemplate(template.replace('Section WebView2', 'Section Unauthorized'))), /baseline/);
 });
 
-test('native primary action artwork uses the bitmap format accepted by NSIS', () => {
-  for (const kind of ['install', 'launch', 'continue', 'close']) for (const language of ['zh', 'en']) {
+test('native control artwork uses the bitmap format and dimensions accepted by NSIS', () => {
+  for (const kind of ['install', 'launch', 'continue', 'close', 'browse', 'dismiss']) for (const language of ['zh', 'en']) {
     const bytes = readFileSync(`src-tauri/windows/branding/button-${kind}-${language}.bmp`);
     assert.equal(bytes.toString('ascii', 0, 2), 'BM');
-    assert.equal(bytes.readInt32LE(18), 416);
-    assert.equal(bytes.readInt32LE(22), 88);
+    assert.equal(bytes.readInt32LE(18), kind === 'browse' ? 144 : kind === 'dismiss' ? 192 : 416);
+    assert.equal(bytes.readInt32LE(22), kind === 'browse' ? 84 : kind === 'dismiss' ? 56 : 88);
     assert.equal(bytes.readUInt16LE(28), 24);
   }
+  const surface = readFileSync('src-tauri/windows/branding/folder-surface.bmp');
+  assert.equal(surface.readInt32LE(18), 816);
+  assert.equal(surface.readInt32LE(22), 84);
+  assert.equal(surface.readUInt16LE(28), 24);
 });

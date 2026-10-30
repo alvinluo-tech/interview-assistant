@@ -1,11 +1,16 @@
 import { cmd, isTauri, listenEvent } from './bridge';
 import { getAiSettings } from './aiSettings';
-import { createQuestionSpeaker, synthesizeSpeech } from './aiRequests';
+import { createQuestionSpeaker, streamSpeech, synthesizeSpeech } from './aiRequests';
+import { createCloudSpeechSession } from './ttsSession';
+import { createSpeechOutput } from './ttsPlayback';
+import type { SpeechPhase } from './questionSpeaker';
 
-export function questionSpeaker(state: (speaking: boolean) => void, error: (reason: unknown) => void) {
-  return createQuestionSpeaker({
+export function questionSpeaker(state: (speaking: boolean) => void, error: (reason: unknown) => void, phase?: (phase: SpeechPhase) => void) {
+  const cloud = createCloudSpeechSession({identity:getAiSettings,load:streamSpeech,output:createSpeechOutput});
+  const speaker = createQuestionSpeaker({
     configured: () => !!getAiSettings().routes.tts,
     cloud: synthesizeSpeech,
+    cloudStream: cloud.speak,
     play: (bytes, changed, failed) => {
       const url = URL.createObjectURL(new Blob([bytes])); const audio = new Audio(url);
       const clean = () => {audio.pause(); audio.src = ''; URL.revokeObjectURL(url);};
@@ -32,5 +37,6 @@ export function questionSpeaker(state: (speaking: boolean) => void, error: (reas
       try {await cmd('cmd_system_speech', {id, text});} catch (reason) {off(); signal.removeEventListener('abort', stop); throw reason;}
       return () => {signal.removeEventListener('abort', stop); stop();};
     },
-  }, state, error);
+  }, state, error, phase);
+  return {...speaker,dispose:() => {speaker.stop();cloud.clear();}};
 }

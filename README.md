@@ -31,6 +31,11 @@
 
 详细实现说明见 [`docs/window-protection-and-disguise.md`](docs/window-protection-and-disguise.md)、[`docs/capture-visibility-and-detection.md`](docs/capture-visibility-and-detection.md)。
 
+## 审计与差距分析
+
+- [`docs/audit/gap-analysis.md`](docs/audit/gap-analysis.md) — 与官方 0.3.16 的逐功能全量差距清单（6 章约 90 个对照点：壳页面/浮窗/面试管线/笔试/设置面板/原生命令与 mac）
+- [`docs/audit/bug-findings.md`](docs/audit/bug-findings.md) — 已知缺陷清单（38 条，含 E2E 复现证据与静态扫描基线；仅记录不修复）
+
 ## 技术栈
 
 | 层 | 选型 |

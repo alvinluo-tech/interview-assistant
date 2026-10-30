@@ -31,6 +31,15 @@ test('speech recognition models cannot send a text-only test to chat/completions
   assert.equal(requests, 0, 'The invalid text test must be rejected before sending a request');
 });
 
+test('speech synthesis models cannot be tested as text chat', async () => {
+  let requests = 0;
+  for (const model of ['mimo-v2.5-tts','qwen3-tts-flash','qwen-audio-3.1-tts-flash','cosyvoice-v3-flash']) {
+    await assert.rejects(testChatModel(provider(),model,async()=>{requests++;return json({});}),/语音合成/);
+  }
+  assert.equal(requests,0);
+  assert.ok(createProvider('mimo').models.some(model=>model.id==='mimo-v2.5-tts'));
+});
+
 test('recognition model classification covers audio families without blocking text-capable multimodal models', () => {
   for (const model of ['fun-asr', 'fun-asr-flash-2026-06-15', 'fun-asr-realtime', 'fun-asr-flash-8k-realtime',
     'paraformer-v2', 'paraformer-realtime-v2', 'sensevoice-v1', 'whisper-1', 'openai/whisper-1', 'mimo-v2-asr', 'qwen3-asr-flash', 'qwen-audio-asr']) {
@@ -65,7 +74,8 @@ test('unsupported Bailian file recognition is readable for repair but cannot be 
 test('Singapore preset and existing custom connections infer the matching realtime endpoint', () => {
   const config = singaporeSettings();
   assert.equal(createProvider('dashscope-sg').baseUrl, 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1');
-  assert.deepEqual(config.providers[0].models.map(model => model.id), ['fun-asr-realtime']);
+  assert.deepEqual(config.providers[0].models.filter(model => configApi.isSpeechRecognitionModel(model.id)).map(model => model.id), ['fun-asr-realtime']);
+  assert.ok(config.providers[0].models.some(model => model.id === 'qwen3-tts-flash'));
   assert.equal(configApi.resolveRealtimeEndpoint(validateAiSettings(config)), 'wss://ws-example.ap-southeast-1.maas.aliyuncs.com/api-ws/v1/inference');
   assert.equal(config.realtimeEndpoint, undefined);
   config.realtimeEndpoint = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference';

@@ -12,9 +12,11 @@ export async function generateMockReport() {return '合成复盘：回答已保�
 export async function generateHint() {return '合成辅助提示';}
 `);
 await writeFile('artifacts/experience-vite.config.mjs', `import base from '../vite.config.ts';import{fileURLToPath}from'node:url';
-export default()=>{const config=base();return {...config,cacheDir:'node_modules/.vite-experience-ui',resolve:{...config.resolve,alias:{'@/lib/mock':fileURLToPath(new URL('./mock-lifecycle-fixture.ts',import.meta.url)),...config.resolve.alias}}};};`);
+export default()=>{const config=base();return {...config,cacheDir:'node_modules/.vite-experience-ui',plugins:[...config.plugins,{name:'synthetic-speech-transport',enforce:'pre',transform(_code,id){if(id.replaceAll('\\\\','/').endsWith('/src/lib/aiTransport.ts'))return {code:'export const aiFetch=(url,init)=>window.__ttsFetch(url,init);',map:null};}}],resolve:{...config.resolve,alias:{'@/lib/mock':fileURLToPath(new URL('./mock-lifecycle-fixture.ts',import.meta.url)),...config.resolve.alias}}};};`);
 await writeFile('artifacts/experience-fixture.html', `<!doctype html><html><meta charset="utf-8"><div id="root"></div><script>
 window.__errors=[]; addEventListener('error',e=>__errors.push(e.message)); addEventListener('unhandledrejection',e=>__errors.push(String(e.reason)));
+window.__ttsCalls=[];window.__audioStarts=0;window.__ttsFetch=async(url,init)=>{__ttsCalls.push({url,init});return new Response(new ReadableStream({start(controller){window.__ttsStream=controller;},cancel(){window.__ttsCancelled=true;}}),{headers:{'content-type':'text/event-stream'}});};
+window.AudioContext=class{state='running';get currentTime(){return performance.now()/1000;}destination={};resume(){return Promise.resolve();}close(){this.state='closed';return Promise.resolve();}createBuffer(_channels,length,rate){return {length,duration:length/rate,getChannelData:()=>new Float32Array(length)};}createBufferSource(){return {connect(){},disconnect(){},start(){__audioStarts++;this.timer=setTimeout(()=>this.onended?.(),80);},stop(){clearTimeout(this.timer);}};}};
 window.__test={callbacks:new Map(),events:new Map(),calls:[],data:{},revision:0};
 window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:()=>{}};
 window.__TAURI_INTERNALS__={metadata:{currentWindow:{label:'mock'},currentWebview:{label:'mock'}},transformCallback:fn=>{const id=__test.callbacks.size+1;__test.callbacks.set(id,fn);return id;},unregisterCallback:id=>__test.callbacks.delete(id),invoke:async(name,args)=>{
@@ -31,12 +33,13 @@ return null;}};
 await writeFile('artifacts/experience-fixture.tsx', `import React,{useState} from 'react';import{createRoot}from'react-dom/client';
 import '/src/index.css';import{MockApp}from'/src/mock/MockApp.tsx';import{RecordsPage}from'/src/main/sections/RecordsPage.tsx';
 import{DeveloperInfo}from'/src/main/sections/DeveloperInfo.tsx';import{StorageSettings}from'/src/main/sections/StorageSettings.tsx';import{AiServicesTab}from'/src/main/sections/AiServicesTab.tsx';
-import{writeData}from'/src/lib/backend.ts';import{saveAiSettings}from'/src/lib/aiSettings.ts';import{defaultAiSettings}from'/src/lib/aiConfig.ts';
+import{writeData}from'/src/lib/backend.ts';import{saveAiSettings}from'/src/lib/aiSettings.ts';import{defaultAiSettings}from'/src/lib/aiConfig.ts';import{setSetting}from'/src/lib/store.ts';
 await saveAiSettings({...defaultAiSettings(),providers:[{id:'fixture',name:'测试连接',baseUrl:'http://127.0.0.1:9/v1',apiKey:'',authMode:'none',models:[{id:'test-chat',name:'测试模型',source:'custom'}],lastFetchedAt:null}],routes:{chat:{providerId:'fixture',modelId:'test-chat'},vision:null,stt:null,tts:null}});
 await writeData('interviewSessions',[{id:'mock_session',type:'MOCK_INTERVIEW',title:'模拟面试样例',createdAt:Date.now()-62000,status:'ACTIVE',messages:[{id:'opening',role:'INTERVIEWER',text:'你好，我们开始吧。能结合你最熟悉的项目，讲讲一次性能优化的经历吗？',createdAt:Date.now(),metadata:{turnKind:'NEW'}}],metadata:{mock:true,config:{goalName:'后端开发',company:'项目深挖',difficultyLabel:'3–5 年',turnBudget:8,basicsRatio:40,assistMode:false}}},{id:'real',type:'INTERVIEW',title:'真实面试样例',status:'COMPLETED',createdAt:Date.now(),messages:[]}]);
 await writeData('examSessions',[{id:'exam',title:'笔试样例',status:'COMPLETED',createdAt:Date.now(),questions:Array.from({length:7},(_,i)=>({id:'q'+i,questionText:'原题 '+(i+1)+'：求两个整数之和。',answer:'答案 '+(i+1)+'：a + b',createdAt:Date.now(),screenshotRefs:['exam/turn/image.png']}))}]);
 window.__resetOpening=()=>writeData('interviewSessions',window.__test.data.interviewSessions.map(s=>s.id==='mock_session'?{...structuredClone(s),messages:[],status:'ACTIVE'}:s));
 window.__refreshOpening=()=>writeData('interviewSessions',window.__test.data.interviewSessions.map(s=>s.id==='mock_session'?{...structuredClone(s),title:'刷新后的模拟面试'}:s));
+window.__ttsRoom=async()=>{await setSetting('mock.speechEnabled',true);return writeData('interviewSessions',window.__test.data.interviewSessions.map(s=>s.id==='mock_session'?{...structuredClone(s),status:'ACTIVE',messages:[{id:'tts-question',role:'INTERVIEWER',text:'请介绍项目中的技术难题。',createdAt:Date.now()}]}:s));};
 function Fixture(){const[view,setView]=useState('room');window.__view=setView;return view==='room'?<MockApp/>:<div className="min-h-screen bg-background p-6">{view==='records'?<RecordsPage/>:view==='about'?<DeveloperInfo/>:view==='storage'?<StorageSettings/>:<AiServicesTab/>}</div>;}createRoot(document.getElementById('root')).render(<Fixture/>);
 `);
 const url = 'http://127.0.0.1:1441/artifacts/experience-fixture.html#mock?sid=mock_session';
@@ -94,6 +97,36 @@ try {
   assert.equal(await cdp.evaluate('window.__openingCalls'),2,'Refreshing a pending opening must release its request ownership and restart it');
   await cdp.evaluate("__finishOpening('刷新后仍能显示的开场问题')");
   await cdp.waitFor("document.querySelector('.mock-question')?.textContent.includes('刷新后仍能显示的开场问题')");
+  // Configure MiMo through the settings UI; networking and audio remain synthetic.
+  await cdp.evaluate("__view('ai')");await cdp.waitFor("!!document.getElementById('ai-preset')");
+  await cdp.evaluate("(()=>{const select=document.getElementById('ai-preset');select.value='mimo';select.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await cdp.click('添加连接');await cdp.input('#ai-api-key','synthetic-tts-key');
+  await cdp.evaluate("(()=>{const select=document.getElementById('ai-route-tts');select.value=[...select.options].find(option=>option.textContent.includes('mimo-v2.5-tts')).value;select.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await cdp.waitFor("document.getElementById('ai-tts-voice')?.value==='苏打'");await cdp.click('保存配置');
+  await cdp.waitFor("[...document.querySelectorAll('button')].some(button=>button.textContent==='试听语音'&&!button.disabled)");
+  await cdp.click('试听语音');await cdp.waitFor("document.body.innerText.includes('正在连接语音服务')");
+  await cdp.click('停止试听');await cdp.waitFor("__ttsCalls.at(-1).init.signal.aborted");
+  await cdp.evaluate("(async()=>{await __ttsRoom();__view('room');})()");
+  await cdp.waitFor("document.body.innerText.includes('正在准备语音')&&__ttsCalls.length===2");
+  await cdp.evaluate("__ttsStream.enqueue(new TextEncoder().encode('data: '+JSON.stringify({choices:[{delta:{audio:{data:btoa(String.fromCharCode(...new Uint8Array(4800)))}}}]})+'\\n\\n'))");
+  await cdp.waitFor("__audioStarts===1&&document.body.innerText.includes('正在提问')");
+  assert.equal(await cdp.evaluate('__ttsCalls.at(-1).init.signal.aborted'),false);
+  await cdp.evaluate("__ttsStream.enqueue(new TextEncoder().encode('data: [DONE]\\n\\n'));__ttsStream.close()");
+  await cdp.waitFor("!!document.querySelector('button[aria-label=朗读当前问题]')");
+  await cdp.evaluate("document.querySelector('button[aria-label=朗读当前问题]').click()");await cdp.waitFor('__audioStarts===2');
+  assert.equal(await cdp.evaluate('__ttsCalls.length'),2,'Replaying a completed question must not repeat the cloud request');
+  await cdp.evaluate("document.querySelector('button[aria-label=关闭面试官语音]').click()");
+  await cdp.waitFor("!!document.querySelector('button[aria-label=开启面试官语音]')");
+  await cdp.evaluate("__view('ai')");await cdp.waitFor("!!document.getElementById('ai-preset')");
+  await cdp.evaluate("(()=>{const select=document.getElementById('ai-preset');select.value='dashscope-sg';select.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await cdp.click('添加连接');await cdp.input('#ai-api-key','synthetic-aliyun-key');
+  await cdp.evaluate("(()=>{const select=document.getElementById('ai-route-tts');select.value=[...select.options].find(option=>option.textContent.includes('qwen3-tts-flash')).value;select.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await cdp.waitFor("document.getElementById('ai-tts-voice')?.value==='Cherry'");await cdp.click('保存配置');
+  await cdp.evaluate("(async()=>{await __ttsRoom();__view('room');})()");
+  await cdp.waitFor("document.body.innerText.includes('正在准备语音')&&__ttsCalls.length===3");
+  assert.ok(await cdp.evaluate("__ttsCalls.at(-1).url.startsWith('https://dashscope-intl.aliyuncs.com/api/v1/')"));
+  await cdp.evaluate("(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'我先定位瓶颈，再做对照验证。');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await cdp.click('提交回答');await cdp.waitFor('__ttsCalls.at(-1).init.signal.aborted');
   assert.deepEqual(await cdp.evaluate('__errors'), []);
   // Phone transport uses synthetic sockets, so there is no LAN traffic.
   await cdp.command('Page.enable', {});
@@ -112,5 +145,5 @@ try {
   await cdp.evaluate("__phone.socket.onmessage({data:JSON.stringify({t:'state',data:__phone.snapshot})});document.getElementById('end').click()");
   assert.equal(await cdp.evaluate('__phone.sent.at(-1).id'),'end-session');
   await cdp.evaluate("__phone.socket.onmessage({data:JSON.stringify({t:'ended'})})"); assert.equal(await cdp.evaluate('__phone.socket.readyState'),3);
-  console.log('PASS: mock room layout/system speech toggle/cancelled late questions; separate history/rename isolation; seven source/answer/image records; developer links; storage paths; phone return/resume/end without re-pairing.');
+  console.log('PASS: mock room/system speech; MiMo and Aliyun voice defaults; cancellable speech preparation; streamed playback; cached replay; answer interrupts speech; separate history; seven source/answer/image records; storage; phone return/resume/end.');
 } finally {if(cdp.socket){await cdp.command('Browser.close',{}).catch(()=>{});cdp.close();}browser.kill();server.kill();}

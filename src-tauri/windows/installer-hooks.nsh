@@ -125,11 +125,11 @@ LangString MianxuRemovingHint 1033 "Removing the app using your selected options
   ${If} $MxProgressStyled <> 1
   ${If} $UpdateMode = 1
   ${AndIf} $PassiveMode = 1
-    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuUpdatingTitle)" "$(MianxuCardTitle)" 340
+    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuUpdatingTitle)" "$(MianxuCardTitle)" 320
   ${ElseIf} $UpdateMode = 1
-    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuUpdatingTitle)" "$(MianxuUpdatingTitle)" 400
+    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuUpdatingTitle)" "$(MianxuUpdatingTitle)" 380
   ${Else}
-    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuInstallingTitle)" "$(MianxuInstallingTitle)" 400
+    !insertmacro MIANXU_UPDATE_CARD "v${VERSION}" "$(MianxuCardHint)" "$(MianxuInstallingTitle)" "$(MianxuInstallingTitle)" 380
   ${EndIf}
   ${EndIf}
 !macroend

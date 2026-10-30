@@ -10,6 +10,8 @@ import { discoverModels, testChatModel } from '@/lib/aiProtocol';
 import { aiFetch } from '@/lib/aiTransport';
 import { questionSpeaker } from '@/lib/questionSpeech';
 import { DEFAULT_REALTIME_ENDPOINT, isRealtimeAsrModel } from '@/lib/realtimeAsrProtocol';
+import { defaultTtsVoice, isSpeechSynthesisModel, ttsService, ttsVoices } from '@/lib/ttsConfig';
+import type { SpeechPhase } from '@/lib/questionSpeaker';
 
 type Status = { kind: 'success' | 'error' | 'info'; text: string } | null;
 const roleDescriptions: Record<AiRole, string> = {
@@ -21,9 +23,9 @@ const roleDescriptions: Record<AiRole, string> = {
 
 export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
   const saved = useAiSettings();
-  const [voicePlaying, setVoicePlaying] = useState(false);
-  const voice = useMemo(() => questionSpeaker(setVoicePlaying, reason => showToast({type:'error', title:'语音试听失败', description:String((reason as Error).message || reason)})), []);
-  useEffect(() => () => voice.stop(), [voice]);
+  const [voicePhase, setVoicePhase] = useState<SpeechPhase>('idle');
+  const voice = useMemo(() => questionSpeaker(() => {}, reason => showToast({type:'error', title:'语音试听失败', description:String((reason as Error).message || reason)}),setVoicePhase), []);
+  useEffect(() => () => voice.dispose(), [voice]);
   const [draft, setDraft] = useState<AiSettings>(() => structuredClone(getAiSettings()));
   const [selectedId, setSelectedId] = useState(saved.providers[0]?.id ?? '');
   const [preset, setPreset] = useState('compatible');
@@ -44,11 +46,15 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
   const mounted = useRef(true);
   const provider = draft.providers.find(p => p.id === selectedId);
   const sttProvider = draft.providers.find(p => p.id === draft.routes.stt?.providerId);
+  const ttsProvider = draft.providers.find(p => p.id === draft.routes.tts?.providerId);
+  const voiceOptions = ttsProvider && draft.routes.tts ? ttsVoices(ttsProvider,draft.routes.tts.modelId) : [];
+  const speechService = ttsProvider && draft.routes.tts ? ttsService(ttsProvider,draft.routes.tts.modelId) : null;
   const realtimeSpeechSelected = isRealtimeAsrModel(draft.routes.stt?.modelId || '');
   const unsupportedSpeechSelected = !!sttProvider && isUnsupportedBailianSpeechModel(sttProvider,draft.routes.stt?.modelId || '');
   const automaticRealtimeEndpoint = (sttProvider && bailianConnection(sttProvider.baseUrl)?.realtimeEndpoint) || DEFAULT_REALTIME_ENDPOINT;
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const loadError = getAiLoadError();
+  useEffect(() => {voice.stop();},[draft,voice]);
 
   useEffect(() => {
     const draftJson = JSON.stringify(draft);
@@ -154,9 +160,16 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
   }
   function assignRoute(role: AiRole, serialized: string) {
     const route = serialized ? JSON.parse(serialized) : null;
-    setDraft(value => ({...value,routes:{...value.routes,[role]:route},
-      ...(role === 'tts' && !route && !value.ttsVoice.trim() ? {ttsVoice:'alloy'} : {}),
-      ...(role==='stt' ? {speechInputMode:route && isRealtimeAsrModel(route.modelId) ? 'realtime' : value.speechInputMode==='realtime' ? 'auto' : value.speechInputMode} : {})}));
+    setDraft(value => {
+      const connection = value.providers.find(provider => provider.id === route?.providerId);
+      const previous = value.providers.find(provider => provider.id === value.routes.tts?.providerId);
+      const sameVoiceFamily = connection && previous && route && value.routes.tts
+        && ttsService(connection,route.modelId) === ttsService(previous,value.routes.tts.modelId)
+        && (ttsService(connection,route.modelId) !== 'bailian' || route.modelId === value.routes.tts.modelId);
+      return {...value,routes:{...value.routes,[role]:route},
+        ...(role === 'tts' ? {ttsVoice:connection && route && !sameVoiceFamily ? defaultTtsVoice(connection,route.modelId) || value.ttsVoice : value.ttsVoice || 'alloy'} : {}),
+        ...(role==='stt' ? {speechInputMode:route && isRealtimeAsrModel(route.modelId) ? 'realtime' : value.speechInputMode==='realtime' ? 'auto' : value.speechInputMode} : {})};
+    });
   }
   function useCurrentConnectionRealtime() {
     if(!sttProvider)return;
@@ -252,7 +265,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
                   {!filtered.length && <p className="p-4 text-xs leading-relaxed text-muted-foreground">{search ? '没有匹配的模型。' : '还没有模型。获取接口模型列表，或在下方手动添加。'}</p>}
                   {filtered.slice(0, limit).map(model => <div key={model.id} className="flex items-center justify-between gap-2 border-b px-3 py-2 last:border-b-0">
                     <div className="min-w-0"><div className="truncate font-mono text-xs" title={model.id}>{model.id}</div><div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground"><span>{model.source === 'custom' ? '自定义' : '接口发现'}</span>{model.name !== model.id && <span className="truncate">{model.name}</span>}</div></div>
-                    <div className="flex shrink-0 items-center"><Button size="sm" variant="ghost" disabled={!!busy || isSpeechRecognitionModel(model.id)} title={isRealtimeAsrModel(model.id) ? '实时语音模型：分配到语音转写、启用持续实时模式并保存后，在工作台开始收音验证字幕。' : isSpeechRecognitionModel(model.id) ? '语音识别模型不能进行文字对话测试。持续实时识别请选择已适配的 fun-asr-realtime。' : undefined} onClick={() => void networkAction('test', model.id)}>{isSpeechRecognitionModel(model.id) ? '语音专用' : busy === 'test' && testingId === model.id ? '测试中…' : '测试对话'}</Button><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`移除模型 ${model.id}`} disabled={!!busy} onClick={() => deleteModel(model.id)}><Trash2 size={12} /></Button></div>
+                    <div className="flex shrink-0 items-center"><Button size="sm" variant="ghost" disabled={!!busy || isSpeechRecognitionModel(model.id) || isSpeechSynthesisModel(model.id)} title={isSpeechSynthesisModel(model.id) ? '语音合成模型：分配到语音合成、选择音色并保存后试听。' : isRealtimeAsrModel(model.id) ? '实时语音模型：分配到语音转写、启用持续实时模式并保存后，在工作台开始收音验证字幕。' : isSpeechRecognitionModel(model.id) ? '语音识别模型不能进行文字对话测试。持续实时识别请选择已适配的 fun-asr-realtime。' : undefined} onClick={() => void networkAction('test', model.id)}>{isSpeechRecognitionModel(model.id) || isSpeechSynthesisModel(model.id) ? '语音专用' : busy === 'test' && testingId === model.id ? '测试中…' : '测试对话'}</Button><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`移除模型 ${model.id}`} disabled={!!busy} onClick={() => deleteModel(model.id)}><Trash2 size={12} /></Button></div>
                   </div>)}
                   {filtered.length > limit && <Button size="sm" variant="ghost" className="w-full" onClick={() => setLimit(v => v + 50)}>再显示 {Math.min(50, filtered.length - limit)} 个</Button>}
                 </div>
@@ -283,10 +296,18 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
             </Select>
           </div>)}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3 text-xs">
-          <div className="min-w-0 flex-1"><p className="font-medium">面试官语音 · {draft.routes.tts ? '自定义语音服务' : '系统默认语音'}</p><p className="mt-1 text-muted-foreground">模拟面试窗口可用喇叭开关控制。自定义模型须支持 /audio/speech 接口；未配置时无需额外服务。</p></div>
-          <Button size="sm" variant="outline" disabled={dirty || !!busy} onClick={() => voicePlaying ? voice.stop() : void voice.speak('你好，我是你的面试官。准备好后，我们开始。')}>{voicePlaying ? '停止试听' : '试听语音'}</Button>
-          {dirty && <span className="text-muted-foreground">保存后可试听</span>}
+        <div className="mt-3 space-y-3 rounded-lg border bg-muted/30 p-4 text-xs" data-testid="interviewer-speech-settings">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1"><p className="font-medium">面试官语音 · {speechService === 'mimo' ? '小米 MiMo' : speechService === 'qwen' || speechService === 'bailian' ? '阿里云百炼' : draft.routes.tts ? '自定义语音服务' : '系统默认语音'}</p><p className="mt-1 leading-relaxed text-muted-foreground">云端语音边生成边播放，开始回答时自动停止。本场已生成的语音可快速重播；未配置时使用系统语音。</p></div>
+            <Button size="sm" variant="outline" disabled={voicePhase === 'idle' && (dirty || !!busy)} onClick={() => voicePhase !== 'idle' ? voice.stop() : void voice.speak('你好，我是你的面试官。请结合你最熟悉的项目，介绍一次解决技术难题的经历。')}>{voicePhase === 'preparing' ? <Loader2 size={13} className="animate-spin" /> : null}{voicePhase !== 'idle' ? '停止试听' : '试听语音'}</Button>
+          </div>
+          {draft.routes.tts && <div className="grid gap-3 sm:grid-cols-2">
+            <label htmlFor="ai-tts-preset">常用音色<Select id="ai-tts-preset" className="mt-1" value={voiceOptions.some(option=>option.id===draft.ttsVoice)?draft.ttsVoice:''} disabled={busy==='save'} onChange={event=>{if(event.target.value)setDraft(value=>({...value,ttsVoice:event.target.value}));}}><option value="">自定义音色 ID</option>{voiceOptions.map(option=><option key={option.id} value={option.id}>{option.name}</option>)}</Select></label>
+            <label htmlFor="ai-tts-voice">音色 ID<Input id="ai-tts-voice" className="mt-1" value={draft.ttsVoice} disabled={busy === 'save'} onChange={event=>setDraft(value=>({...value,ttsVoice:event.target.value}))} placeholder={defaultTtsVoice(ttsProvider || {baseUrl:''},draft.routes.tts.modelId) || '填写此模型支持的音色 ID'} /></label>
+          </div>}
+          <p role="status" className="text-muted-foreground">{voicePhase === 'preparing' ? '正在连接语音服务，可随时停止…' : voicePhase === 'speaking' ? '正在试听…' : dirty ? '保存后可试听；云端试听会调用所选服务，可能产生费用。' : draft.routes.tts ? '保存的配置将用于试听。音色可用范围取决于模型、地域与账户权限。' : '无需配置语音模型或密钥。'}</p>
+          {speechService === 'bailian' && <p className="text-muted-foreground">Qwen-Audio-TTS 使用该模型支持的系统或自建音色；CosyVoice HTTP 目前适配北京地域。新加坡请选择 Qwen 系列。复刻音色请填写已创建的音色 ID。</p>}
+          {speechService === 'mimo' && <p className="text-muted-foreground">预置音色请选择 mimo-v2.5-tts；音色复刻、设计模型需要额外参数，暂不适用于此入口。</p>}
         </div>
         {unsupportedSpeechSelected&&<div role="alert" data-testid="unsupported-speech-model" className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed">当前语音转写选择了 {draft.routes.stt?.modelId}。本应用尚未接入此百炼文件识别接口，不能发送到 OpenAI 文件转写地址。请改用当前连接的实时模型并保存。<Button size="sm" variant="outline" className="mt-2" disabled={!!busy} onClick={useCurrentConnectionRealtime}>改用当前连接的实时识别</Button></div>}
         <details className="mt-3 border-t pt-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">请求与语音选项</summary><div className="mt-3 grid grid-cols-2 gap-3">
@@ -307,7 +328,6 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
             <label className="block">热词表 ID（可选）<Input aria-label="ASR 热词表 ID" className="mt-1" value={draft.realtimeVocabularyId ?? ''} placeholder="百炼已创建的 vocabulary_id" onChange={event => setDraft(value => ({ ...value, realtimeVocabularyId: event.target.value }))} /></label>
           </div>}
           <label htmlFor="ai-timeout" className="text-xs">请求超时（秒）<Input id="ai-timeout" className="mt-1" type="number" min={5} max={300} value={draft.timeoutMs / 1000} disabled={busy === 'save'} onChange={e => setDraft(value => ({ ...value, timeoutMs: Number(e.target.value) * 1000 }))} /></label>
-          <label htmlFor="ai-tts-voice" className="text-xs">语音音色 ID<Input id="ai-tts-voice" className="mt-1" value={draft.ttsVoice} disabled={busy === 'save' || !draft.routes.tts} onChange={e => setDraft(value => ({ ...value, ttsVoice: e.target.value }))} /></label>
         </div></details>
       </Card>
       <ConfirmDialog open={removeId !== null} title="删除这个连接？" body="该连接的密钥、模型列表和用途分配会一起移除。保存配置后生效。" confirmText="删除连接" onCancel={() => setRemoveId(null)} onConfirm={() => {

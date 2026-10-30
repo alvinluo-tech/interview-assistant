@@ -1,4 +1,4 @@
-# Generate the small 24-bit BMP assets accepted by NSIS. Run on Windows after brand changes.
+﻿# Generate the small 24-bit BMP assets accepted by NSIS. Run on Windows after brand changes.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $destination = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../src-tauri/windows/branding'))
@@ -10,9 +10,20 @@ function Label($Graphics, [string]$Text, [float]$X, [float]$Y, [float]$Size, [st
     $brush = Brush $Color
     try { $Graphics.DrawString($Text, $font, $brush, $X, $Y) } finally { $font.Dispose(); $brush.Dispose() }
 }
+function RoundedPath([float]$X, [float]$Y, [float]$Width, [float]$Height, [float]$Radius) {
+    $shape = [Drawing.Drawing2D.GraphicsPath]::new()
+    $diameter = $Radius * 2
+    $shape.AddArc($X, $Y, $diameter, $diameter, 180, 90)
+    $shape.AddArc(($X + $Width - $diameter), $Y, $diameter, $diameter, 270, 90)
+    $shape.AddArc(($X + $Width - $diameter), ($Y + $Height - $diameter), $diameter, $diameter, 0, 90)
+    $shape.AddArc($X, ($Y + $Height - $diameter), $diameter, $diameter, 90, 90)
+    $shape.CloseFigure()
+    return $shape
+}
 function Mark($Graphics, [float]$X, [float]$Y, [float]$Size) {
-    $brush = Brush '#0B8FD6'
-    try { $Graphics.FillRectangle($brush, $X, $Y, $Size, $Size) } finally { $brush.Dispose() }
+    $brush = Brush '#0879BA'
+    $shape = RoundedPath $X $Y $Size $Size ($Size * .26)
+    try { $Graphics.FillPath($brush, $shape) } finally { $brush.Dispose(); $shape.Dispose() }
     Label $Graphics '面' ($X + $Size * .15) ($Y + $Size * .04) ($Size * .66) '#FFFFFF' $true
 }
 foreach ($kind in @('sidebar', 'header', 'uninstall-header')) {
@@ -48,74 +59,63 @@ foreach ($kind in @('sidebar', 'header', 'uninstall-header')) {
 }
 Write-Output 'Generated installer and uninstaller branding bitmaps.'
 
-# Render at 2x; the native updater scales the artwork to its current window DPI.
-$bitmap = [Drawing.Bitmap]::new(1120, 420, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
-$graphics = [Drawing.Graphics]::FromImage($bitmap)
-$graphics.ScaleTransform(2, 2)
-$graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
-$graphics.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-$gradient = [Drawing.Drawing2D.LinearGradientBrush]::new(
-    [Drawing.Point]::new(0, 0), [Drawing.Point]::new(560, 210),
-    [Drawing.ColorTranslator]::FromHtml('#647DF5'), [Drawing.ColorTranslator]::FromHtml('#A78BFA'))
-try {
-    $graphics.FillRectangle($gradient, 0, 0, 560, 210)
-    $white = Brush '#FFFFFF'
-    $outline = [Drawing.Pen]::new([Drawing.Color]::FromArgb(100, 255, 255, 255), 1.4)
+# Render at 2x; the native pages scale this compact header to the window DPI.
+foreach ($language in @('zh', 'en')) {
+    $bitmap = [Drawing.Bitmap]::new(1120, 280, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    $graphics.ScaleTransform(2, 2)
+    $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $graphics.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
     try {
-        $mark = [Drawing.Drawing2D.GraphicsPath]::new()
-        $mark.AddArc(250, 26, 16, 16, 180, 90)
-        $mark.AddArc(294, 26, 16, 16, 270, 90)
-        $mark.AddArc(294, 70, 16, 16, 0, 90)
-        $mark.AddArc(250, 70, 16, 16, 90, 90)
-        $mark.CloseFigure()
-        try { $graphics.DrawPath($outline, $mark) } finally { $mark.Dispose() }
-        $markFormat = [Drawing.StringFormat]::new()
-        $markFormat.Alignment = [Drawing.StringAlignment]::Center
-        $markFormat.LineAlignment = [Drawing.StringAlignment]::Center
-        $markFont = [Drawing.Font]::new('Microsoft YaHei UI', 42, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
-        try { $graphics.DrawString('面', $markFont, $white, [Drawing.RectangleF]::new(250, 26, 60, 60), $markFormat) } finally { $markFont.Dispose(); $markFormat.Dispose() }
-        $center = [Drawing.StringFormat]::new()
-        $center.Alignment = [Drawing.StringAlignment]::Center
-        $pill = Brush '#5B61C9'
-        $pillPath = [Drawing.Drawing2D.GraphicsPath]::new()
-        $pillPath.AddArc(193, 148, 26, 26, 90, 180)
-        $pillPath.AddArc(341, 148, 26, 26, 270, 180)
-        $pillPath.CloseFigure()
-        try { $graphics.FillPath($pill, $pillPath) } finally { $pill.Dispose(); $pillPath.Dispose() }
-        foreach ($line in @(@('Mianxu', 104, 28, $true), @('面试 · 笔试 · 模拟练习', 152, 12, $false))) {
-            $style = if ($line[3]) { [Drawing.FontStyle]::Bold } else { [Drawing.FontStyle]::Regular }
-            $font = [Drawing.Font]::new('Microsoft YaHei UI', [float]$line[2], $style, [Drawing.GraphicsUnit]::Pixel)
-            try { $graphics.DrawString([string]$line[0], $font, $white, [Drawing.RectangleF]::new(0, $line[1], 560, 44), $center) } finally { $font.Dispose() }
-        }
-        $center.Dispose()
-    } finally { $white.Dispose(); $outline.Dispose() }
-    $bitmap.Save((Join-Path $destination 'update-hero.bmp'), [Drawing.Imaging.ImageFormat]::Bmp)
-} finally { $gradient.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
-Write-Output 'Generated high-resolution native update artwork.'
+        $graphics.Clear([Drawing.ColorTranslator]::FromHtml('#F5F9FC'))
+        Mark $graphics 36 36 60
+        Label $graphics 'Mianxu' 114 31 28 '#192C3A' $true
+        Label $graphics $(if ($language -eq 'zh') { '桌面面试助手' } else { 'Your interview companion' }) 116 78 12 '#647887'
+        $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#E5EDF3'), 1)
+        try { $graphics.DrawLine($pen, 0, 139, 560, 139) } finally { $pen.Dispose() }
+        $filename = if ($language -eq 'zh') { 'update-hero.bmp' } else { 'update-hero-en.bmp' }
+        $bitmap.Save((Join-Path $destination $filename), [Drawing.Imaging.ImageFormat]::Bmp)
+    } finally { $graphics.Dispose(); $bitmap.Dispose() }
+}
 
-foreach ($button in @(@('install', '立即安装', 'Install now'), @('launch', '立即体验', 'Open Mianxu'), @('continue', '继续', 'Continue'), @('close', '完成', 'Finish'))) {
+# Real native buttons keep their accessible text, focus and click handling.
+# Bitmap faces use a single blue and generous radii, with no gradient or shadow.
+foreach ($button in @(@('install', '立即安装', 'Install now'), @('launch', '打开 Mianxu', 'Open Mianxu'), @('continue', '继续', 'Continue'), @('close', '完成', 'Finish'), @('browse', '更改', 'Change'), @('dismiss', '完成', 'Finish'))) {
     foreach ($language in @('zh', 'en')) {
-        $buttonBitmap = [Drawing.Bitmap]::new(416, 88, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
+        $width = if ($button[0] -eq 'browse') { 144 } elseif ($button[0] -eq 'dismiss') { 192 } else { 416 }
+        $height = if ($button[0] -eq 'browse') { 84 } elseif ($button[0] -eq 'dismiss') { 56 } else { 88 }
+        $secondary = $button[0] -in @('browse', 'dismiss')
+        $buttonBitmap = [Drawing.Bitmap]::new($width, $height, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
         $g = [Drawing.Graphics]::FromImage($buttonBitmap)
         $g.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $g.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
         $g.Clear([Drawing.Color]::White)
-        $fill = [Drawing.Drawing2D.LinearGradientBrush]::new([Drawing.Point]::new(0,0), [Drawing.Point]::new(416,88), [Drawing.ColorTranslator]::FromHtml('#536EE7'), [Drawing.ColorTranslator]::FromHtml('#8061D8'))
-        $shape = [Drawing.Drawing2D.GraphicsPath]::new()
-        $shape.AddArc(0, 0, 24, 24, 180, 90)
-        $shape.AddArc(391, 0, 24, 24, 270, 90)
-        $shape.AddArc(391, 63, 24, 24, 0, 90)
-        $shape.AddArc(0, 63, 24, 24, 90, 90)
-        $shape.CloseFigure()
+        $fill = Brush $(if ($secondary) { '#EFF4F8' } else { '#0879BA' })
+        $ink = Brush $(if ($secondary) { '#33556D' } else { '#FFFFFF' })
+        $shape = RoundedPath 0 0 ($width - 1) ($height - 1) $(if ($secondary) { 20 } else { 43 })
         $format = [Drawing.StringFormat]::new()
         $format.Alignment = [Drawing.StringAlignment]::Center
         $format.LineAlignment = [Drawing.StringAlignment]::Center
-        $font = [Drawing.Font]::new('Microsoft YaHei UI', 28, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
+        $font = [Drawing.Font]::new('Microsoft YaHei UI', $(if ($secondary) { 24 } else { 28 }), [Drawing.FontStyle]::Regular, [Drawing.GraphicsUnit]::Pixel)
         try {
             $g.FillPath($fill, $shape)
             $caption = if ($language -eq 'zh') { $button[1] } else { $button[2] }
-            $g.DrawString($caption, $font, [Drawing.Brushes]::White, [Drawing.RectangleF]::new(0, 0, 416, 88), $format)
+            $g.DrawString($caption, $font, $ink, [Drawing.RectangleF]::new(0, 0, $width, $height), $format)
             $buttonBitmap.Save((Join-Path $destination ('button-' + $button[0] + '-' + $language + '.bmp')), [Drawing.Imaging.ImageFormat]::Bmp)
-        } finally { $font.Dispose(); $format.Dispose(); $shape.Dispose(); $fill.Dispose(); $g.Dispose(); $buttonBitmap.Dispose() }
+        } finally { $font.Dispose(); $format.Dispose(); $shape.Dispose(); $fill.Dispose(); $ink.Dispose(); $g.Dispose(); $buttonBitmap.Dispose() }
     }
 }
+Write-Output 'Generated compact blue/white native installer artwork (Chinese and English).'
+
+# A bitmap-backed surface avoids the square background erase of native STATIC
+# controls. The editable folder field remains a separate accessible EDIT.
+$surface = [Drawing.Bitmap]::new(816, 84, [Drawing.Imaging.PixelFormat]::Format24bppRgb)
+$g = [Drawing.Graphics]::FromImage($surface)
+$g.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$fill = Brush '#EFF4F8'
+$shape = RoundedPath 0 0 815 83 20
+try {
+    $g.Clear([Drawing.Color]::White)
+    $g.FillPath($fill, $shape)
+    $surface.Save((Join-Path $destination 'folder-surface.bmp'), [Drawing.Imaging.ImageFormat]::Bmp)
+} finally { $shape.Dispose(); $fill.Dispose(); $g.Dispose(); $surface.Dispose() }

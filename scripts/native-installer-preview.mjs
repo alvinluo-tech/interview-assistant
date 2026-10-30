@@ -9,6 +9,8 @@ const finishOnly = process.argv.includes('--finish') || progressOnly;
 const failure = process.argv.includes('--failure');
 const english = process.argv.includes('--english');
 const selfTest = process.argv.includes('--self-test');
+const maintenance = process.argv.includes('--maintenance');
+const comparison = process.argv.includes('--same-version') ? 0 : process.argv.includes('--newer-version') ? -1 : 1;
 mkdirSync('artifacts', { recursive: true });
 const root = mkdtempSync(path.join(repo, 'artifacts/installer-ui-preview-'));
 const executable = path.join(root, 'Mianxu-Installer-UI-Preview.exe');
@@ -29,7 +31,7 @@ RequestExecutionLevel user
 !include "${path.join(repo, 'src-tauri/windows/installer-hooks.nsh')}"
 !include "${path.join(repo, 'src-tauri/windows/installer-pages.nsh')}"
 AutoCloseWindow true
-${finishOnly ? '' : 'Page custom MianxuInstallPage MianxuInstallLeave'}
+${maintenance ? 'Page custom PreviewMaintenance' : finishOnly ? '' : 'Page custom MianxuInstallPage MianxuInstallLeave'}
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW MianxuProgressShow
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE MianxuProgressLeave
 !insertmacro MUI_PAGE_INSTFILES
@@ -59,6 +61,26 @@ ${selfTest ? String.raw`
   Quit
 ` : ''}
 FunctionEnd
+${maintenance ? String.raw`
+; Synthetic choices exercise only the production presentation function.
+; No installed-version lookup, registry mutation or uninstaller is present.
+Function PreviewMaintenance
+  nsDialogs::Create 1018
+  Pop $R4
+  ${'${NSD_CreateLabel}'} 0 0 100% 24u "Preview"
+  Pop $R1
+  ${'${NSD_CreateRadioButton}'} 30u 50u -30u 8u "First choice"
+  Pop $R2
+  ${'${NSD_CreateRadioButton}'} 30u 70u -30u 8u "Second choice"
+  Pop $R3
+  SendMessage $R2 ${'${BM_SETCHECK}'} ${'${BST_CHECKED}'} 0
+  ${comparison === -1 ? 'EnableWindow $R3 0' : ''}
+  StrCpy $R0 ${comparison}
+  Call MianxuReinstallStyle
+  ${'${NSD_SetFocus}'} $R2
+  nsDialogs::Show
+FunctionEnd
+` : ''}
 Function RunMainBinary
   ; Deliberately no app launch.
 FunctionEnd

@@ -9,6 +9,7 @@ Var MxWantLaunch
 Var MxChoiceLabel
 Var MxChoiceOne
 Var MxChoiceTwo
+Var MxComparison
 LangString MxLocation 2052 "安装位置"
 LangString MxLocation 1033 "Installation folder"
 LangString MxBrowse 2052 "更改"
@@ -17,7 +18,7 @@ LangString MxInstall 2052 "立即安装"
 LangString MxInstall 1033 "Install now"
 LangString MxContinue 2052 "继续"
 LangString MxContinue 1033 "Continue"
-LangString MxLaunch 2052 "立即体验"
+LangString MxLaunch 2052 "打开 Mianxu"
 LangString MxLaunch 1033 "Open Mianxu"
 LangString MxFinish 2052 "完成"
 LangString MxFinish 1033 "Finish"
@@ -35,6 +36,22 @@ LangString MxFailedHint 2052 "可关闭窗口，按错误提示检查权限或�
 LangString MxFailedHint 1033 "Close this window, check the reported error and try again."
 LangString MxReboot 2052 "安装完成。部分更改将在系统重启后生效。"
 LangString MxReboot 1033 "Installation complete. Some changes require a system restart."
+LangString MxExisting 2052 "发现已安装的 Mianxu"
+LangString MxExisting 1033 "Mianxu is already installed"
+LangString MxExistingHint 2052 "选择安装方式，然后继续。"
+LangString MxExistingHint 1033 "Choose how to install, then continue."
+LangString MxSameHint 2052 "可以重新安装程序，或移除当前版本。"
+LangString MxSameHint 1033 "Reinstall the application or remove this version."
+LangString MxNewerHint 2052 "当前版本较新。安装旧版需要先卸载。"
+LangString MxNewerHint 1033 "A newer version is installed. Uninstall it before downgrading."
+LangString MxReinstall 2052 "重新安装"
+LangString MxReinstall 1033 "Reinstall Mianxu"
+LangString MxRemove 2052 "卸载 Mianxu"
+LangString MxRemove 1033 "Uninstall Mianxu"
+LangString MxRemoveFirst 2052 "卸载旧版后安装"
+LangString MxRemoveFirst 1033 "Uninstall first, then install"
+LangString MxOverwrite 2052 "直接覆盖安装"
+LangString MxOverwrite 1033 "Install over the existing version"
 
 !macro MX_CONTROL CLASS STYLE EXSTYLE X Y WIDTH HEIGHT TEXT
   !insertmacro MX_CARD_SCALE $R4 ${X}
@@ -46,20 +63,39 @@ LangString MxReboot 1033 "Installation complete. Some changes require a system r
   SendMessage $R9 ${WM_SETFONT} $R8 1
 !macroend
 
-!macro MX_PRIMARY KIND CAPTION Y CALLBACK
+; SetWindowRgn transfers region ownership to Windows only on success.
+!macro MX_ROUND_CONTROL HANDLE WIDTH HEIGHT DIAMETER
+  !insertmacro MX_CARD_SCALE $R6 ${WIDTH}
+  !insertmacro MX_CARD_SCALE $R7 ${HEIGHT}
+  !insertmacro MX_CARD_SCALE $R4 ${DIAMETER}
+  IntOp $1 $R6 + 1
+  IntOp $2 $R7 + 1
+  System::Call 'gdi32::CreateRoundRectRgn(i 0, i 0, i r1, i r2, i $R4, i $R4) p .r1'
+  ${If} $1 <> 0
+    System::Call 'user32::SetWindowRgn(p ${HANDLE}, p r1, i 1) i .r2'
+    ${If} $2 = 0
+      System::Call 'gdi32::DeleteObject(p r1)'
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+!macro MX_BUTTON KIND CAPTION X Y WIDTH HEIGHT DIAMETER CALLBACK
   InitPluginsDir
   ${If} $LANGUAGE = 2052
     File "/oname=$PLUGINSDIR\mianxu-button.bmp" "${MIANXU_BUTTONS}\button-${KIND}-zh.bmp"
   ${Else}
     File "/oname=$PLUGINSDIR\mianxu-button.bmp" "${MIANXU_BUTTONS}\button-${KIND}-en.bmp"
   ${EndIf}
-  !insertmacro MX_CONTROL "BUTTON" 0x50018080 0 176 ${Y} 208 44 "${CAPTION}"
-  StrCpy $MxPrimary $R9
-  !insertmacro MX_CARD_SCALE $R6 208
-  !insertmacro MX_CARD_SCALE $R7 44
+  !insertmacro MX_CONTROL "BUTTON" 0x50018080 0 ${X} ${Y} ${WIDTH} ${HEIGHT} "${CAPTION}"
+  !insertmacro MX_ROUND_CONTROL $R9 ${WIDTH} ${HEIGHT} ${DIAMETER}
   System::Call 'user32::LoadImageW(p 0, w "$PLUGINSDIR\mianxu-button.bmp", i 0, i $R6, i $R7, i 0x2010) p .r1'
-  SendMessage $MxPrimary ${BM_SETIMAGE} 0 $1
-  ${NSD_OnClick} $MxPrimary ${CALLBACK}
+  SendMessage $R9 ${BM_SETIMAGE} 0 $1
+  ${NSD_OnClick} $R9 ${CALLBACK}
+!macroend
+
+!macro MX_PRIMARY KIND CAPTION Y CALLBACK
+  !insertmacro MX_BUTTON ${KIND} "${CAPTION}" 176 ${Y} 208 44 44 ${CALLBACK}
+  StrCpy $MxPrimary $R9
 !macroend
 
 Function MianxuInstallPage
@@ -71,16 +107,20 @@ Function MianxuInstallPage
   ${If} $R0 == error
     Abort
   ${EndIf}
-  !insertmacro MX_BRAND_FRAME 400 "Mianxu"
+  !insertmacro MX_BRAND_FRAME 380 "Mianxu"
   CreateFont $R8 "Microsoft YaHei UI" 9
-  !insertmacro MX_CARD_LABEL "$(MxLocation)" 32 230 320 22 "26324F" 0
-  !insertmacro MX_CONTROL "EDIT" 0x50010080 0x200 32 257 416 28 "$INSTDIR"
+  File "/oname=$PLUGINSDIR\mianxu-folder.bmp" "${MIANXU_BUTTONS}\folder-surface.bmp"
+  !insertmacro MX_CONTROL "STATIC" 0x5000000E 0 36 204 408 42 ""
+  System::Call 'user32::LoadImageW(p 0, w "$PLUGINSDIR\mianxu-folder.bmp", i 0, i $R6, i $R7, i 0x2010) p .r1'
+  SendMessage $R9 0x172 0 $1
+  !insertmacro MX_CARD_LABEL "$(MxLocation)" 36 176 320 22 "192C3A" 0
+  !insertmacro MX_CONTROL "EDIT" 0x50010080 0 48 215 384 22 "$INSTDIR"
   StrCpy $MxPathInput $R9
-  !insertmacro MX_CONTROL "BUTTON" 0x50010000 0 456 257 72 28 "$(MxBrowse)"
-  ${NSD_OnClick} $R9 MianxuBrowse
-  !insertmacro MX_CARD_LABEL "v${VERSION}" 376 230 152 22 "626B80" 2
-  !insertmacro MX_PRIMARY install "$(MxInstall)" 314 MianxuNext
-  !insertmacro MX_CARD_LABEL "$(MxNote)" 16 373 528 22 "626B80" 1
+  SetCtlColors $MxPathInput "192C3A" "EFF4F8"
+  !insertmacro MX_BUTTON browse "$(MxBrowse)" 452 204 72 42 20 MianxuBrowse
+  !insertmacro MX_CARD_LABEL "v${VERSION}" 372 176 152 22 "647887" 2
+  !insertmacro MX_PRIMARY install "$(MxInstall)" 286 MianxuNext
+  !insertmacro MX_CARD_LABEL "$(MxNote)" 16 350 528 22 "647887" 1
   ${NSD_SetFocus} $MxPrimary
   nsDialogs::Show
 FunctionEnd
@@ -172,28 +212,27 @@ Function MianxuFinishPage
     Abort
   nsDialogs::Create 1018
   Pop $R0
-  !insertmacro MX_BRAND_FRAME 400 "Mianxu"
+  !insertmacro MX_BRAND_FRAME 380 "Mianxu"
   CreateFont $R8 "Microsoft YaHei UI" 12 600
-  !insertmacro MX_CARD_LABEL "$(MxReady)" 16 231 528 30 "26324F" 1
+  !insertmacro MX_CARD_LABEL "$(MxReady)" 16 182 528 30 "192C3A" 1
   CreateFont $R8 "Microsoft YaHei UI" 9
-  !insertmacro MX_CARD_LABEL "v${VERSION}" 16 267 528 20 "626B80" 1
+  !insertmacro MX_CARD_LABEL "v${VERSION}" 16 219 528 20 "647887" 1
   StrCpy $MxShortcut 0
   ${If} $NoShortcutMode <> 1
-    !insertmacro MX_CONTROL "BUTTON" 0x50010003 0 176 290 260 22 "$(MxShortcut)"
+    !insertmacro MX_CONTROL "BUTTON" 0x50010003 0 176 249 260 22 "$(MxShortcut)"
     StrCpy $MxShortcut $R9
-    SetCtlColors $MxShortcut "626B80" "FFFFFF"
+    SetCtlColors $MxShortcut "647887" "FFFFFF"
     ${NSD_SetState} $MxShortcut ${BST_CHECKED}
   ${EndIf}
   StrCpy $MxWantLaunch 0
   IfRebootFlag mianxu_finish_reboot
-    !insertmacro MX_PRIMARY launch "$(MxLaunch)" 323 MianxuLaunch
+    !insertmacro MX_PRIMARY launch "$(MxLaunch)" 286 MianxuLaunch
     Goto mianxu_finish_buttons
   mianxu_finish_reboot:
-    !insertmacro MX_CARD_LABEL "$(MxReboot)" 16 267 528 22 "626B80" 1
-    !insertmacro MX_PRIMARY close "$(MxFinish)" 323 MianxuNext
+    !insertmacro MX_CARD_LABEL "$(MxReboot)" 16 219 528 22 "647887" 1
+    !insertmacro MX_PRIMARY close "$(MxFinish)" 286 MianxuNext
   mianxu_finish_buttons:
-  !insertmacro MX_CONTROL "BUTTON" 0x50018000 0 244 373 72 22 "$(MxFinish)"
-  ${NSD_OnClick} $R9 MianxuNext
+  !insertmacro MX_BUTTON dismiss "$(MxFinish)" 232 342 96 28 20 MianxuNext
   ${NSD_SetFocus} $MxPrimary
   nsDialogs::Show
 FunctionEnd
@@ -223,23 +262,42 @@ Function MianxuReinstallStyle
   StrCpy $MxChoiceLabel $R1
   StrCpy $MxChoiceOne $R2
   StrCpy $MxChoiceTwo $R3
+  StrCpy $MxComparison $R0
   StrCpy $R0 $R4
-  !insertmacro MX_BRAND_FRAME 400 "Mianxu"
-  !insertmacro MX_CARD_SCALE $R4 32
-  !insertmacro MX_CARD_SCALE $R5 230
-  !insertmacro MX_CARD_SCALE $R6 496
-  !insertmacro MX_CARD_SCALE $R7 48
-  System::Call 'user32::SetWindowPos(p $MxChoiceLabel, p 0, i $R4, i $R5, i $R6, i $R7, i 4)'
-  SetCtlColors $MxChoiceLabel "26324F" "FFFFFF"
-  !insertmacro MX_CARD_SCALE $R5 285
-  !insertmacro MX_CARD_SCALE $R7 24
-  System::Call 'user32::SetWindowPos(p $MxChoiceOne, p 0, i $R4, i $R5, i $R6, i $R7, i 4)'
-  SetCtlColors $MxChoiceOne "26324F" "FFFFFF"
-  !insertmacro MX_CARD_SCALE $R5 316
-  System::Call 'user32::SetWindowPos(p $MxChoiceTwo, p 0, i $R4, i $R5, i $R6, i $R7, i 4)'
-  SetCtlColors $MxChoiceTwo "26324F" "FFFFFF"
+  !insertmacro MX_BRAND_FRAME 380 "Mianxu"
+  SendMessage $MxChoiceLabel ${WM_SETTEXT} 0 "STR:$(MxExisting)"
+  SendMessage $MxChoiceOne ${WM_SETTEXT} 0 "STR:$(MxRemoveFirst)"
+  SendMessage $MxChoiceTwo ${WM_SETTEXT} 0 "STR:$(MxOverwrite)"
   CreateFont $R8 "Microsoft YaHei UI" 9
-  !insertmacro MX_PRIMARY continue "$(MxContinue)" 350 MianxuNext
+  ${If} $MxComparison = 0
+    !insertmacro MX_CARD_LABEL "$(MxSameHint)" 36 210 488 26 "647887" 0
+    SendMessage $MxChoiceOne ${WM_SETTEXT} 0 "STR:$(MxReinstall)"
+    SendMessage $MxChoiceTwo ${WM_SETTEXT} 0 "STR:$(MxRemove)"
+  ${ElseIf} $MxComparison = -1
+    !insertmacro MX_CARD_LABEL "$(MxNewerHint)" 36 210 488 26 "647887" 0
+  ${Else}
+    !insertmacro MX_CARD_LABEL "$(MxExistingHint)" 36 210 488 26 "647887" 0
+  ${EndIf}
+  CreateFont $R8 "Microsoft YaHei UI" 12 600
+  SendMessage $MxChoiceLabel ${WM_SETFONT} $R8 1
+  !insertmacro MX_CARD_SCALE $R4 36
+  !insertmacro MX_CARD_SCALE $R5 174
+  !insertmacro MX_CARD_SCALE $R6 488
+  !insertmacro MX_CARD_SCALE $R7 30
+  System::Call 'user32::SetWindowPos(p $MxChoiceLabel, p 0, i $R4, i $R5, i $R6, i $R7, i 4)'
+  SetCtlColors $MxChoiceLabel "192C3A" "FFFFFF"
+  CreateFont $R8 "Microsoft YaHei UI" 10
+  SendMessage $MxChoiceOne ${WM_SETFONT} $R8 1
+  SendMessage $MxChoiceTwo ${WM_SETFONT} $R8 1
+  !insertmacro MX_CARD_SCALE $R5 245
+  !insertmacro MX_CARD_SCALE $R7 28
+  System::Call 'user32::SetWindowPos(p $MxChoiceOne, p 0, i $R4, i $R5, i $R6, i $R7, i 4)'
+  SetCtlColors $MxChoiceOne "192C3A" "FFFFFF"
+  !insertmacro MX_CARD_SCALE $R5 280
+  System::Call 'user32::SetWindowPos(p $MxChoiceTwo, p 0, i $R4, i $R5, i $R6, i $R7, i 4)'
+  SetCtlColors $MxChoiceTwo "192C3A" "FFFFFF"
+  CreateFont $R8 "Microsoft YaHei UI" 9
+  !insertmacro MX_PRIMARY continue "$(MxContinue)" 326 MianxuNext
   !insertmacro MX_POP_REGS
 FunctionEnd
 
@@ -249,7 +307,7 @@ FunctionEnd
 Function MianxuProgressLeave
   IfAbort 0 mianxu_progress_ok
     !insertmacro MX_FIND_PROGRESS
-    !insertmacro MX_BRAND_FRAME 400 "$(MxFailed)"
+    !insertmacro MX_BRAND_FRAME 380 "$(MxFailed)"
     SendMessage $MxProgressHeading ${WM_SETTEXT} 0 "STR:$(MxFailed)"
     SendMessage $MxProgressHint ${WM_SETTEXT} 0 "STR:$(MxFailedHint)"
   mianxu_progress_ok:

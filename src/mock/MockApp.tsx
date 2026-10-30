@@ -12,7 +12,7 @@ import type { RealtimeCapture } from '@/lib/realtimeAsr';
  * 每次写回都基于本次读到的数组，避免覆盖另一个窗口/协程的追加。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Mic, Sparkles, Square, Send, Volume2, VolumeX, MessagesSquare, X } from 'lucide-react';
+import { Mic, Sparkles, Square, Send, Volume2, VolumeX, MessagesSquare, X, Loader2 } from 'lucide-react';
 import { Button, Textarea, showToast, ToastViewport, ConfirmDialog } from '@/ui/primitives';
 import { encodeWav, transcribeAudio } from '@/lib/ai';
 import {
@@ -27,6 +27,7 @@ import {
 import { updateSession, useData, type ChatMessage, type InterviewSession } from '@/lib/backend';
 import { AvatarMark } from './AvatarMark';
 import { questionSpeaker } from '@/lib/questionSpeech';
+import type { SpeechPhase } from '@/lib/questionSpeaker';
 import './room.css';
 
 const SILENCE_HINT_AFTER_MS = 4000;
@@ -66,6 +67,7 @@ function MockRoom() {
   const [assistOverride, setAssistOverride] = useState<boolean | null>(null);
   const assistEnabled = assistOverride ?? config?.assistMode ?? false;
   const [speaking, setSpeaking] = useState(false);
+  const [speechPhase, setSpeechPhase] = useState<SpeechPhase>('idle');
   const [hints, setHints] = useState<Record<string, string>>({});
   const [report, setReport] = useState<string | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
@@ -76,7 +78,7 @@ function MockRoom() {
   const recorderRef = useRef<VoiceRecording|null>(null);
   const [voicePreview,setVoicePreview] = useState('');
   const [voiceStatus,setVoiceStatus] = useState('');
-  const player = useMemo(() => questionSpeaker(setSpeaking, reason => showToast({type:'error', title:'面试官语音暂时不可用', description:String((reason as Error).message || reason)})), []);
+  const player = useMemo(() => questionSpeaker(setSpeaking, reason => showToast({type:'error', title:'面试官语音暂时不可用', description:String((reason as Error).message || reason)}), setSpeechPhase), []);
   const busyRef = useRef(false);
   const finishingRef = useRef(false);
   const requestGeneration = useRef(0);
@@ -90,6 +92,7 @@ function MockRoom() {
   const currentQuestion = [...messages].reverse().find((m) => m.role === 'INTERVIEWER') ?? null;
   const done = finished || session?.status === 'COMPLETED';
   useEffect(() => () => {
+    player.dispose();
     requestGeneration.current++; questionRequest.current?.abort();
     if (retryTimer.current) window.clearTimeout(retryTimer.current);
     const rec=recorderRef.current; recorderRef.current=null;
@@ -132,7 +135,7 @@ function MockRoom() {
 
   // Route presence chooses configured TTS; otherwise the OS voice is used.
   useEffect(() => {
-    if (currentQuestion && ttsOn && !done) void player.speak(currentQuestion.text);
+    if (currentQuestion && ttsOn && !done && !recorderRef.current && session?.messages[session.messages.length - 1]?.role === 'INTERVIEWER') void player.speak(currentQuestion.text);
     return () => player.stop();
   }, [currentQuestion?.id, ttsOn, done, player, speechSettings.routes.tts, speechSettings.ttsVoice]);
 
@@ -277,7 +280,7 @@ function MockRoom() {
       finishingRef.current = true;
       requestGeneration.current++; questionRequest.current?.abort();
       if (retryTimer.current) window.clearTimeout(retryTimer.current);
-      player.stop(); setFinished(true); setThinking(false); busyRef.current = false;
+      player.dispose(); setFinished(true); setThinking(false); busyRef.current = false;
       const rec=recorderRef.current;recorderRef.current=null;rec?.controller.abort();
       const closing = await Promise.allSettled([rec?.capture?.close(), rec?.realtime?.close()]);
       setRecording(false);
@@ -320,6 +323,7 @@ function MockRoom() {
     if(recording || transcribing)return;
     const text = draft.trim();
     if (!text || !session || !config || busyRef.current || done) return;
+    player.stop();
     const generation = ++requestGeneration.current;
     const controller = new AbortController(); questionRequest.current = controller;
     setDraft('');
@@ -409,7 +413,7 @@ function MockRoom() {
         <time className="mock-clock">{fmtElapsed(elapsed)}</time>
         <div className="mock-room-actions">
           <button aria-label={transcriptOpen ? '收起对话记录' : '展开对话记录'} aria-pressed={transcriptOpen} title="对话记录" onClick={() => setTranscriptOpen(!transcriptOpen)}><MessagesSquare size={18} /></button>
-          <button aria-label={ttsOn ? '关闭面试官语音' : '开启面试官语音'} aria-pressed={ttsOn} title={speechSettings.routes.tts ? '使用已配置的语音服务' : '使用系统默认语音'} onClick={() => setTtsOn(!ttsOn)}>{ttsOn ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
+          <button aria-label={ttsOn ? '关闭面试官语音' : '开启面试官语音'} aria-pressed={ttsOn} title={speechSettings.routes.tts ? `使用 ${speechSettings.routes.tts.modelId}` : '使用系统默认语音'} onClick={() => {player.stop();setTtsOn(!ttsOn);}}>{ttsOn ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
           <button className="mock-end" onClick={() => setConfirmEnd(true)}>结束面试</button>
         </div>
       </header>
@@ -418,7 +422,7 @@ function MockRoom() {
           <div className="mock-participants">
             <div className={`mock-participant ${speaking ? 'is-speaking' : ''}`}>
               <span className="mock-role">面试官</span><div className="mock-avatar-halo"><AvatarMark size={112} /></div>
-              <div className="mock-participant-caption"><span className={speaking ? 'mock-live-dot' : 'mock-muted-dot'} />{speaking ? '正在提问' : thinking ? '正在思考下一问' : '面试官'}</div>
+              <div className="mock-participant-caption" role="status"><span className={speaking ? 'mock-live-dot' : 'mock-muted-dot'} />{speaking ? '正在提问' : speechPhase === 'preparing' ? '正在准备语音…' : thinking ? '正在思考下一问' : '面试官'}</div>
             </div>
             <div className={`mock-participant candidate ${recording ? 'is-speaking' : ''}`}>
               <span className="mock-role">候选人</span><div className="mock-candidate-avatar">我</div>
@@ -426,7 +430,7 @@ function MockRoom() {
             </div>
           </div>
           <div className="mock-question" aria-live="polite"><span className="mock-question-label">{thinking ? '面试官正在思考' : '当前问题'}</span><p>{currentQuestion?.text || (thinking ? '面试官正在准备开场问题…' : '准备好后开始对话。')}</p>
-            {currentQuestion && <button title="重新朗读当前问题" aria-label="朗读当前问题" onClick={() => {if (!ttsOn) setTtsOn(true); else void player.speak(currentQuestion.text);}}><Volume2 size={16} /></button>}
+            {currentQuestion && <button disabled={recording || transcribing || thinking} title={speechPhase !== 'idle' ? '停止本次朗读，自动播报开关保持不变' : '重新朗读当前问题；已生成的云端音频优先从本场缓存播放'} aria-label={speechPhase !== 'idle' ? '停止朗读' : '朗读当前问题'} onClick={() => {if (speechPhase !== 'idle') player.stop();else if (!ttsOn) setTtsOn(true);else void player.speak(currentQuestion.text);}}>{speechPhase === 'preparing' ? <Loader2 size={16} className="animate-spin" /> : speechPhase === 'speaking' ? <Square size={16} /> : <Volume2 size={16} />}</button>}
           </div>
           {assistEnabled && currentQuestion && hints[currentQuestion.id] && <div className="mock-hint"><Sparkles size={14} /><p>{hints[currentQuestion.id]}</p></div>}
           <button className={`mock-assist-toggle ${assistEnabled ? 'enabled' : ''}`} aria-pressed={assistEnabled} onClick={() => setAssistOverride(!assistEnabled)}><Sparkles size={14} /> AI 辅助 {assistEnabled ? '已开启' : '已关闭'}</button>

@@ -4,6 +4,7 @@ Var MxProgressHeading
 Var MxProgressHint
 Var MxProgressStyled
 !define MIANXU_CARD_HERO "${__FILEDIR__}\branding\update-hero.bmp"
+!define MIANXU_CARD_HERO_EN "${__FILEDIR__}\branding\update-hero-en.bmp"
 
 LangString MianxuCardTitle 2052 "正在安装更新"
 LangString MianxuCardTitle 1033 "Installing update"
@@ -31,19 +32,19 @@ LangString MianxuCardHint 1033 "Please wait. Your settings and history will be k
     GetDlgItem $1 $R0 1016
     ShowWindow $1 ${SW_HIDE}
     CreateFont $R8 "Microsoft YaHei UI" 11 600
-    !insertmacro MX_CARD_LABEL "${TITLE_TEXT}" 32 231 320 26 "26324F" 0
+    !insertmacro MX_CARD_LABEL "${TITLE_TEXT}" 36 183 320 26 "192C3A" 0
     StrCpy $MxProgressHeading $R9
     CreateFont $R8 "Microsoft YaHei UI" 9
-    !insertmacro MX_CARD_LABEL "${VERSION_TEXT}" 372 234 156 22 "626B80" 2
-    !insertmacro MX_CARD_SCALE $R4 32
-    !insertmacro MX_CARD_SCALE $R5 275
-    !insertmacro MX_CARD_SCALE $R6 496
+    !insertmacro MX_CARD_LABEL "${VERSION_TEXT}" 368 186 156 22 "647887" 2
+    !insertmacro MX_CARD_SCALE $R4 36
+    !insertmacro MX_CARD_SCALE $R5 237
+    !insertmacro MX_CARD_SCALE $R6 488
     !insertmacro MX_CARD_SCALE $R7 6
     System::Call 'user32::SetWindowPos(p r0, p 0, i $R4, i $R5, i $R6, i $R7, i 0)'
     System::Call 'uxtheme::SetWindowTheme(p r0, w "", w "")'
-    SendMessage $0 0x409 0 0xF57D64 ; PBM_SETBARCOLOR; never set range or position.
-    SendMessage $0 0x2001 0 0xF4EEEB ; PBM_SETBKCOLOR
-    !insertmacro MX_CARD_LABEL "${HINT_TEXT}" 32 300 496 24 "626B80" 0
+    SendMessage $0 0x409 0 0xBA7908 ; PBM_SETBARCOLOR; never set range or position.
+    SendMessage $0 0x2001 0 0xF3EDE5 ; PBM_SETBKCOLOR
+    !insertmacro MX_CARD_LABEL "${HINT_TEXT}" 36 266 488 32 "647887" 0
     StrCpy $MxProgressHint $R9
     StrCpy $MxProgressStyled 1
     System::Call 'user32::RedrawWindow(p $HWNDPARENT, p 0, p 0, i 0x185)'
@@ -131,7 +132,11 @@ LangString MianxuCardHint 1033 "Please wait. Your settings and history will be k
     InitPluginsDir
     ; Absolute extraction leaves $OUTDIR untouched and never creates $INSTDIR
     ; before the user clicks the installation action.
-    File "/oname=$PLUGINSDIR\mianxu-update-hero.bmp" "${MIANXU_CARD_HERO}"
+    ${If} $LANGUAGE = 2052
+      File "/oname=$PLUGINSDIR\mianxu-update-hero.bmp" "${MIANXU_CARD_HERO}"
+    ${Else}
+      File "/oname=$PLUGINSDIR\mianxu-update-hero.bmp" "${MIANXU_CARD_HERO_EN}"
+    ${EndIf}
     System::Call 'user32::GetDpiForWindow(p $HWNDPARENT) i .R1'
     ${IfThen} $R1 = 0 ${|} StrCpy $R1 96 ${|}
     !insertmacro MX_CARD_SCALE $R2 560
@@ -155,8 +160,8 @@ LangString MianxuCardHint 1033 "Please wait. Your settings and history will be k
     IntOp $5 $5 / 2
     IntOp $3 $3 + $5
     System::Call 'user32::SetWindowPos(p $HWNDPARENT, p 0, i r2, i r3, i r8, i r9, i 4)'
-    SetCtlColors $HWNDPARENT "26324F" "FFFFFF"
-    SetCtlColors $R0 "26324F" "FFFFFF"
+    SetCtlColors $HWNDPARENT "192C3A" "FFFFFF"
+    SetCtlColors $R0 "192C3A" "FFFFFF"
     ; Hide wizard chrome. Keep the native caption for dragging, system menu and
     ; accessibility. Unsupported DWM attributes simply leave the OS caption intact.
     !insertmacro MX_CARD_HIDE_ROOT 1
@@ -171,10 +176,11 @@ LangString MianxuCardHint 1033 "Please wait. Your settings and history will be k
     !insertmacro MX_CARD_HIDE_ROOT 1256
     !insertmacro MX_CARD_HIDE_ROOT 1028
     !insertmacro MX_CARD_HIDE_ROOT 1046
-    System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 35, *i 0xF57D64, i 4)'
-    System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 36, *i 0xFFFFFF, i 4)'
+    System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 33, *i 2, i 4)'
+    System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 35, *i 0xFCF9F5, i 4)'
+    System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 36, *i 0x3A2C19, i 4)'
     System::Call 'user32::SetWindowPos(p $R0, p 0, i 0, i 0, i $R2, i $R3, i 4)'
-    !insertmacro MX_CARD_SCALE $R5 210
+    !insertmacro MX_CARD_SCALE $R5 140
     System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "Mianxu", i 0x5000000E, i 0, i 0, i $R2, i $R5, p $R0, p 0, p 0, p 0) p .R9'
     System::Call 'user32::LoadImageW(p 0, w "$PLUGINSDIR\mianxu-update-hero.bmp", i 0, i $R2, i $R5, i 0x2010) p .r1'
     SendMessage $R9 0x172 0 $1 ; STM_SETIMAGE; process owns bitmap until exit.
