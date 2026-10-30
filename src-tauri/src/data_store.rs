@@ -356,3 +356,12 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+    #[test]
+    fn job_progress_is_an_accepted_persistent_collection() {
+        assert!(KEYS.contains(&"jobProgress"));
+    }
+}
