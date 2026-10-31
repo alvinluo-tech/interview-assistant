@@ -337,7 +337,7 @@ function ExamRecords() {
                           <div className="mb-2 border-b pb-2"><p className="mb-1 text-xs text-muted-foreground">原题</p>{q.questionText && !/^第\s*\d+\s*题$/.test(q.questionText) ? <Md text={q.questionText} /> : '旧记录未保存题干。'}</div>
                           <p className="mb-1 text-xs text-muted-foreground">答案</p>
                           {q.answer ? <Md text={q.answer} /> : '这道题没有答案记录。'}
-                          {q.imageSaveError && <p role="alert" className="mt-2 text-xs text-amber-700">截图未能保存：{q.imageSaveError}</p>}
+                          {q.imageSaveError && <p role="alert" className="mt-2 text-xs text-amber-700 dark:text-amber-400">截图未能保存：{q.imageSaveError}</p>}
                         </div>
                       </div>
                     ))}

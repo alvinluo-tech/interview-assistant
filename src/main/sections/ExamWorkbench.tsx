@@ -164,7 +164,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
         </div>
 
         {!aiReady && (
-          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
+          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
             请到「设置 → AI 服务」选择截图识别模型，或使用支持图片输入的对话模型。
           </div>
         )}

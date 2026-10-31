@@ -105,7 +105,7 @@ export function applyDocumentLang() {
 
 // ---- 英语字典（key = 中文原文）----
 const en: Record<string, string> = {
-  "骆耀升老公酱面试助手": "Interview Assistant",
+  "MianXu": "MianXu",
   "AI 面试助手": "AI Interview Assistant",
   "面试助手": "Interview",
   "实时听译 · 自动答题": "Live transcription · Auto answers",
@@ -137,6 +137,9 @@ const en: Record<string, string> = {
   "界面语言": "Interface language",
   "切换语言会刷新窗口让翻译生效。": "Switching language reloads the window.",
   "跟随系统": "Follow system",
+  "随操作系统外观切换": "Follows your OS appearance",
+  "始终浅色": "Always light",
+  "始终深色": "Always dark",
   "外观主题": "Appearance",
   "只影响主窗口；浮窗的明暗在「浮窗样式」里单独选。": "Main window only; overlay has its own theme in \"Overlay Style\".",
   "浅色": "Light",

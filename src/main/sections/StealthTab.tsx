@@ -95,7 +95,7 @@ export function StealthTab() {
           <Switch ariaLabel="演示可见模式" checked={capture?.demoVisible ?? false} disabled={captureDisabled} onCheckedChange={(v) => void act(() => setDemoVisibleMode(v))} />
         </SettingRow>
         <div className="mt-2 rounded-md bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground" aria-live="polite">
-          {capture?.devBypass && <p className="mb-1 text-amber-600">开发旁路已启用，当前允许捕获。</p>}
+          {capture?.devBypass && <p className="mb-1 text-amber-600 dark:text-amber-400">开发旁路已启用，当前允许捕获。</p>}
           {capture?.windows.map((w) => <p key={w.label}>
             {w.label === 'main' ? '主窗口' : '浮窗'}：{w.error ? `设置异常：${w.error}` : bestEffort ? w.sharingRestricted ? '已设置共享限制，效果需实测' : '未限制窗口共享' : w.affinity === 0x11 ? '捕获排除已设置' : w.affinity === 0 ? '允许捕获' : `亲和性 ${w.affinity}`}
           </p>)}

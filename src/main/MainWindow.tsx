@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import brandIcon from '../../src-tauri/icons/128x128@2x.png';
 import { Badge, Card, ToastViewport } from '@/ui/primitives';
 import { BRAND, isMac } from '@/lib/env';
 import { getSetting, setSetting, useSetting } from '@/lib/store';
@@ -270,12 +271,8 @@ function TitleBar() {
 
 export function BrandMark({ size = 36 }: { size?: number }) {
   return (
-    <span
-      className="flex items-center justify-center rounded-md bg-primary/15 font-bold text-primary"
-      style={{ width: size, height: size, fontSize: size * 0.5 }}
-    >
-      骆
-    </span>
+    <img src={brandIcon} alt="" aria-hidden="true" draggable={false}
+      className="shrink-0 object-contain" style={{ width: size, height: size }} />
   );
 }
 

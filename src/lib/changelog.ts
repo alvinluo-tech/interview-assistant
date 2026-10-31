@@ -5,6 +5,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-31',
+    items: [
+      {tag: 'new', text: '主窗口支持深色、浅色和跟随系统外观，重启后保留设置。'},
+      {tag: 'improved', text: '更新应用图标及安装、卸载和更新界面的品牌形象。'},
+      {tag: 'improved', text: '改善 Mac 浮窗在全屏应用和不同桌面空间中的显示。'},
+    ],
+  },
+  {
     date: '2026-10-30',
     items: [
       {tag: 'improved', text: '优化 Windows 安装界面，并完善语音播放与音频设备设置。'},

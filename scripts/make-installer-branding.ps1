@@ -21,10 +21,12 @@ function RoundedPath([float]$X, [float]$Y, [float]$Width, [float]$Height, [float
     return $shape
 }
 function Mark($Graphics, [float]$X, [float]$Y, [float]$Size) {
-    $brush = Brush '#0879BA'
-    $shape = RoundedPath $X $Y $Size $Size ($Size * .26)
-    try { $Graphics.FillPath($brush, $shape) } finally { $brush.Dispose(); $shape.Dispose() }
-    Label $Graphics '面' ($X + $Size * .15) ($Y + $Size * .04) ($Size * .66) '#FFFFFF' $true
+    $image = [Drawing.Image]::FromFile([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../src/assets/brand.png')))
+    $previous = $Graphics.InterpolationMode
+    try {
+        $Graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $Graphics.DrawImage($image, [Drawing.RectangleF]::new($X, $Y, $Size, $Size))
+    } finally { $Graphics.InterpolationMode = $previous; $image.Dispose() }
 }
 foreach ($kind in @('sidebar', 'header', 'uninstall-header')) {
     $width = if ($kind -eq 'sidebar') { 164 } else { 150 }

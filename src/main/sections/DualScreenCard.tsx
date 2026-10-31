@@ -70,7 +70,7 @@ export function DualScreenCard() {
           <p className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
             连接后电脑浮窗内容隐藏，答案显示在手机上。可直接在手机操作，也可用电脑鼠标悬停手机映射的按钮；手机可随时切回电脑或结束笔试。
           </p>
-          <p className="mt-1 max-w-md text-xs leading-relaxed text-amber-700">副屏连接目前未加密，请仅在可信的私人网络中使用；同一网络中的攻击者可能截获内容和连接地址。</p>
+          <p className="mt-1 max-w-md text-xs leading-relaxed text-amber-700 dark:text-amber-400">副屏连接目前未加密，请仅在可信的私人网络中使用；同一网络中的攻击者可能截获内容和连接地址。</p>
         </div>
         <Badge variant={peers > 0 ? 'default' : 'secondary'}>{peers > 0 ? '手机已连接' : '未连接'}</Badge>
       </div>

@@ -27,8 +27,8 @@ export function ChangelogDialog({ onClose }: { onClose: () => void }) {
                       it.tag === 'new'
                         ? 'bg-primary/10 text-primary'
                         : it.tag === 'improved'
-                          ? 'bg-sky-500/10 text-sky-600'
-                          : 'bg-emerald-500/10 text-emerald-600'
+                          ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
+                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                     }`}
                   >
                     {it.tag === 'new' ? '新功能' : it.tag === 'improved' ? '体验优化' : '问题修复'}

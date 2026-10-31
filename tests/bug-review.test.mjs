@@ -104,7 +104,7 @@ test('parsed suggestions have visible follow-up actions (B29)',()=>{
 test('global error diagnostics keep only the latest 400 entries (B35)',async()=>{
   const handlers=new Map(),win={addEventListener:(name,handler)=>handlers.set(name,handler)};
   const jsx=()=>({});
-  const modules={react:{default:{StrictMode:'StrictMode'}},'react/jsx-runtime':{jsx,jsxs:jsx},'react-dom/client':{createRoot:()=>({render(){}})},'./index.css':{},'./lib/i18n':{applyDocumentLang(){},windowScene:()=> 'main'},'./lib/bridge':{isTauri:()=>false},'./lib/store':{},'./lib/backend':{},'./lib/aiSettings':{},'./App':{App(){}}};
+  const modules={react:{default:{StrictMode:'StrictMode'}},'react/jsx-runtime':{jsx,jsxs:jsx},'react-dom/client':{createRoot:()=>({render(){}})},'./index.css':{},'./lib/i18n':{applyDocumentLang(){},windowScene:()=> 'main'},'./lib/bridge':{isTauri:()=>false},'./lib/store':{},'./lib/backend':{},'./lib/aiSettings':{},'./lib/desktopAppearance':{initDesktopAppearance(){},refreshDesktopAppearance(){}},'./App':{App(){}}};
   evaluateFixture('src/main.tsx',{exports:{},window:win,document:{getElementById:()=>({}),documentElement:{classList:{toggle(){}}},body:{classList:{toggle(){}}}},console:{error(){}},require:name=>{if(!(name in modules))throw new Error(name);return modules[name];}});
   for(let i=0;i<1000;i++)handlers.get('error')({message:'error '+i});
   assert.equal(win.__errors.length,400);

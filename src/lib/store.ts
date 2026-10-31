@@ -13,6 +13,11 @@ let hydrating = false;
 
 const STORE_FILE = 'store.json';
 
+function mirrorDesktopTheme(key: string, value: unknown) {
+  if (key !== 'desktop.theme') return;
+  try { localStorage.setItem('desktop.theme.mirror', String(value)); } catch { /* storage can be unavailable */ }
+}
+
 async function getStore() {
   if (!storePromise) {
     storePromise = import('@tauri-apps/plugin-store').then((m) =>
@@ -31,6 +36,7 @@ export async function hydrateStore() {
       const v = await store.get<unknown>(key);
       if (v !== null && v !== undefined) {
         cache.set(key, v);
+        mirrorDesktopTheme(key, v);
       }
     }
     listeners.forEach((l) => l());
@@ -41,7 +47,7 @@ export async function hydrateStore() {
 
 /** 写设置（持久化 + 广播 + 跨窗口同步） */
 export async function setSetting<T>(key: string, value: T,options?:{strict?:boolean}) {
-  if(!options?.strict){cache.set(key, value);listeners.forEach((l) => l());}
+  if(!options?.strict){cache.set(key, value);mirrorDesktopTheme(key, value);listeners.forEach((l) => l());}
   let previous:unknown,changed=false;
   try {
     const store = await getStore();
@@ -56,7 +62,7 @@ export async function setSetting<T>(key: string, value: T,options?:{strict?:bool
     }
     console.warn('[store] persist failed', e);
   }
-  if(options?.strict){cache.set(key,value);listeners.forEach(listener=>listener());}
+  if(options?.strict){cache.set(key,value);mirrorDesktopTheme(key, value);listeners.forEach(listener=>listener());}
   // 跨窗口同步：主窗口的改动要立刻反映到浮窗（各自独立 JS 上下文）
   try {
     const { emit } = await import('@tauri-apps/api/event');
@@ -73,6 +79,7 @@ export async function initStoreSync() {
     const { listen } = await import('@tauri-apps/api/event');
     await listen<{ key: string; value: unknown }>('ml-store-changed', (e) => {
       cache.set(e.payload.key, e.payload.value);
+      mirrorDesktopTheme(e.payload.key, e.payload.value);
       listeners.forEach((l) => l());
     });
   } catch {
@@ -228,4 +235,6 @@ export const ALL_KEYS = [
   'interviewPreference', // 复刻新增：面试偏好（本地化替代 updateInterviewPreference）
   'mac.screenShareNoticeDismissed',
   'local.user', // 复刻新增：本地用户
+  'desktop.theme', // 主窗口深浅色（'system' | 'light' | 'dark'）
+  'desktop.uiScale', // 主窗口界面大小
 ] as const;

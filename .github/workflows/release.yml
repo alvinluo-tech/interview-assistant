@@ -113,6 +113,9 @@ jobs:
       - name: Test chat tools and voice calls
         run: pnpm test:chat
 
+      - name: Test desktop appearance
+        run: node --test tests/desktop-appearance.test.mjs
+
       - name: Test permission and native capture bridge
         run: pnpm test:platform
 
@@ -234,9 +237,11 @@ jobs:
           if gh release view "$TAG" --json isDraft > release-status.json 2>/dev/null; then
             node -e "if (!JSON.parse(require('node:fs').readFileSync('release-status.json')).isDraft) throw new Error('Release is already public; publish a new version instead of replacing updater assets')"
           else
-            gh release create "$TAG" --verify-tag --draft --title "Mianxu ${TAG}" --generate-notes --prerelease="$PRERELEASE"
+            echo "Create a draft release for $TAG with reviewed Simplified Chinese notes, then rerun this job." >&2
+            exit 1
           fi
           gh release view "$TAG" --json body --jq '.body' > release-notes.txt
+          node -e "const notes = require('node:fs').readFileSync('release-notes.txt', 'utf8'); if (!/[\\u4e00-\\u9fff]/u.test(notes)) throw new Error('Draft release requires reviewed Simplified Chinese notes')"
           RELEASE_NOTES_FILE=release-notes.txt node scripts/release.mjs manifest "$TAG"
           (cd release-assets && sha256sum latest.json >> SHA256SUMS.txt)
           gh release upload "$TAG" \

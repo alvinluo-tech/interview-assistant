@@ -105,6 +105,9 @@ jobs:
       - name: Test chat tools and voice calls
         run: pnpm test:chat
 
+      - name: Test desktop appearance
+        run: node --test tests/desktop-appearance.test.mjs
+
       - name: Test permission and native capture bridge
         run: pnpm test:platform
 

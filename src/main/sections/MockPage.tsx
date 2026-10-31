@@ -268,7 +268,7 @@ export function MockPage() {
         </div>
 
         {!aiReady && (
-          <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
+          <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
             还没有配置 AI 接口：到「设置 → AI 服务」填写后开始。
           </div>
         )}

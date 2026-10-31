@@ -19,6 +19,7 @@ import {
   showToast,
 } from '@/ui/primitives';
 import { DEFAULT_OVERLAY_STYLE, useSetting, type OverlayStyle } from '@/lib/store';
+import type { DesktopTheme } from '@/lib/desktopAppearance';
 import { normalizeStyle as normalizeStyleHelper } from '@/lib/overlayStyle';
 import {
   ACTIONS,
@@ -103,17 +104,11 @@ export function SettingsPage() {
 function GeneralTab() {
   const [autoOpen, setAutoOpen] = useSetting('interview.autoOpenMockShell', true);
   const [uiScale, setUiScale] = useSetting('desktop.uiScale', 1);
-  const [theme, setTheme] = useSetting<'system' | 'light' | 'dark'>('desktop.theme', 'system');
+  const [theme, setTheme] = useSetting<DesktopTheme>('desktop.theme', 'system');
   const [locale, setLocale] = useState(currentLocale());
   const [expandLangs, setExpandLangs] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.style.zoom = String(uiScale);
-  }, [uiScale]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
+  // 深浅色与界面大小的实际应用在 lib/desktopAppearance：启动、设置变更、
+  // 跨窗口广播和系统配色切换都会在那里统一处理，这里只负责选择 UI。
 
   const langList = expandLangs ? LOCALES : LOCALES.slice(0, 4);
 
@@ -171,7 +166,7 @@ function GeneralTab() {
             <button
               key={t.key}
               type="button"
-              onClick={() => setTheme(t.key as 'system' | 'light' | 'dark')}
+              onClick={() => setTheme(t.key as DesktopTheme)}
               className={`rounded-md border p-2.5 text-left transition-colors ${
                 theme === t.key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
               }`}

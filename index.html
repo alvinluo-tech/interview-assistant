@@ -2,9 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" href="/src-tauri/icons/32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>骆耀升老公酱面试助手</title>
+    <script>
+      // 首帧防闪白：主窗口在样式加载前按上次主题着色。
+      // store.json 无法同步读取，setSetting 会把 desktop.theme 镜像到 localStorage。
+      (function () {
+        try {
+          var scene = location.hash.replace(/^#/, '').split('?')[0];
+          if (scene === 'overlay' || scene === 'mock') return; // 浮窗/模拟面试窗有自己的配色
+          var stored = localStorage.getItem('desktop.theme.mirror');
+          var dark = stored === 'dark' ||
+            (stored !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          }
+        } catch (e) {
+          /* 忽略，保持浅色 */
+        }
+      })();
+    </script>
   </head>
 
   <body>

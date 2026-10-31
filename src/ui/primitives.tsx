@@ -284,7 +284,7 @@ export function Badge({
     secondary: 'bg-secondary text-secondary-foreground border-transparent',
     outline: 'border-input text-foreground',
     destructive: 'bg-destructive/10 text-destructive border-destructive/20',
-    amber: 'border-amber-500/30 bg-amber-500/10 text-amber-600',
+    amber: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
   }[variant];
   return (
     <span className={`inline-flex items-center rounded border px-1.5 py-px text-[11px] font-medium ${cls} ${className}`}>

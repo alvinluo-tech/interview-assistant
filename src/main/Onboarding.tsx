@@ -131,7 +131,7 @@ export function Onboarding({ onFinish }: { onFinish: (ownData: boolean) => void 
             挑一个马上开一场，跟着浮窗里的提示用演示内容跑一遍，就知道怎么用了。
           </p>
           {!aiReady && (
-            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
+            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
               开始前先到「设置 → AI 服务」配置你的接口地址与密钥，浮窗才能出答案。
             </div>
           )}
