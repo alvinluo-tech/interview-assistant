@@ -1,5 +1,5 @@
-import type {AiProvider} from './aiConfig';
-import type {SpeechAccent,SpeechLanguage,SpeechRenderSpec} from './speechProfile';
+import type {AiProvider} from './aiConfig.js';
+import type {SpeechAccent,SpeechLanguage,SpeechRenderSpec} from './speechProfile.js';
 import {bailianRegion} from './realtimeAsrProtocol.js';
 export interface SpeechVoice {id:string;name:string;languages:SpeechLanguage[];accents:SpeechAccent[];regions?:string[];instruction?:boolean}
 const zh:SpeechLanguage[]=['zh-CN'],en:SpeechLanguage[]=['en-US'],both:SpeechLanguage[]=['zh-CN','en-US'];
