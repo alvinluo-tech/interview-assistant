@@ -13,6 +13,7 @@ const KEYS: &[&str] = &[
     "questionBanks",
     "feedback",
     "jobProgress",
+    "freeChats",
 ];
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
 #[derive(Default)]

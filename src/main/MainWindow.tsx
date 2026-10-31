@@ -2,7 +2,7 @@
  * 主窗口（对齐原版 SW/dW/fW）：自定义标题栏（Win）、侧边栏（品牌/导航/
  * 额度卡/设置/反馈/账号）、内容区 8 个 section、使用须知弹窗、首次引导。
  */
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   BookOpen,
   ChevronsUpDown,
@@ -38,11 +38,13 @@ import { ChangelogDialog } from './ChangelogDialog';
 import { FeedbackDialog } from './FeedbackDialog';
 import { LocalProfileDialog } from './LocalProfileDialog';
 import { UpdateNotice } from './UpdateNotice';
+const FreeChatPage = lazy(() => import('./sections/FreeChatPage').then(module => ({default: module.FreeChatPage})));
 
 type Section =
   | 'interview'
   | 'exam'
   | 'mock'
+  | 'chat'
   | 'question-bank'
   | 'resource'
   | 'records'
@@ -52,6 +54,7 @@ const BIG_NAV: { key: Section; label: string; desc: string; icon: React.ReactNod
   { key: 'interview', label: '面试助手', desc: '实时听译 · 自动答题', icon: <Mic size={17} /> },
   { key: 'exam', label: '笔试助手', desc: '真实笔试 · 截屏解题', icon: <Laptop size={17} /> },
   { key: 'mock', label: '模拟面试', desc: '面试前练手 · 复盘报告', icon: <Sparkles size={17} /> },
+  { key: 'chat', label: '自由对话', desc: '文字 · 语音 · 资料查询', icon: <MessageSquareText size={17} /> },
 ];
 
 const SMALL_NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
@@ -69,6 +72,7 @@ const PAGE_TITLES: Record<Exclude<Section, 'interview' | 'settings'>, { h1: stri
     h1: '模拟面试',
     sub: 'AI 面试官按你的简历和岗位出题，你开口回答，结束后出一份复盘报告。',
   },
+  chat: {h1:'自由对话',sub:'文字和语音对话。'},
   'question-bank': { h1: '面试题库', sub: '马上要面的这场，会考什么、你该怎么答。' },
   resource: {
     h1: '资料管理',
@@ -178,12 +182,12 @@ export function MainWindow() {
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-3xl px-7 py-7">
+            <div className={`mx-auto w-full ${section==='chat'?'max-w-none':'max-w-3xl'} px-7 py-7`}>
               {showOnboarding ? (
                 <Onboarding onFinish={finishOnboarding} />
               ) : (
                 <>
-                  {section !== 'interview' && section !== 'settings' && (
+                  {section !== 'interview' && section !== 'settings' && section !== 'chat' && (
                     <header className="mb-5">
                       <h1 className="text-lg font-semibold">{PAGE_TITLES[section].h1}</h1>
                       <p className="mt-1 text-sm text-muted-foreground">{PAGE_TITLES[section].sub}</p>
@@ -192,6 +196,7 @@ export function MainWindow() {
                   {section === 'interview' && <InterviewWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'exam' && <ExamWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'mock' && <MockPage />}
+                  {section === 'chat' && <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">正在打开对话…</div>}><FreeChatPage /></Suspense>}
                   {section === 'question-bank' && <QuestionBankPage />}
                   {section === 'resource' && <ResourcePage />}
                   {section === 'records' && <RecordsPage />}

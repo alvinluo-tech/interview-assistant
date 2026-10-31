@@ -31,7 +31,7 @@ import {
   stripMarkdown,
   type SolverState,
 } from '@/lib/examEngine';
-import { setOverlaySize, setSessionActive, captureScreen } from '@/lib/bridge';
+import { setOverlaySize, setSessionActive, captureScreen, isTauri } from '@/lib/bridge';
 import { effectiveHotkeys, hotkeyBadge, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
 import { isMac, BRAND } from '@/lib/env';
 import { getSetting } from '@/lib/store';
@@ -53,8 +53,15 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
   const { bindHotkey } = usePlatform();
   useEffect(() => {
     if (preview) return;
-    const config=getSetting<{runId:string;goalId:string|null}|null>('exam.pendingConfig',null);
-    if(config)prepareExamRun(config.runId,config.goalId);
+    let active = true;
+    const config=getSetting<{runId:string;goalId:string|null;resumeSessionId?:string}|null>('exam.pendingConfig',null);
+    if(config) void (async () => {
+      try {
+        if(config.resumeSessionId && isTauri()) await (await import('@/lib/backend')).refreshData();
+        if(active) prepareExamRun(config.runId,config.goalId,undefined,config.resumeSessionId);
+      } catch (error) { if(active) showToast({type:'error',title:'恢复笔试失败',description:String((error as Error).message || error)}); }
+    })();
+    return () => { active = false; };
   }, [preview]);
 
   useEffect(() => {
@@ -145,7 +152,7 @@ function ExamShell({
     }
   };
 
-  const empty = solver.turns.length === 0 && !multiPage && !solving;
+  const empty = solver.turns.length === 0 && !multiPage && !solving && !solver.errorMessage;
 
   return (
     <div
@@ -214,6 +221,7 @@ function ExamShell({
                 <div data-overlay-scroll-anchor={i === solver.turns.length - 1 || undefined}>
                   <Md text={turn.body.replace(/^> .*\n\n/, '')} />
                   <GenerationDetails status={turn.completionStatus} request={turn.request}/>
+                  {turn.imageSaveError && <div role="alert" className="ov-text-2">原题截图未保存，请保留题目并在需要时重新截图。</div>}
                 </div>
               </div>
             ))}
@@ -263,7 +271,7 @@ function ExamShell({
             id="fu-review"
             hoverMs={HOVER_MS.followUp}
             onTrigger={() => void followUp({ intent: 'code-review' })}
-            label="检查我抄的代码"
+            label="截图检查当前代码"
           />
         </div>
       )}

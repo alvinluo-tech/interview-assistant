@@ -198,7 +198,7 @@ export function startDualTakeover(): () => void {
   const followUpLabels: { intent: string; label: string }[] = [
     { intent: 'simplify', label: '继续简化' },
     { intent: 'brute-force', label: '换暴力解法' },
-    { intent: 'code-review', label: '检查我抄的代码' },
+    { intent: 'code-review', label: '截图检查当前代码' },
     { intent: 'partial-pass', label: '降通过率' },
   ];
   async function pushState() {

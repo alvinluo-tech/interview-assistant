@@ -44,6 +44,8 @@ import { backupData, getDataError } from '@/lib/backend';
 import { UpdateStatusButton } from '../UpdateNotice';
 import { DeveloperInfo } from './DeveloperInfo';
 import { StorageSettings } from './StorageSettings';
+import { CHANGELOG } from '@/lib/changelog';
+import { isWindows } from '@/lib/env';
 
 type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'prompts' | 'storage' | 'changelog' | 'about';
 
@@ -785,31 +787,21 @@ function HotkeysTab() {
 // ---------------- 更新日志 ----------------
 
 function ChangelogTab() {
-  const entries = [
-    {
-      date: '2026-10-28',
-      items: [
-        { tag: '新功能', text: '首个复刻版本：面试浮窗 / 笔试浮窗 / 模拟面试 / 题库资料全套页面。' },
-        { tag: '新功能', text: 'AI 管线本地化：接入你自己的 OpenAI 兼容接口（对话 / 视觉 / 语音转写）。' },
-        { tag: '体验优化', text: '浮窗样式系统与原版一致：主题、透明度、文字描边、字号、滚动速度。' },
-      ],
-    },
-  ];
   return (
     <Card className="p-5">
-      <SectionHeader title="更新日志" desc="这个客户端版本里的全部改动。" />
-      {entries.length === 0 ? (
+      <SectionHeader title="更新日志" desc="查看客户端更新记录。" />
+      {CHANGELOG.length === 0 ? (
         <p className="text-sm text-muted-foreground">暂无更新记录。</p>
       ) : (
         <div className="flex flex-col gap-4">
-          {entries.map((e) => (
+          {CHANGELOG.map((e) => (
             <div key={e.date}>
               <div className="mb-1.5 text-xs font-medium text-muted-foreground">{e.date}</div>
               <div className="flex flex-col gap-1.5">
                 {e.items.map((it, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
-                    <Badge variant={it.tag === '新功能' ? 'default' : it.tag === '体验优化' ? 'secondary' : 'outline'}>
-                      {it.tag}
+                    <Badge variant={it.tag === 'new' ? 'default' : it.tag === 'improved' ? 'secondary' : 'outline'}>
+                      {it.tag === 'new' ? '新功能' : it.tag === 'improved' ? '体验优化' : '问题修复'}
                     </Badge>
                     <span>{it.text}</span>
                   </div>
@@ -853,7 +845,7 @@ function AboutTab() {
       <div className="divide-y">
         <Row label="客户端版本" value={APP_VERSION} />
         <Row label="界面版本" value="随客户端内置" />
-        <Row label="系统版本" value={osVersion || '无法读取'} />
+        <Row label={isWindows() ? 'Windows 版本' : '系统版本'} value={osVersion || '无法读取'} />
         <Row
           label="客户端更新"
           value={

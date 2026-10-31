@@ -1,25 +1,8 @@
-/*
- * 更新日志弹窗（对齐原版 oI）：本复刻版的更新条目。
- */
+/* 更新日志弹窗。 */
 import { Button, Dialog, DialogTitle } from '@/ui/primitives';
 import { setSetting } from '@/lib/store';
 import { APP_VERSION } from '@/lib/env';
-
-interface Entry {
-  date: string;
-  items: { tag: 'new' | 'improved' | 'fixed'; text: string }[];
-}
-
-const ENTRIES: Entry[] = [
-  {
-    date: '2026-10-28',
-    items: [
-      { tag: 'new', text: '首个复刻版本：面试浮窗 / 笔试浮窗 / 模拟面试 / 题库资料全套页面。' },
-      { tag: 'new', text: 'AI 管线本地化：接入你自己的 OpenAI 兼容接口（对话 / 视觉 / 语音转写）。' },
-      { tag: 'improved', text: '浮窗样式系统与原版一致：主题、透明度、文字描边、字号、滚动速度、快捷键调透明度。' },
-    ],
-  },
-];
+import { CHANGELOG } from '@/lib/changelog';
 
 export function ChangelogDialog({ onClose }: { onClose: () => void }) {
   return (
@@ -33,7 +16,7 @@ export function ChangelogDialog({ onClose }: { onClose: () => void }) {
     >
       <DialogTitle>已更新到新版本</DialogTitle>
       <div className="mb-4 flex flex-col gap-4">
-        {ENTRIES.map((e) => (
+        {CHANGELOG.map((e) => (
           <div key={e.date}>
             <div className="mb-1.5 text-xs font-medium text-muted-foreground">{e.date}</div>
             <div className="flex flex-col gap-1.5">

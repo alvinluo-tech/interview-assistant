@@ -3,21 +3,21 @@ import assert from 'node:assert/strict';
 import { evaluateFixture } from './compile-fixture.mjs';
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
-function engine({ completionFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[] } = {}) {
-  let resolveRequest, options, requests = 0;
+function engine({ completionFails = false, imageSaveFails = false, captureFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[] } = {}) {
+  let resolveRequest, options, requests = 0, sentImages = [], captures = 0;
   let resolveSession, resolveCapture, created = 0;
   const calls = [], saved = [],prompts=[],createdInputs=[];
-  const timers = new Set();
+  const timers = new Set(), checkpoints = new Map();
   const bridge = {
-    cmd: async () => ['synthetic/turn/image.png'],
-    captureScreen: async () => deferredCapture ? new Promise(resolve => { resolveCapture = resolve; }) : 'data:image/png;base64,synthetic',
+    cmd: async command => { if (imageSaveFails && command === 'cmd_exam_store_images') throw new Error('disk full'); return ['synthetic/turn/image.png']; },
+    captureScreen: async () => { captures++; if(captureFails) throw new Error('capture denied'); return deferredCapture ? new Promise(resolve => { resolveCapture = resolve; }) : `synthetic-page-${captures}`; },
     hideOverlay: async () => calls.push('hide'),
     showMain: async () => calls.push('main'),
     setSessionActive: async on => calls.push(on ? 'active' : 'inactive'),
   };
   const api = evaluateFixture('src/lib/examEngine.ts', {
     exports: {}, console, Date: fixedTime ? class extends Date { static now() { return 1000; } } : Date, AbortController,
-    window: { setInterval: () => { const id = {}; timers.add(id); return id; }, clearInterval(id) {timers.delete(id);} },
+    window: { setInterval: () => { const id = {}; timers.add(id); return id; }, clearInterval(id) {timers.delete(id);}, setTimeout(fn) {const id={}; checkpoints.set(id,fn); return id;}, clearTimeout(id){checkpoints.delete(id);} },
     require: name => {
       if (name === './aiContext') return evaluateFixture('src/lib/aiContext.ts',{exports:{}});
       if (name === './bridge') return bridge;
@@ -29,16 +29,57 @@ function engine({ completionFails = false, deferred = true, deferredSession = fa
         completeExamSession: async () => { if (completionFails) throw new Error('Disk unavailable'); calls.push('complete'); },
       };
       if (name === './ai') return { EXAM_SYSTEM_PROMPT: '', buildExamUserPrompt: () => 'test', chatWithImages: async (_prompt, _images, opts) => {
-        requests++;prompts.push(_prompt); options = opts;
+        requests++;prompts.push(_prompt); sentImages.push(_images); options = opts;
         if (deferred) return new Promise(resolve => { resolveRequest = resolve; });
         opts.onDelta?.('answer'); return 'answer';
       } };
       throw new Error(`Unexpected dependency ${name}`);
     },
   });
-  return { api, calls, saved, settings, timers,prompts,createdInputs, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
+  return { api, calls, saved, settings, timers,prompts,createdInputs,sentImages, captures:()=>captures, runCheckpoints:()=>{for(const fn of [...checkpoints.values()])fn();checkpoints.clear();}, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
     created: () => created, resolveSession: () => resolveSession?.({ id: 'synthetic-session' }), resolveCapture: () => resolveCapture?.('synthetic') };
 }
+
+test('first solve sends all collected screenshots without taking a replacement', async () => {
+  const h=engine({deferred:false}); await h.api.capturePage(); await h.api.capturePage();
+  await h.api.solve();
+  assert.deepEqual(Array.from(h.sentImages[0]),['synthetic-page-1','synthetic-page-2']);
+  assert.equal(h.captures(),2);
+});
+
+test('code review captures the current screen before requesting an answer', async () => {
+  const h=engine({deferred:false}); await h.api.solve({screenshots:['original']});
+  await h.api.followUp({intent:'code-review'});
+  assert.deepEqual(Array.from(h.sentImages[1]),['synthetic-page-1']);
+});
+
+test('image save failure stays visible while the captured image is sent', async () => {
+  const h=engine({deferred:false,imageSaveFails:true}); await h.api.solve({screenshots:['original']});
+  assert.match(h.api.getSolverState().errorMessage,/截图未能保存/);
+  assert.match(h.api.getSolverState().turns[0].imageSaveError,/disk full/);
+  assert.deepEqual(Array.from(h.sentImages[0]),['original']);
+});
+
+test('code review never sends the old answer when current screenshot fails', async () => {
+  const h=engine({deferred:false,captureFails:true}); await h.api.solve({screenshots:['original']});
+  await h.api.followUp({intent:'code-review'});
+  assert.equal(h.requests(),1);
+  assert.match(h.api.getSolverState().errorMessage,/capture denied/);
+});
+
+test('a streaming exam answer is checkpointed before completion', async () => {
+  const h=engine(); const request=h.api.solve({screenshots:['original']}); await flush();
+  h.options().onDelta('<exam-question>题目</exam-question><exam-answer>部分答案');
+  h.runCheckpoints(); await flush();
+  assert.equal(h.saved.at(-1).questions[0].answer,'部分答案');
+  h.resolve('<exam-question>题目</exam-question><exam-answer>答案</exam-answer>'); await request;
+});
+
+test('an explicitly selected interrupted standalone exam restores its questions', () => {
+  const h=engine({records:[{id:'exam-1',status:'ACTIVE',questions:[{id:'q',questionText:'题目',answer:'旧答案',createdAt:1}]}]});
+  h.api.prepareExamRun('new-run',null,undefined,'exam-1');
+  assert.equal(h.api.getSolverState().turns[0].body,'旧答案');
+});
 
 test('ending an exam cancels generation and ignores late streamed text and completion', async () => {
   const h = engine(); await h.api.startExamSession(null);

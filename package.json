@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:byok": "node scripts/test-byok.mjs",
     "test:audio": "node --test tests/interview-audio.test.mjs",
+    "test:chat": "node --test tests/free-chat.test.mjs tests/voice-call.test.mjs",
     "test:speech": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/speechProfile.cjs --test-coverage-include=**/artifacts/test-compiled/speechCatalog.cjs --test-coverage-include=**/artifacts/test-compiled/speakerRouting.cjs --test-coverage-include=**/artifacts/test-compiled/ttsSocket.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/speech-profile.test.mjs",
     "test:tts": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/tts*.cjs --test-coverage-include=**/artifacts/test-compiled/questionSpeaker.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/tts.test.mjs tests/question-speech.test.mjs tests/speech-profile.test.mjs",
     "test:platform": "node --test tests/native-platform.test.mjs tests/dual-screen.test.mjs tests/exam-lifecycle.test.mjs tests/question-speech.test.mjs tests/tts.test.mjs tests/mock-cancellation.test.mjs tests/ai-optimization.test.mjs",
@@ -25,6 +26,7 @@
     "test:ai": "node --test --experimental-test-coverage --test-coverage-include=**/artifacts/test-compiled/aiContext.cjs --test-coverage-include=**/artifacts/test-compiled/aiTaskPolicy.cjs --test-coverage-include=**/artifacts/test-compiled/taskPrompts.cjs --test-coverage-include=**/artifacts/test-compiled/preparation.cjs --test-coverage-include=**/artifacts/test-compiled/sessionKnowledge.cjs --test-coverage-include=**/artifacts/test-compiled/knowledgeContext.cjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 tests/ai-optimization.test.mjs tests/context-documents.test.mjs"
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.15.32",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-clipboard-manager": "~2",
     "@tauri-apps/plugin-dialog": "~2",

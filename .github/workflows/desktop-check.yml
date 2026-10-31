@@ -102,6 +102,9 @@ jobs:
       - name: Test microphone and subtitle engine
         run: pnpm test:audio
 
+      - name: Test chat tools and voice calls
+        run: pnpm test:chat
+
       - name: Test permission and native capture bridge
         run: pnpm test:platform
 

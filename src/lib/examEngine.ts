@@ -120,9 +120,12 @@ let requestController: AbortController | null = null;
 let startingSolve = false;
 let turnSequence = 0;
 let examRunId: string | null = null;
+let checkpointTimer: number | null = null;
+let turnWrites: Promise<void> = Promise.resolve();
 function turnId() { return `t${Date.now()}-${++turnSequence}`; }
 function cancelRequest() {
   generation++;
+  if (checkpointTimer !== null) { window.clearTimeout(checkpointTimer); checkpointTimer = null; }
   if(requestController && state.activeTurnId)setState({turns:state.turns.map(turn=>turn.id===state.activeTurnId?{...turn,completionStatus:'cancelled'}:turn)});
   requestController?.abort();
   requestController = null;
@@ -163,15 +166,16 @@ export function customizationSummary(): string {
 // ---------------- 会话 ----------------
 
 /** New workbench runs reset only the owning runtime; panic hide/show keeps it. */
-export function prepareExamRun(runId:string, goalId:string|null,interviewSessionId?:string) {
+export function prepareExamRun(runId:string, goalId:string|null,interviewSessionId?:string, resumeSessionId?:string) {
   if (examRunId === runId) return;
   examRunId = runId;
   cancelRequest();
   setState({sessionId:null,goalId,interviewSessionId,selectedTurnId:undefined,mode:examModeInfo(getSetting(modeSettingKey(),'quick')).key as ExamModeKey,
     phase:'idle',turns:[],pendingScreenshots:[],activeTurnId:null,elapsedSec:0,statusText:'',errorMessage:null});
-  const saved=interviewSessionId?readData<import('./backend').ExamSessionRecord[]>('examSessions',[]).find(session=>session.interviewSessionId===interviewSessionId&&session.status==='ACTIVE'):undefined;
+  const saved=readData<import('./backend').ExamSessionRecord[]>('examSessions',[]).find(session=>session.status==='ACTIVE' && (interviewSessionId ? session.interviewSessionId===interviewSessionId : !!resumeSessionId && session.id===resumeSessionId && !session.interviewSessionId));
   if(saved){const turns=saved.questions.map(question=>({...question,body:question.answer,reasoning:'',reasoningDone:true,reasoningDurationMs:0,followUpOptions:[]}));
     setState({sessionId:saved.id,turns,selectedTurnId:turns[turns.length-1]?.id});}
+  else if(resumeSessionId) setState({phase:'error',errorMessage:'未找到可恢复的笔试记录，请返回工作台重新尝试。'});
 }
 
 export async function finishInterviewExam(interviewSessionId:string,complete=true):Promise<void> {
@@ -206,7 +210,6 @@ async function createSessionForGeneration(goalId: string | null, current: number
     phase: 'idle',
     statusText: '',
     mode,
-    pendingScreenshots: [],
     turns: [],
     activeTurnId: null,
     elapsedSec: 0,
@@ -229,7 +232,21 @@ async function persistTurns() {
       answer: t.body,
       createdAt: t.createdAt,
     }));
-  await updateExamSession(state.sessionId, { questions });
+  const sessionId = state.sessionId;
+  const write = turnWrites.catch(() => {}).then(() => updateExamSession(sessionId, { questions }));
+  turnWrites = write;
+  await write;
+}
+
+function scheduleTurnCheckpoint(current: number) {
+  if (checkpointTimer !== null) return;
+  checkpointTimer = window.setTimeout(() => {
+    checkpointTimer = null;
+    if (current !== generation) return;
+    void persistTurns().catch(error => {
+      if (current === generation) setState({errorMessage:`答案暂未保存：${String((error as Error).message || error)}`});
+    });
+  }, 2000);
 }
 
 // ---------------- 截屏与作答 ----------------
@@ -278,7 +295,9 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     try { await createSessionForGeneration(state.goalId, current); }
     catch (error) {
       if (current !== generation) return;
-      startingSolve = false; requestController = null; throw error;
+      startingSolve = false; requestController = null;
+      setState({phase:'error',statusText:'',errorMessage:`创建笔试记录失败：${String((error as Error).message || error)}`});
+      return;
     }
   }
   if (current !== generation) return;
@@ -332,8 +351,10 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     } catch (error) {
       if (current !== generation) return;
       setState({turns: state.turns.map(t => t.id === turn.id ? {...t, imageSaveError: String((error as Error).message || error)} : t)});
+      setState({errorMessage:'原题截图未能保存，仍将尝试解答；请保留题目以备重新截图。'});
     }
     await persistTurns();
+    if (current !== generation) return;
     const c = customization();
     const answer = await chatWithImages(buildExamUserPrompt(c), shots, {
       task:'exam-solve',
@@ -349,6 +370,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
           statusText: 'AI 输出中…',
           turns: state.turns.map((t) => (t.id === turn.id ? { ...t, body: parsed.answer, questionText: parsed.questionText } : t)),
         });
+        scheduleTurnCheckpoint(current);
       },
     });
     if (current !== generation) return;
@@ -382,7 +404,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:(err as {completionStatus?:string}).completionStatus || 'failed'}:t),
     });
     await persistTurns();
-  } finally { if (current === generation) requestController = null; }
+  } finally { if (current === generation) { if(checkpointTimer!==null){window.clearTimeout(checkpointTimer);checkpointTimer=null;} requestController = null; } }
 }
 
 /** 从答案中提取服务端建议追问（原版 [[FOLLOWUP: a|b|c]] 协议） */
@@ -453,6 +475,12 @@ export async function followUp(opts: {
   try {
     const context=assembleExamContext(state.turns,last.id);
     let images=opts.screenshots || [];
+    if (opts.intent === 'code-review' && images.length === 0) {
+      setState({statusText:'正在截取当前代码…'});
+      images = [await captureScreen(captureOptions())];
+      if (current !== generation) return;
+      setState({statusText:'AI 检查中…'});
+    }
     const root=state.turns.find(t=>t.id===(last.parentTurnId || last.id)) || last;
     if(!images.length&&(!root.questionText||/模型未单独|请查看原题/.test(root.questionText))){
       images=(await Promise.all((root.screenshotRefs || []).slice(0,6).map(reference=>cmd<string>('cmd_exam_read_image',{reference}).catch(()=>'')))).filter(Boolean);
@@ -471,6 +499,7 @@ export async function followUp(opts: {
           setState({
             turns: state.turns.map((t) => (t.id === turn.id ? { ...t, body: t.body + delta } : t)),
           });
+          scheduleTurnCheckpoint(current);
         },
       },
     );
@@ -497,7 +526,7 @@ export async function followUp(opts: {
       turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:(e as {completionStatus?:string}).completionStatus || 'failed'}:t),
     });
     await persistTurns();
-  } finally { if (current === generation) requestController = null; }
+  } finally { if (current === generation) { if(checkpointTimer!==null){window.clearTimeout(checkpointTimer);checkpointTimer=null;} requestController = null; } }
 }
 
 /** 多页收集态：发送 */

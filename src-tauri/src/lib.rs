@@ -222,6 +222,17 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {speech::cancel_window(window.app_handle(), window.label());}
+            #[cfg(target_os = "macos")]
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // macOS normally closes the window without quitting the application.
+                    // Keep the configured main window alive so Dock reopen can show it again.
+                    api.prevent_close();
+                    if let Err(error) = window.hide() {
+                        log::error!("[window] failed to hide main window: {error}");
+                    }
+                }
+            }
         })
         .setup(|app| {
             if let Err(error) = protection::initialize(app.handle()) {
@@ -235,6 +246,8 @@ pub fn run() {
                     .unwrap() = Some(error);
             }
             if let Some(main) = app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                main.set_decorations(true)?;
                 main.show()?;
             }
             // 光标轮询线程：命中 zones → cursor-zone 事件（悬停驻留交互的核心）
@@ -250,5 +263,14 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {speech::cancel_all(app);}
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.unminimize();
+                    if let Err(error) = main.show().and_then(|_| main.set_focus()) {
+                        log::error!("[window] failed to reopen main window: {error}");
+                    }
+                }
+            }
         });
 }

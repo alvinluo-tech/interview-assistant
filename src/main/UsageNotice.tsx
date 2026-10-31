@@ -41,7 +41,7 @@ export function UsageNotice() {
         </ul>
       </div>
       <p className="mb-2 text-[13px] leading-relaxed text-muted-foreground">
-        所有回答均由 AI 生成、仅供参考，请结合自身情况独立判断。本复刻版默认接入你自行配置的
+        所有回答均由 AI 生成、仅供参考，请结合自身情况独立判断。应用使用你自行配置的
         AI 接口，音频、截图与文本会发送到你所配置的服务商处理。
       </p>
       <div className="flex justify-end">

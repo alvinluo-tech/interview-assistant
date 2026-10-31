@@ -338,7 +338,7 @@ function finalizeUtterance() {
     setState({ partial: '', audio: { ...state.audio, bufferedMs: 0, speaking: false } });
     return;
   }
-  if (state.audio.pending >= 3) {
+  if (state.audio.pending >= 12) {
     if (live) removeLive(live.id);
     setState({ errorMessage: '语音转写服务处理较慢，本段未发送。请暂停说话，等待转写完成后重试。' });
     return;
@@ -905,6 +905,7 @@ export function beginListening(audioSource: AudioSource): Promise<void> {
 
 export async function pauseListening() {
   // Discard the unfinished segment and cancel in-flight transcription on pause.
+  const discarded = audioBuf.length > 0 || state.audio.pending > 0 || !!state.partial;
   captureGeneration++;
   realtimeOpening?.abort();realtimeOpening=null;
   transcriptionControllers.forEach(controller => controller.abort());
@@ -914,7 +915,7 @@ export async function pauseListening() {
   await previousRealtime?.close();
   if (state.audio.source === 'SPEAKER') await stopCapture(false);
   await microphone?.setPaused(true);
-  setState({ status: 'paused', partial: '', audio: { ...state.audio, level: 0, speaking: false, bufferedMs: 0, pending: 0 } });
+  setState({ status: 'paused', partial: '', ...(discarded ? {errorMessage:'暂停时未完成的语音识别已取消；继续收音后请重说该段。'} : {}), audio: { ...state.audio, level: 0, speaking: false, bufferedMs: 0, pending: 0 } });
 }
 
 export async function resumeListening() {

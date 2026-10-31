@@ -71,6 +71,7 @@ export const DATA_KEYS = [
   'questionBanks',
   'feedback',
   'jobProgress',
+  'freeChats',
 ] as const;
 
 async function persist(key: string, value: unknown) {
@@ -196,6 +197,7 @@ export interface ExamQuestion {
 
 export interface ExamSessionRecord {
   interviewSessionId?:string;
+  interrupted?: boolean;
   id: string;
   title: string;
   goalId?: string | null;
@@ -298,7 +300,7 @@ export async function closeStaleActiveSessions() {
   if (staleExams.length > 0) {
     await persist(
       'examSessions',
-      exams.map((s) => (s.status === 'ACTIVE' ? { ...s, status: 'COMPLETED', endedAt: Date.now() } : s)),
+      exams.map((s) => (s.status === 'ACTIVE' ? { ...s, status: 'COMPLETED', endedAt: Date.now(), interrupted: true } : s)),
     );
   }
   const {getSetting,setSetting}=await import('./store');
@@ -332,7 +334,7 @@ export async function updateExamSession(id: string, patch: Partial<ExamSessionRe
 }
 
 export async function completeExamSession(id: string) {
-  await updateExamSession(id, { status: 'COMPLETED', endedAt: Date.now() });
+  await updateExamSession(id, { status: 'COMPLETED', endedAt: Date.now(), interrupted: false });
 }
 
 export async function saveGoal(g: Omit<Goal, 'id' | 'createdAt'> & { id?: string }): Promise<Goal> {

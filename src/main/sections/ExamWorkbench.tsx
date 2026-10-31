@@ -18,7 +18,7 @@ import {
   Input,
   showToast,
 } from '@/ui/primitives';
-import { useData, saveGoal, readData, type Goal } from '@/lib/backend';
+import { useData, saveGoal, readData, updateExamSession, type Goal, type ExamSessionRecord } from '@/lib/backend';
 import { useSetting, setSetting } from '@/lib/store';
 
 import {
@@ -34,6 +34,8 @@ import { DualScreenCard } from './DualScreenCard';
 
 export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void }) {
   const goals = useData<Goal[]>('goals', [])[0];
+  const examSessions = useData<ExamSessionRecord[]>('examSessions', [])[0];
+  const interrupted = examSessions.find(session => session.interrupted && !session.interviewSessionId);
   const [mode, setMode] = useSetting<ExamModeKey>('exam.mode', 'quick');
   const [goalId, setGoalId] = useSetting<string | null>('exam.goalId', goals[0]?.id ?? null);
   const [showCopyCode, setShowCopyCode] = useSetting('exam.showCopyCodeButton', false);
@@ -54,9 +56,10 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
     return () => { active = false; };
   }, []);
 
-  const start = async () => {
+  const start = async (resume?: ExamSessionRecord) => {
     if (starting) return;
     setStarting(true);
+    let reactivated = false;
     try {
       // 上一场如果还挂着（崩溃/强退留下的），先收尾再开新场
       const stale = readData<{ id: string; status: string }[]>('examSessions', []).filter(
@@ -66,11 +69,14 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
         const { closeStaleActiveSessions } = await import('@/lib/backend');
         await closeStaleActiveSessions();
       }
-      await setSetting('exam.mode', mode);
-      await setSetting('exam.pendingConfig', {runId:crypto.randomUUID(),goalId});
-      await startOverlayFlow('exam', goalId);
+      const selectedGoal = resume ? (resume.goalId ?? null) : goalId;
+      await setSetting('exam.mode', resume?.mode ?? mode);
+      if (resume) { await updateExamSession(resume.id, {status:'ACTIVE',endedAt:null,interrupted:false}); reactivated = true; }
+      await setSetting('exam.pendingConfig', {runId:crypto.randomUUID(),goalId:selectedGoal,...(resume ? {resumeSessionId:resume.id} : {})});
+      await startOverlayFlow('exam', selectedGoal);
       showToast({ type: 'success', title: '笔试浮窗已启动', description: '把题目放到屏幕上，悬停「解题」即可。' });
     } catch (e) {
+      if (resume && reactivated) await updateExamSession(resume.id, {status:'COMPLETED',endedAt:Date.now(),interrupted:true}).catch(() => {});
       showToast({ type: 'error', title: '启动失败', description: String((e as Error).message ?? e) });
     } finally {
       setStarting(false);
@@ -98,6 +104,11 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
             </Button>
           }
         />
+
+        {interrupted && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border p-3 text-xs">
+          <span className="flex-1">上次笔试意外中断：{interrupted.title}。可恢复已保存的题目和答案。</span>
+          <Button size="sm" variant="outline" disabled={starting} onClick={() => void start(interrupted)}>恢复上次笔试</Button>
+        </div>}
 
         {/* 模式三选卡 */}
         <div className="mb-4 grid grid-cols-3 gap-3">
