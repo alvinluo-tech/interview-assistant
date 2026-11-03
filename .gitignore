@@ -34,3 +34,19 @@ docs/original-app-gap-analysis.md
 src-tauri/target
 tools/update-verifier/target/
 src-tauri/gen/schemas
+
+# Private local product comparison research
+/docs/audit/ai-vs-official-comparison.md
+/docs/audit/gap-analysis.md
+/docs/audit/official-code-verification.md
+/docs/audit/bug-findings.md
+/docs/audit/bug-revalidation.md
+/docs/design/ai/official-reference-review.md
+/docs/design/ai/README.md
+/docs/design/ai/architecture.md
+/docs/design/ai/implementation-plan.md
+/docs/gap-2026-10-28.md
+/docs/macos-implementation.md
+/docs/macos-next-steps.md
+/docs/macos-rust-vs-swift.md
+/docs/audit/official-macos-fullscreen-space.md
