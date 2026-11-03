@@ -227,6 +227,10 @@ pub fn cmd_set_overlay_interactive(
     if let Some(win) = overlay_window(&app) {
         let _ = win.set_ignore_cursor_events(!interactive);
         let _ = win.set_focusable(interactive);
+        #[cfg(target_os = "macos")]
+        if !interactive {
+            crate::window_macos::release_overlay_focus_if_noninteractive(&app)?;
+        }
     }
     Ok(())
 }

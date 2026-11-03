@@ -1,5 +1,6 @@
 //! AppKit calls stay on Tauri's UI thread; raw handles never cross that thread.
-use tauri::Window;
+use std::sync::atomic::Ordering;
+use tauri::{AppHandle, Manager, Window};
 
 pub fn with_native<T: Send + 'static>(
     window: &Window,
@@ -21,9 +22,26 @@ pub fn with_native<T: Send + 'static>(
 }
 
 pub fn configure_overlay(window: &Window) -> Result<(), String> {
-    window.set_always_on_top(true).map_err(|e| e.to_string())?;
+    // Tao schedules set_always_on_top asynchronously on the main queue and can
+    // overwrite the native level below with NSFloatingWindowLevel afterwards.
     with_native(window, |raw| {
         // SAFETY: with_native holds the live Tauri window on the main thread.
         unsafe { mianxu_macos_capture::window::configure_overlay(raw) }
+    })
+}
+
+pub fn release_overlay_focus_if_noninteractive(app: &AppHandle) -> Result<(), String> {
+    let Some(window) = crate::protection::window(app, "overlay") else {
+        return Ok(());
+    };
+    let app = app.clone();
+    with_native(&window, move |raw| {
+        // A later interaction toggle may have superseded the request while it
+        // was queued on the main thread.
+        if app.state::<crate::overlay::OverlayState>().interactive.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        // SAFETY: with_native holds the live Tauri window on the main thread.
+        unsafe { mianxu_macos_capture::window::resign_key_if_needed(raw) }
     })
 }

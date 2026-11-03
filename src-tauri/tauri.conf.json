@@ -26,6 +26,7 @@
       },
       {
         "label": "overlay",
+        "tabbingIdentifier": "com.luoyaosheng.mianxu.overlay-panel",
         "title": "骆耀升老公酱面试助手",
         "url": "index.html#overlay",
         "width": 420,

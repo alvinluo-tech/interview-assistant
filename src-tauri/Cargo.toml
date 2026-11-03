@@ -9,6 +9,7 @@ default-run = "Mianxu"
 
 [workspace]
 members = ["macos-capture"]
+exclude = ["vendor/tao"]
 resolver = "3"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -94,3 +95,7 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Pinned fork creates the macOS overlay as a real non-activating NSPanel.
+[patch.crates-io]
+tao = { path = "vendor/tao" }
