@@ -27,14 +27,18 @@ export interface UpdateClientDependencies {
 export function createUpdateClient(deps: UpdateClientDependencies) {
   let snapshot: UpdateSnapshot = { phase: 'idle', downloaded: 0, busy: false, canInstall: false };
   let inFlight: Promise<void> | null = null;
+  let inFlightCommand: string | null = null;
   const listeners = new Set<() => void>();
   const publish = (next: UpdateSnapshot) => { snapshot = { ...next }; listeners.forEach(fn => fn()); };
-  const run = (command: string, args?: Record<string, unknown>) => {
-    if (inFlight) return inFlight;
+  const run = (command: string, args?: Record<string, unknown>): Promise<void> => {
+    // Progress events can enable the next action before the previous command's
+    // response reaches JS. Never silently coalesce a different user action.
+    if (inFlight) return inFlightCommand === command ? inFlight : inFlight.then(() => run(command, args));
     const task = deps.invoke(command, args).then(publish).catch(error => {
       publish({ ...snapshot, phase: 'error', error: String((error as Error)?.message || error) });
-    }).finally(() => { if (inFlight === task) inFlight = null; });
+    }).finally(() => { if (inFlight === task) { inFlight = null; inFlightCommand = null; } });
     inFlight = task;
+    inFlightCommand = command;
     return task;
   };
   return {
@@ -45,7 +49,7 @@ export function createUpdateClient(deps: UpdateClientDependencies) {
     refresh: () => run('cmd_updater_status'),
     download: () => run('cmd_updater_download'),
     install: async () => {
-      if (snapshot.busy) throw new Error('请先结束正在进行的会话再安装更新。');
+      if (snapshot.busy) throw new Error('请先结束正在进行的会话并关闭模拟面试窗口，再安装更新。');
       if (snapshot.phase !== 'ready') throw new Error('请先下载并验证更新。');
       await run('cmd_updater_install');
     },

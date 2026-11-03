@@ -73,7 +73,7 @@ test('subscribers receive shared snapshots and unsubscribe cleanly', async () =>
   await assert.rejects(h.updater.install(), /下载|验证/);
 });
 
-test('concurrent commands coalesce and native failures remain retryable', async () => {
+test('duplicate commands coalesce and native failures remain retryable', async () => {
   const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, console });
   let reject, calls = 0;
   const updater = api.createUpdateClient({
@@ -81,7 +81,7 @@ test('concurrent commands coalesce and native failures remain retryable', async 
     listen: async () => () => {}, read: () => undefined, write: async () => {}, now: () => 0,
   });
   const pending = updater.check();
-  assert.equal(updater.refresh(), pending);
+  assert.equal(updater.check(), pending);
   assert.equal(calls, 1);
   reject(new Error('Network offline')); await pending;
   assert.equal(updater.getSnapshot().phase, 'error');
@@ -89,6 +89,30 @@ test('concurrent commands coalesce and native failures remain retryable', async 
   const retry = updater.check(true); reject('HTTP 404'); await retry;
   assert.equal(calls, 2);
   assert.equal(updater.getSnapshot().error, 'HTTP 404');
+});
+
+test('installation clicked as download finishes is not swallowed by the download request', async () => {
+  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, console });
+  const calls = [];
+  let notify, finishDownload;
+  const ready = { phase: 'ready', version: '0.1.2', downloaded: 100, busy: false, canInstall: true };
+  const updater = api.createUpdateClient({
+    invoke: name => {
+      calls.push(name);
+      if (name === 'cmd_updater_download') return new Promise(resolve => { finishDownload = resolve; });
+      if (name === 'cmd_updater_install') return Promise.resolve({ ...ready, phase: 'installing' });
+      return Promise.resolve({ ...ready, phase: 'installing' });
+    },
+    listen: async fn => { notify = fn; return () => {}; }, read: () => undefined, write: async () => {}, now: () => 0,
+  });
+  await updater.connect();
+  const download = updater.download();
+  notify(ready); // Native event can precede the command response.
+  const install = updater.install();
+  assert.deepEqual(calls, ['cmd_updater_download']);
+  finishDownload(ready);
+  await download; await install;
+  assert.deepEqual(calls, ['cmd_updater_download', 'cmd_updater_install']);
 });
 
 test('reminders expire and a different version can prompt again', async () => {

@@ -100,7 +100,7 @@ export function UpdateNotice() {
         <div className="update-version-row"><span>当前 <b>v{state.currentVersion || '…'}</b></span>{state.version && <><ArrowRight size={14} /><span className="update-version-target">v{state.version}</span></>}{date && <time>{date}</time>}</div>
         {state.phase === 'error' && <div role="alert" className="update-error"><p>可以继续使用当前版本，或重新尝试更新。</p>{state.error && <details><summary>查看错误详情</summary><pre>{state.error}</pre></details>}</div>}
         {state.installReason && <div className="update-context">{state.installReason}</div>}
-        {state.busy && <div className="update-context">当前会话正在进行，结束面试、笔试、录音或手机副屏会话后即可安装。</div>}
+        {state.busy && <div className="update-context">当前会话正在进行，请结束面试、笔试、录音或手机副屏会话，并关闭模拟面试窗口后再安装。</div>}
         {showProgress && <div className="update-download">
           <div className="update-download-caption"><span>{state.phase === 'ready' ? '下载完成' : state.phase === 'verifying' ? '正在验证文件' : '下载进度'}</span><b>{progress.percent === null ? '正在获取…' : `${progress.percent}%`}</b></div>
           <div role="progressbar" aria-label="更新下载进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent ?? undefined} className={`update-progress ${progress.percent === null ? 'is-indeterminate' : ''}`}><span style={progress.percent === null ? undefined : { width: `${progress.percent}%` }} /></div>

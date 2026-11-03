@@ -242,7 +242,7 @@ pub async fn cmd_updater_install(app: AppHandle, window: WebviewWindow) -> Resul
     // Atomic with native session/audio starts. JS state is never the installation authority.
     {
         let state = app.state::<UpdateState>(); let mut gate = state.activity_guard()?;
-        if busy(&app) { return Err("请先结束面试、笔试、录音或手机副屏会话，再安装更新。".into()); }
+        if busy(&app) { return Err("请先结束面试、笔试、录音或手机副屏会话，并关闭模拟面试窗口，再安装更新。".into()); }
         let location = install_location(&app);
         if !location.0.can_install() { return Err(location.2.unwrap_or_default()); }
         *gate = true;
