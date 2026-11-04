@@ -17,6 +17,38 @@ const frame = value => `data: ${JSON.stringify(value)}\r\n\r\n`;
 const pcm = Buffer.from([0,0,255,127,0,128,0,0]).toString('base64');
 const sse = text => new Response(text, {headers:{'content-type':'text/event-stream'}});
 
+test('fast synthesis cannot schedule an unbounded mock speech backlog and stop releases blocked writes', async () => {
+  const {createSpeechOutput} = load('src/lib/ttsPlayback.ts');
+  const sources = [];
+  const context = {state:'running',currentTime:0,destination:{},resume:async()=>{},close:async()=>{},
+    createBuffer:(_channels,length,rate)=>({length,duration:length/rate,getChannelData:()=>new Float32Array(length)}),
+    createBufferSource:()=>{const source={connect(){},disconnect(){},start(at,offset,duration){source.end=at+duration;},stop(){source.stopped=true;}};sources.push(source);return source;}};
+  const output = createSpeechOutput(()=>{},()=>{},()=>context);
+  let completed = false;
+  const writing = output.write({format:'pcm16',sampleRate:24000,bytes:new Uint8Array(24000*2*30)}).then(()=>{completed=true;});
+  await new Promise(resolve=>setTimeout(resolve,10));
+  try {
+    assert.equal(completed,false);
+    assert.ok(sources.length <= 5);
+    assert.ok(sources.every(source=>source.end <= 2.7));
+  } finally {output.stop();await writing;}
+  assert.ok(sources.every(source=>source.stopped));
+});
+
+test('suspending an audio device under backpressure fails instead of leaving synthesis stuck', async () => {
+  const {createSpeechOutput}=load('src/lib/ttsPlayback.ts');
+  let closed=false;
+  const context={state:'running',currentTime:0,destination:{},resume:async()=>{},close:async()=>{closed=true;},
+    createBuffer:(_channels,length,rate)=>({length,duration:length/rate,getChannelData:()=>new Float32Array(length)}),
+    createBufferSource:()=>({connect(){},disconnect(){},start(){},stop(){}})};
+  const output=createSpeechOutput(()=>{},()=>{},()=>context);
+  const result=assert.rejects(output.write({format:'pcm16',sampleRate:24000,bytes:new Uint8Array(24000*2*5)}),/暂停|设备/);
+  await new Promise(resolve=>setTimeout(resolve,10));
+  context.state='suspended';
+  await result;
+  assert.equal(closed,true);
+});
+
 test('MiMo speaks assistant text with nested voice and streams PCM before the response ends', async () => {
   const {requestSpeech} = load('src/lib/ttsProtocol.ts');
   const chunks = []; let streamController, responseEnded = false;

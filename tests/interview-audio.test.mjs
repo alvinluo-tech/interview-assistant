@@ -6,7 +6,7 @@ import ts from 'typescript';
 import {evaluateFixture} from './compile-fixture.mjs';
 import {randomUUID} from 'node:crypto';
 
-function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand } = {}) {
+function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand, deadlineTimers } = {}) {
   let now = 1000;
   let processor;
   let resumed = 0;
@@ -63,7 +63,8 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       addEventListener() {}
       removeEventListener() {}
     },
-    performance: { now: () => now }, console, Blob, DOMException, AbortController, atob, btoa, setTimeout, clearTimeout,crypto:{randomUUID},
+    performance: { now: () => now }, console, Blob, DOMException, AbortController, atob, btoa,
+    setTimeout: deadlineTimers?.setTimeout || setTimeout, clearTimeout: deadlineTimers?.clearTimeout || clearTimeout,crypto:{randomUUID},
     Int16Array, Float32Array, Uint8Array, ArrayBuffer, DataView,
   };
   vm.createContext(sandbox);
@@ -110,6 +111,36 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     get timerCount() { return timers.size; },
   };
 }
+
+test('slow phone transcription keeps at most three segments instead of accumulating twelve', async () => {
+  const h = harness({transcribe: () => new Promise(() => {})});
+  await h.start('PHONE');
+  try {
+    for (let segment = 0; segment < 8; segment++) {
+      for (let i = 0; i < 10; i++) h.feed();
+      await h.silence();
+    }
+    assert.ok(h.engine.getInterviewEngineState().audio.pending <= 3);
+    assert.match(h.engine.getInterviewEngineState().errorMessage, /较慢|积压/);
+  } finally { await h.engine.endInterview(false); }
+});
+
+test('expired recognition releases the queue and ignores a late speaker identification result', async () => {
+  let expire, finishIdentification;
+  const h = harness({identify:()=>new Promise(resolve=>{finishIdentification=resolve;}),
+    deadlineTimers:{setTimeout:fn=>{expire=fn;return 1;},clearTimeout(){}}});
+  await h.start('PHONE');
+  for (let i=0;i<10;i++) h.feed();
+  await h.silence();
+  assert.equal(typeof finishIdentification,'function');
+  expire();
+  for(let i=0;i<20;i++) await Promise.resolve();
+  assert.equal(h.engine.getInterviewEngineState().audio.pending,0);
+  finishIdentification({role:'interviewer',score:1,revision:1});
+  for(let i=0;i<20;i++) await Promise.resolve();
+  assert.equal(h.engine.getInterviewEngineState().messages.length,0);
+  await h.engine.endInterview(false);
+});
 
 test('phone self speech is an actual candidate answer and cannot trigger generation',async()=>{
  let answers=0;const h=harness({autoAnswer:true,speakerRole:'candidate',chat:async()=>{answers++;return 'must not run';}});await h.start('PHONE');for(let i=0;i<60;i++)h.feed();await h.silence();

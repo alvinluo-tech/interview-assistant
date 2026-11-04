@@ -5,9 +5,13 @@ export function Md({ text }: { text: string }) {
   return <div className="overlay-md">{renderBlocks(text)}</div>;
 }
 
-function renderBlocks(src: string): ReactNode[] {
+function renderBlocks(src: string, depth=0, budget={remaining:6000}): ReactNode[] {
+  const plain=()=>[<pre key="plain" className="whitespace-pre-wrap break-words font-sans" style={{overflowWrap:'anywhere'}} aria-label="复杂内容按纯文本显示">{src}</pre>];
+  if(depth>=12||src.length>100000||budget.remaining<=0)return plain();
   const nodes: ReactNode[] = [];
   const lines = src.replace(/\r\n/g, '\n').split('\n');
+  if(lines.length>2000||lines.length>budget.remaining)return plain();
+  budget.remaining-=lines.length;
   let i = 0;
   let key = 0;
 
@@ -61,7 +65,7 @@ function renderBlocks(src: string): ReactNode[] {
         quoteLines.push(lines[i].replace(/^>\s?/, ''));
         i++;
       }
-      nodes.push(<blockquote key={key++}>{renderBlocks(quoteLines.join('\n'))}</blockquote>);
+      nodes.push(<blockquote key={key++}>{renderBlocks(quoteLines.join('\n'),depth+1,budget)}</blockquote>);
       continue;
     }
 

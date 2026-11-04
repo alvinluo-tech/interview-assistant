@@ -5,6 +5,7 @@ import { defaultAiSettings, isRoleConfigured, validateAiSettings, type AiRole, t
 
 let settings = defaultAiSettings();
 let loadError = '';
+let revision = 0;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach(l => l());
 const desktop = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -15,12 +16,14 @@ export function useAiSettings() { return useSyncExternalStore(subscribeAiSetting
 export function useAiReady(role: AiRole = 'chat') { return isRoleConfigured(useAiSettings(), role) && !loadError; }
 export async function reloadAiSettings() {
   if (!desktop()) return;
+  const current = ++revision;
   try {
     const value = await invoke<AiSettings | null>('cmd_ai_load_settings');
+    if (current !== revision) return;
     if (value) settings = validateAiSettings(value, true);
     else settings = defaultAiSettings();
     loadError = '';
-  } catch (error) { loadError = String(error); settings = { ...settings }; }
+  } catch (error) { if(current !== revision)return;loadError = String(error); settings = { ...settings }; }
   notify();
 }
 export async function initializeAiSettings() {
@@ -31,7 +34,10 @@ export async function initializeAiSettings() {
 export async function saveAiSettings(value: AiSettings) {
   if (loadError) throw new Error(`请先解决配置读取问题：${loadError}`);
   const normalized = validateAiSettings(value);
+  const current = ++revision; // Invalidate reads already in flight before the save.
   if (desktop()) await invoke('cmd_ai_save_settings', { config: normalized });
+  if(current!==revision){await reloadAiSettings();return settings;}
+  ++revision; // Also invalidate reads started while the save was pending.
   settings = structuredClone(normalized);
   notify();
   return settings;

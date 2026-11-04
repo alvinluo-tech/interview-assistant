@@ -176,10 +176,12 @@ async function restorePosition() {
 
 /** 浮窗热键注册：移动 / 尺寸 / 透明度 / 一键配色（原版 XE + vK） */
 export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
+  const actions=useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     const unlisteners: (() => void)[] = [];
-    const off = onEvent<{ action: string; pressed: boolean }>('action-hotkeys', async (p) => {
+    const off = onEvent<{ action: string; pressed: boolean }>('action-hotkeys', (p) => {
       if (!p.pressed) return;
+      actions.current=actions.current.catch(()=>{}).then(async()=>{
       const currentStyle = normalizeStyle(getSetting('overlay.style', style));
       const sizeKey = mode === 'interview' ? 'interview' : 'exam';
       const patch: Partial<OverlayStyle> = {};
@@ -241,6 +243,8 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
       await setSetting('overlay.style', merged);
       const { emit } = await import('@tauri-apps/api/event');
       await emit('overlay-style-hotkey-patch', patch);
+      });
+      void actions.current.catch(()=>{}); // setSetting publishes a visible save error.
     });
     unlisteners.push(off);
     return () => unlisteners.forEach((u) => u());

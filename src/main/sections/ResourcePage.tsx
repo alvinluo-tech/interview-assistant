@@ -163,8 +163,10 @@ export function ResourcePage() {
               size="sm"
               variant="outline"
               onClick={async () => {
+                try {
                 const m = await saveMaterial({ name: '未命名资料', source: 'manual' });
                 setEditorId(m.id);
+                } catch(error) {showToast({type:'error',title:'资料未保存',description:String((error as Error).message||error)});}
               }}
             >
               <Plus size={13} />
@@ -239,10 +241,12 @@ export function ResourcePage() {
         onCancel={() => setDeleting(null)}
         onConfirm={async () => {
           if (!deleting) return;
+          try {
           if (deleting.kind === 'resume') await deleteResume(deleting.id);
           else if (deleting.kind === 'goal') await deleteGoal(deleting.id);
           else await deleteMaterial(deleting.id);
           setDeleting(null);
+          } catch(error) {showToast({type:'error',title:'删除未完成，请重试',description:String((error as Error).message||error)});}
         }}
       />
     </div>
@@ -250,26 +254,30 @@ export function ResourcePage() {
 }
 
 function GoalDialog({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
+  const [saving,setSaving]=useState(false),[error,setError]=useState('');
+  const savingRef=useRef(false);
   const [name, setName] = useState(goal?.name ?? '');
   const [company, setCompany] = useState(goal?.companyName ?? '');
   const [description, setDescription] = useState(goal?.description ?? '');
   return (
-    <Dialog open onClose={onClose} className="max-w-md">
+    <Dialog open onClose={onClose} dismissable={!saving} className="max-w-md">
       <DialogTitle>{goal ? '编辑岗位' : '新建岗位'}</DialogTitle>
+      {error&&<p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium text-muted-foreground">
           岗位名称
-          <Input className="mt-1" placeholder="岗位名称" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input disabled={saving} className="mt-1" placeholder="岗位名称" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
           公司
-          <Input className="mt-1" placeholder="公司" value={company} onChange={(e) => setCompany(e.target.value)} />
+          <Input disabled={saving} className="mt-1" placeholder="公司" value={company} onChange={(e) => setCompany(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
           JD / 面试方向
           <Textarea
             className="mt-1"
             rows={6}
+            disabled={saving}
             placeholder="把岗位 JD 粘进来，AI 会按这个方向组织回答"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -277,18 +285,22 @@ function GoalDialog({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
         </label>
       </div>
       <div className="mt-4 flex justify-end gap-2">
-        <Button size="sm" variant="outline" onClick={onClose}>
+        <Button size="sm" variant="outline" disabled={saving} onClick={onClose}>
           取消
         </Button>
         <Button
           size="sm"
-          disabled={!name.trim()}
+          disabled={saving||!name.trim()}
           onClick={async () => {
+            if(savingRef.current)return;savingRef.current=true;setSaving(true);setError('');
+            try {
             await saveGoal({ id: goal?.id, name: name.trim(), companyName: company.trim(), description });
             onClose();
+            }catch(error){setError(`保存失败，输入已保留：${String((error as Error).message||error)}`);}
+            finally{savingRef.current=false;setSaving(false);}
           }}
         >
-          保存
+          {saving?'正在保存…':'保存'}
         </Button>
       </div>
     </Dialog>
@@ -313,8 +325,10 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
   if (!material) return null;
 
   const save = async () => {
+    try {
     await saveMaterial({ id, name: name.trim() || '未命名资料', content });
     showToast({ type: 'success', title: '已保存' });
+    }catch(error){showToast({type:'error',title:'资料保存失败，输入已保留',description:String((error as Error).message||error)});}
   };
 
   return (
@@ -386,7 +400,7 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
                       <button
                         type="button"
                         className="text-[11px] text-muted-foreground hover:text-destructive"
-                        onClick={() => void deleteEntry(id, e.id)}
+                        onClick={() => void deleteEntry(id, e.id).catch(error=>showToast({type:'error',title:'删除失败，请重试',description:String(error)}))}
                       >
                         删除
                       </button>
@@ -446,10 +460,12 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
               size="sm"
               disabled={!q.trim() || !a.trim()}
               onClick={async () => {
+                try {
                 await saveEntry(id, { question: q.trim(), answer: a.trim() });
                 setQ('');
                 setA('');
                 setAddOpen(false);
+                }catch(error){showToast({type:'error',title:'问答保存失败，输入已保留',description:String((error as Error).message||error)});}
               }}
             >
               保存

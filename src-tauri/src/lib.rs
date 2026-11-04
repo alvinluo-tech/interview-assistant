@@ -158,6 +158,7 @@ pub fn run() {
             data_store::cmd_data_read,
             data_store::cmd_data_commit,
             data_store::cmd_data_backup,
+            settings::cmd_set_setting,
             code_sandbox::cmd_code_check,
             code_sandbox::cmd_code_run,
             // overlay 窗口控制

@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties,type RefObject} from 'react';
 import {createPortal} from 'react-dom';
 import {AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime, unstable_useComposerInput, type ChatModelAdapter} from '@assistant-ui/react';
 import {ArrowUp, AudioLines, LoaderCircle, Mic, Phone, PhoneOff, Plus, Square, Trash2, Volume2, VolumeX} from 'lucide-react';
@@ -12,6 +12,7 @@ import {createVoiceCall, type VoiceCallPhase} from '@/lib/voiceCall';
 import {useAiReady, useAiSettings} from '@/lib/aiSettings';
 import {showToast} from '@/ui/primitives';
 import './voice-call.css';
+import {useModalFocus} from '@/ui/useModalFocus';
 
 export function FreeChatPage() {
   const [sessions]=useData<FreeChatSession[]>('freeChats',[]);
@@ -39,6 +40,8 @@ function ChatThread({id,initial,onDelete,onCallEnd}:{id:string;initial:FreeChatM
   const recordTool=useCallback((name:string)=>{const label=name==='app_guide'?'应用功能':name==='list_local_data'?'本地记录清单':name==='read_local_record'?'本地记录详情':name==='search_local_knowledge'?'本地资料搜索':'未知工具';setToolsUsed(items=>items.includes(label)?items:[...items,label]);setTool(`正在查询${label}…`);},[]);
   const [callPhase,setCallPhase]=useState<VoiceCallPhase>('idle');
   const [closingCall,setClosingCall]=useState(false);
+  const inputOwner=useRef<'call'|'manual'|null>(null);
+  const [manualBusy,setManualBusy]=useState(false);
   const [voiceMessages,setVoiceMessages]=useState<FreeChatMessage[]>([]),[voiceLevel,setVoiceLevel]=useState(0),[voicePreview,setVoicePreview]=useState('');
   const voiceHistory=useRef<FreeChatMessage[]>([]),voiceRequest=useRef<AbortController|null>(null),lastMeter=useRef(0),voiceStartIndex=useRef(0);
   const voiceSave=useRef<Promise<void>>(Promise.resolve());
@@ -66,7 +69,7 @@ function ChatThread({id,initial,onDelete,onCallEnd}:{id:string;initial:FreeChatM
     setTool('');
     if(full)try { await saveFreeChat(id,[...history,{role:'assistant',content:full}]); } catch(e) {setError(`回答保存失败：${String((e as Error).message || e)}`);}
     if(failure){if(!abortSignal.aborted){const message=`对话失败：${String((failure as Error).message || failure)}`;setError(message);call.current?.answerFailed(message);}return;}
-    if(config.current.speak&&full&&!abortSignal.aborted)void speaker.speak(full);
+    if(config.current.speak&&full&&!abortSignal.aborted&&!inputOwner.current)void speaker.speak(full);
   }}),[id,speaker,recordTool]);
   const runtime=useLocalRuntime(adapter,{initialMessages:initial.map(message=>({role:message.role,content:[{type:'text' as const,text:message.content}]}))});
   const voiceCall=useMemo(()=>createVoiceCall({
@@ -99,16 +102,16 @@ function ChatThread({id,initial,onDelete,onCallEnd}:{id:string;initial:FreeChatM
     speak:(text,finished,failed)=>{playback.current={started:false,finished,failed};void speaker.speak(text);},
     stopSpeech:()=>{playback.current=null;speaker.stop();},
     cancelAnswer:()=>{voiceRequest.current?.abort();voiceRequest.current=null;},
-    state:setCallPhase,
+    state:phase=>{if(phase==='idle'&&inputOwner.current==='call')inputOwner.current=null;setCallPhase(phase);},
     error:message=>{showToast({type:'error',title:'语音通话已停止',description:message});refreshAfterVoice();},
   }),[speaker,id,refreshAfterVoice,speechInputMode,recordTool]);
   call.current=voiceCall;
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
-  return <AssistantRuntimeProvider runtime={runtime}><ThreadPrimitive.Root className="flex min-w-0 flex-1 flex-col">
+  return <AssistantRuntimeProvider runtime={runtime}><ThreadPrimitive.Root inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
     <div className="flex items-center gap-3 border-b px-6 py-4"><div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="text-sm font-semibold">自由对话</div><div className="text-xs text-muted-foreground">文字、语音与本地资料</div></div>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?'关闭语音回复':'开启语音回复'} title={speak?'关闭语音回复':'开启语音回复'}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
-      <CallButton disabled={callPhase!=='idle'||closingCall} onStart={()=>{if(!chatReady||!sttReady){setError('请先在「设置 → AI 服务」配置对话模型和语音转写模型。');return;}voiceHistory.current=runtime.thread.getState().messages.filter(message=>message.role==='user'||message.role==='assistant').map(message=>({role:message.role as 'user'|'assistant',content:message.content.filter(part=>part.type==='text').map(part=>part.text).join('')})).filter(message=>message.content.trim());voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
+      <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError('请先在「设置 → AI 服务」配置对话模型和语音转写模型。');return;}inputOwner.current='call';voiceHistory.current=runtime.thread.getState().messages.filter(message=>message.role==='user'||message.role==='assistant').map(message=>({role:message.role as 'user'|'assistant',content:message.content.filter(part=>part.type==='text').map(part=>part.text).join('')})).filter(message=>message.content.trim());voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
       <DeleteButton onDelete={onDelete} onError={setError}/>
       {speaking&&<button className="text-xs text-primary" onClick={()=>speaker.stop()}>停止播放</button>}
     </div>
@@ -118,7 +121,7 @@ function ChatThread({id,initial,onDelete,onCallEnd}:{id:string;initial:FreeChatM
         {tool&&<p className="py-2 text-xs text-muted-foreground">{tool}</p>}{!tool&&toolsUsed.length>0&&<p className="py-2 text-xs text-muted-foreground">本次已查询：{toolsUsed.join('、')}</p>}{error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
       </div>
     </ThreadPrimitive.Viewport>
-    <div className="mx-auto w-full max-w-2xl px-5 pb-5"><Composer allowLocal={allowLocal} setAllowLocal={setAllowLocal} setError={setError} speakerStop={speaker.stop}/></div>
+    <div className="mx-auto w-full max-w-2xl px-5 pb-5"><Composer allowLocal={allowLocal} setAllowLocal={setAllowLocal} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt}/>,document.body)}
   </ThreadPrimitive.Root></AssistantRuntimeProvider>;
 }
@@ -129,12 +132,12 @@ function CallButton({disabled,onStart}:{disabled:boolean;onStart:()=>void}) {
 }
 
 export function VoiceCallDialog({phase,messages,level,tool,onStop,onInterrupt}:{phase:VoiceCallPhase;messages:FreeChatMessage[];level:number;tool:string;onStop:()=>void;onInterrupt:()=>void}) {
-  const transcript=useRef<HTMLDivElement>(null),endButton=useRef<HTMLButtonElement>(null);
-  useEffect(()=>{endButton.current?.focus();const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')onStop();};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[onStop]);
+  const transcript=useRef<HTMLDivElement>(null),endButton=useRef<HTMLButtonElement>(null),dialog=useRef<HTMLDivElement>(null);
+  useModalFocus(dialog,true,onStop,endButton);
   useEffect(()=>{const element=transcript.current;if(element)element.scrollTop=element.scrollHeight;},[messages]);
   const status={connecting:'正在连接',listening:'正在聆听',transcribing:'正在识别',thinking:'正在思考',speaking:'正在回答',idle:''}[phase];
   const hint={connecting:'请允许麦克风访问',listening:'你可以直接说话，说完稍作停顿',transcribing:'正在将你的声音转换成文字',thinking:tool || '正在整理回答',speaking:'播放时麦克风暂停，避免回声',idle:''}[phase];
-  return <div className="voice-backdrop" role="dialog" aria-modal="true" aria-label="语音通话">
+  return <div ref={dialog} tabIndex={-1} className="voice-backdrop" role="dialog" aria-modal="true" aria-label="语音通话">
     <div className="voice-dialog" data-phase={phase}>
       <header className="voice-header"><span className="voice-brand"><span className="voice-brand-mark"><AudioLines size={15}/></span>语音对话</span><span className="voice-live"><span/> {status}</span></header>
       <div className="voice-body">
@@ -164,34 +167,39 @@ function ChatMessage({role}:{role:string}) {
   </div></MessagePrimitive.Root>;
 }
 
-function Composer({allowLocal,setAllowLocal,setError,speakerStop}:{allowLocal:boolean;setAllowLocal:(v:boolean)=>void;setError:(v:string)=>void;speakerStop:()=>void}) {
+function Composer({allowLocal,setAllowLocal,setError,speakerStop,inputOwner,blocked,onInputBusy}:{allowLocal:boolean;setAllowLocal:(v:boolean)=>void;setError:(v:string)=>void;speakerStop:()=>void;inputOwner:RefObject<'call'|'manual'|null>;blocked:boolean;onInputBusy:(busy:boolean)=>void}) {
   const composer=unstable_useComposerInput();
+  const currentComposer=useRef(composer);currentComposer.current=composer;
   const running=useAuiState(state=>state.thread.isRunning);
   const [recording,setRecording]=useState(false),[busy,setBusy]=useState(false);
   const capture=useRef<MicrophoneCapture|null>(null),chunks=useRef<Int16Array[]>([]),count=useRef(0),alive=useRef(true),controller=useRef<AbortController|null>(null),opening=useRef(false);
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;controller.current?.abort();void capture.current?.close();capture.current=null;};},[]);
+  const release=()=>{if(inputOwner.current==='manual')inputOwner.current=null;if(alive.current)onInputBusy(false);};
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;controller.current?.abort();void capture.current?.close().catch(()=>{});capture.current=null;release();};},[]);
   const record=async()=>{
-    if(opening.current||busy)return;
+    if(opening.current||busy||blocked||inputOwner.current==='call')return;
     if(capture.current){
-      const mic=capture.current;capture.current=null;setRecording(false);setBusy(true);await mic.close();
-      const total=count.current;if(total<8000){setError('录音太短，请至少说半秒。');setBusy(false);return;}
-      const pcm=new Int16Array(total);let offset=0;for(const chunk of chunks.current){pcm.set(chunk,offset);offset+=chunk.length;}
+      const mic=capture.current;capture.current=null;setRecording(false);setBusy(true);
       const request=new AbortController();controller.current=request;
-      try{const text=await transcribeAudio(encodeWav(pcm),{signal:request.signal});if(alive.current&&!request.signal.aborted)composer.setText([composer.value,text].filter(Boolean).join(' '));}
+      try{
+      await mic.close();
+      const total=count.current;if(total<8000){setError('录音太短，请至少说半秒。');return;}
+      const pcm=new Int16Array(total);let offset=0;for(const chunk of chunks.current){pcm.set(chunk,offset);offset+=chunk.length;}
+      const text=await transcribeAudio(encodeWav(pcm),{signal:request.signal});if(alive.current&&!request.signal.aborted)currentComposer.current.setText([currentComposer.current.value,text].filter(Boolean).join(' '));}
       catch(e){if(alive.current&&!request.signal.aborted)setError(`语音识别失败：${String((e as Error).message || e)}`);}
-      finally{if(controller.current===request)controller.current=null;if(alive.current)setBusy(false);}return;
+      finally{if(controller.current===request)controller.current=null;chunks.current=[];count.current=0;release();if(alive.current)setBusy(false);}return;
     }
+    if(inputOwner.current)return;inputOwner.current='manual';onInputBusy(true);
     opening.current=true;setBusy(true);setError('');speakerStop();chunks.current=[];count.current=0;
-    try{const mic=await openMicrophone({onPcm:pcm=>{if(count.current+pcm.length<=16000*60){chunks.current.push(pcm);count.current+=pcm.length;}else if(alive.current)setError('已录满 60 秒，请结束录音。');},onError:message=>{if(alive.current){setError(message);setRecording(false);}void capture.current?.close();capture.current=null;}});
+    try{const mic=await openMicrophone({onPcm:pcm=>{if(count.current+pcm.length<=16000*60){chunks.current.push(pcm);count.current+=pcm.length;}else if(alive.current)setError('已录满 60 秒，请结束录音。');},onError:message=>{if(alive.current){setError(message);setRecording(false);}void capture.current?.close().catch(()=>{});capture.current=null;release();}});
       if(!alive.current){await mic.close();return;}capture.current=mic;setRecording(true);
-    }catch(e){if(alive.current)setError(`无法录音：${String((e as Error).message || e)}`);}finally{opening.current=false;if(alive.current)setBusy(false);}
+    }catch(e){release();if(alive.current)setError(`无法录音：${String((e as Error).message || e)}`);}finally{opening.current=false;if(alive.current)setBusy(false);}
   };
   return <ComposerPrimitive.Root className="rounded-2xl border bg-card p-3 shadow-sm">
     <ComposerPrimitive.Input rows={2} placeholder="输入消息，Enter 发送，Shift + Enter 换行" className="w-full resize-none bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" />
     <div className="mt-2 flex items-center gap-2"><label className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={allowLocal} disabled={running} onChange={event=>setAllowLocal(event.target.checked)}/>允许查询本地资料</label>
-      <button type="button" onClick={()=>void record()} disabled={busy} className={`rounded-lg p-2 ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?'结束录音':'语音输入'} title={recording?'结束录音':'语音输入'}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
+      <button type="button" onClick={()=>void record()} disabled={busy||blocked} className={`rounded-lg p-2 ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?'结束录音':'语音输入'} title={recording?'结束录音':'语音输入'}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
       <ComposerPrimitive.Cancel className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label="停止生成"><Square size={16}/></ComposerPrimitive.Cancel>
-      <ComposerPrimitive.Send className="rounded-lg bg-primary p-2 text-primary-foreground disabled:opacity-40" aria-label="发送"><ArrowUp size={17}/></ComposerPrimitive.Send>
+      <ComposerPrimitive.Send disabled={busy||recording||blocked} className="rounded-lg bg-primary p-2 text-primary-foreground disabled:opacity-40" aria-label="发送"><ArrowUp size={17}/></ComposerPrimitive.Send>
     </div><p className="mt-2 text-[11px] text-muted-foreground">开启本地资料查询后，模型可读取简历、岗位及面试、笔试记录的内容，并发送给所选服务商。录音结束后可先编辑文字。</p>
   </ComposerPrimitive.Root>;
 }

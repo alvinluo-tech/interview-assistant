@@ -19,6 +19,168 @@ const MAX_BYTES: u64 = 64 * 1024 * 1024;
 #[derive(Default)]
 pub struct DataState(Mutex<Option<Map<String, Value>>>);
 
+const SCHEMA_VERSION: u64 = 1;
+fn identified_rows(value: &Value) -> Result<(), String> {
+    let rows = value.as_array().ok_or("数据集合必须是记录列表。")?;
+    let mut ids = BTreeSet::new();
+    if rows.len() > 100000
+        || !rows.iter().all(|row| {
+            row.is_object()
+                && row["id"]
+                    .as_str()
+                    .is_some_and(|id| !id.is_empty() && id.len() < 1024 && ids.insert(id))
+        })
+    {
+        return Err("记录 ID 无效或重复。".into());
+    }
+    Ok(())
+}
+fn strings(row: &Value, fields: &[&str]) -> Result<(), String> {
+    for field in fields {
+        if row.get(*field).is_some_and(|value| !value.is_string()) {
+            return Err(format!("字段 {field} 必须是文字；原数据已保留。"));
+        }
+    }
+    Ok(())
+}
+fn list_field<'a>(row: &'a mut Value, name: &str) -> Result<&'a mut Vec<Value>, String> {
+    let object = row.as_object_mut().ok_or("记录必须是对象。")?;
+    // Version 0 records may omit collections; explicit wrong types are never erased.
+    object
+        .entry(name)
+        .or_insert_with(|| json!([]))
+        .as_array_mut()
+        .ok_or_else(|| format!("字段 {name} 必须是列表；原数据已保留。"))
+}
+fn normalize_collection(key: &str, value: &mut Value) -> Result<(), String> {
+    if matches!(key, "localUser" | "interviewPreference" | "jobProgress") {
+        return if value.is_object() {
+            Ok(())
+        } else {
+            Err("数据集合必须是对象。".into())
+        };
+    }
+    identified_rows(value)?;
+    for row in value.as_array_mut().unwrap() {
+        strings(row, &["title", "name", "content", "summary", "description"])?;
+        if matches!(key, "interviewSessions" | "examSessions")
+            && row
+                .get("status")
+                .is_some_and(|v| !matches!(v.as_str(), Some("ACTIVE" | "COMPLETED")))
+        {
+            return Err("会话状态无效。".into());
+        }
+        if key == "interviewSessions"
+            && row
+                .get("type")
+                .is_some_and(|v| !matches!(v.as_str(), Some("INTERVIEW" | "MOCK_INTERVIEW")))
+        {
+            return Err("面试类型无效。".into());
+        }
+        if row
+            .get("metadata")
+            .is_some_and(|value| !value.is_object() && !value.is_null())
+        {
+            return Err("metadata 必须是对象。".into());
+        }
+        match key {
+            "interviewSessions" => {
+                let messages = list_field(row, "messages")?;
+                identified_rows(&Value::Array(messages.clone()))?;
+                for message in messages {
+                    if !matches!(message["role"].as_str(), Some("INTERVIEWER" | "ASSISTANT"))
+                        || !message["text"].is_string()
+                    {
+                        return Err("面试发言的角色或正文格式无效。".into());
+                    }
+                    if message
+                        .get("metadata")
+                        .is_some_and(|v| !v.is_object() && !v.is_null())
+                    {
+                        return Err("发言 metadata 必须是对象。".into());
+                    }
+                }
+            }
+            "examSessions" | "materials" => {
+                let field = if key == "examSessions" {
+                    "questions"
+                } else {
+                    "entries"
+                };
+                let entries = list_field(row, field)?;
+                identified_rows(&Value::Array(entries.clone()))?;
+                for entry in entries {
+                    strings(entry, &["questionText", "question", "answer"])?;
+                    let object = entry.as_object_mut().unwrap();
+                    object.entry("answer").or_insert_with(|| json!(""));
+                    object
+                        .entry(if key == "examSessions" {
+                            "questionText"
+                        } else {
+                            "question"
+                        })
+                        .or_insert_with(|| json!(""));
+                    if entry.get("screenshotRefs").is_some_and(|v| {
+                        !v.as_array()
+                            .is_some_and(|refs| refs.iter().all(Value::is_string))
+                    }) {
+                        return Err("截图引用必须是文字列表。".into());
+                    }
+                }
+            }
+            "freeChats" => {
+                let messages = list_field(row, "messages")?;
+                if messages.len() > 100000
+                    || messages.iter().any(|m| {
+                        !matches!(m["role"].as_str(), Some("user" | "assistant"))
+                            || !m["content"].is_string()
+                    })
+                {
+                    return Err("对话消息格式无效。".into());
+                }
+            }
+            "questionBanks" => {
+                let questions = list_field(row, "questions")?;
+                if questions
+                    .iter()
+                    .any(|q| !q["question"].is_string() || !q["answer"].is_string())
+                {
+                    return Err("题库问题或答案格式无效。".into());
+                }
+                if list_field(row, "favorites")?
+                    .iter()
+                    .any(|value| !value.is_string())
+                {
+                    return Err("题库收藏必须是文字列表。".into());
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+fn normalize_document(mut data: Map<String, Value>) -> Result<Map<String, Value>, String> {
+    if data
+        .get("__schemaVersion")
+        .is_some_and(|v| !v.as_u64().is_some_and(|version| version <= SCHEMA_VERSION))
+    {
+        return Err("本地数据版本不兼容，请使用更新版本；原文件已保留。".into());
+    }
+    if data
+        .get("__revision")
+        .is_some_and(|v| !v.as_u64().is_some_and(|revision| revision < u64::MAX))
+    {
+        return Err("本地数据修订号无效。".into());
+    }
+    for key in KEYS {
+        if let Some(value) = data.get_mut(*key) {
+            normalize_collection(key, value)?;
+        }
+    }
+    data.insert("__schemaVersion".into(), SCHEMA_VERSION.into());
+    Ok(data)
+}
+
 // Three-way merge: preserve edits from other windows, reject conflicting edits.
 fn merge_value(base: &Value, current: &Value, next: &Value) -> Result<Value, String> {
     if base == next || current == next {
@@ -101,11 +263,12 @@ fn read_document(path: &Path) -> Result<Map<String, Value>, String> {
         return Err("本地数据超过 64MB，请先备份整理。".into());
     }
     let bytes = fs::read(path).map_err(|e| format!("读取本地数据失败：{e}"))?;
-    serde_json::from_slice::<Value>(&bytes)
+    let data = serde_json::from_slice::<Value>(&bytes)
         .map_err(|_| "本地数据损坏，已阻止覆盖；可在设置中恢复手动备份。".to_string())?
         .as_object()
         .cloned()
-        .ok_or("本地数据格式无效，已阻止覆盖。".into())
+        .ok_or("本地数据格式无效，已阻止覆盖。")?;
+    normalize_document(data)
 }
 fn atomic_write(path: &Path, value: &Map<String, Value>) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
@@ -136,7 +299,9 @@ fn migrate_folder(legacy: &Path, path: &Path) -> Result<(), String> {
             if legacy.join(name).exists() && !path.join("backups").join(name).exists() {
                 match read_document(&legacy.join(name)) {
                     Ok(backup) => atomic_write(&path.join("backups").join(name), &backup)?,
-                    Err(_) => log::warn!("[storage] legacy backup {name} is invalid; original file preserved"),
+                    Err(_) => log::warn!(
+                        "[storage] legacy backup {name} is invalid; original file preserved"
+                    ),
                 }
             }
         }
@@ -147,7 +312,11 @@ fn migrate_folder(legacy: &Path, path: &Path) -> Result<(), String> {
 fn folder(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     static MIGRATION: Mutex<()> = Mutex::new(());
     let _lock = MIGRATION.lock().map_err(|_| "存储迁移锁异常")?;
-    let path = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("data");
+    let path = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("data");
     let legacy = app.path().app_data_dir().map_err(|e| e.to_string())?;
     migrate_folder(&legacy, &path)?;
     Ok(path)
@@ -157,44 +326,68 @@ fn folder(app: &AppHandle) -> Result<std::path::PathBuf, String> {
 mod migration_tests {
     use super::*;
     fn temporary() -> std::path::PathBuf {
-        let mut random = [0u8; 8]; getrandom::fill(&mut random).unwrap();
+        let mut random = [0u8; 8];
+        getrandom::fill(&mut random).unwrap();
         std::env::temp_dir().join(format!("mianxu-storage-{:x}", u64::from_le_bytes(random)))
     }
     #[test]
     fn migration_preserves_legacy_data_and_never_overwrites_newer_records() {
-        let root = temporary(); let legacy = root.join("legacy"); let local = root.join("local");
+        let root = temporary();
+        let legacy = root.join("legacy");
+        let local = root.join("local");
         fs::create_dir_all(&legacy).unwrap();
         let document = serde_json::from_value(json!({"examSessions":[{"id":"old"}]})).unwrap();
         atomic_write(&legacy.join("data.json"), &document).unwrap();
         atomic_write(&legacy.join("data.manual-backup.json"), &document).unwrap();
         migrate_folder(&legacy, &local).unwrap();
-        assert_eq!(read_document(&local.join("data.json")).unwrap(), document);
+        assert_eq!(
+            read_document(&local.join("data.json")).unwrap(),
+            normalize_document(document.clone()).unwrap()
+        );
         assert!(legacy.join("data.json").is_file());
         assert!(local.join("backups/data.manual-backup.json").is_file());
         let new = serde_json::from_value(json!({"examSessions":[{"id":"new"}]})).unwrap();
         atomic_write(&local.join("data.json"), &new).unwrap();
         migrate_folder(&legacy, &local).unwrap();
-        assert_eq!(read_document(&local.join("data.json")).unwrap(), new);
+        assert_eq!(
+            read_document(&local.join("data.json")).unwrap(),
+            normalize_document(new).unwrap()
+        );
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn corrupt_legacy_data_is_not_marked_as_migrated() {
-        let root = temporary(); let legacy = root.join("legacy"); let local = root.join("local");
-        fs::create_dir_all(&legacy).unwrap(); fs::write(legacy.join("data.json"), "broken").unwrap();
-        assert!(migrate_folder(&legacy, &local).is_err()); assert!(!local.join("data.json").exists());
-        assert_eq!(fs::read_to_string(legacy.join("data.json")).unwrap(), "broken");
+        let root = temporary();
+        let legacy = root.join("legacy");
+        let local = root.join("local");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(legacy.join("data.json"), "broken").unwrap();
+        assert!(migrate_folder(&legacy, &local).is_err());
+        assert!(!local.join("data.json").exists());
+        assert_eq!(
+            fs::read_to_string(legacy.join("data.json")).unwrap(),
+            "broken"
+        );
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn a_corrupt_old_backup_does_not_block_migration_of_valid_records() {
-        let root = temporary(); let legacy = root.join("legacy"); let local = root.join("local");
+        let root = temporary();
+        let legacy = root.join("legacy");
+        let local = root.join("local");
         fs::create_dir_all(&legacy).unwrap();
         let data = serde_json::from_value(json!({"examSessions":[{"id":"valid"}]})).unwrap();
         atomic_write(&legacy.join("data.json"), &data).unwrap();
         fs::write(legacy.join("data.manual-backup.json"), "broken backup").unwrap();
         migrate_folder(&legacy, &local).unwrap();
-        assert_eq!(read_document(&local.join("data.json")).unwrap(), data);
-        assert_eq!(fs::read_to_string(legacy.join("data.manual-backup.json")).unwrap(), "broken backup");
+        assert_eq!(
+            read_document(&local.join("data.json")).unwrap(),
+            normalize_document(data).unwrap()
+        );
+        assert_eq!(
+            fs::read_to_string(legacy.join("data.manual-backup.json")).unwrap(),
+            "broken backup"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }
@@ -212,7 +405,7 @@ pub fn cmd_data_commit(
     state: tauri::State<DataState>,
     key: String,
     expected: Value,
-    value: Value,
+    mut value: Value,
 ) -> Result<Value, String> {
     if !KEYS.contains(&key.as_str()) {
         return Err("未知数据集合".into());
@@ -220,21 +413,7 @@ pub fn cmd_data_commit(
     if value.to_string().len() as u64 > MAX_BYTES || expected.to_string().len() as u64 > MAX_BYTES {
         return Err("数据集合过大。".into());
     }
-    if matches!(key.as_str(), "localUser" | "interviewPreference" | "jobProgress") {
-        if !value.is_object() { return Err("数据集合必须是对象。".into()); }
-    } else {
-        let rows = value.as_array().ok_or("数据集合必须是记录列表。")?;
-        let mut ids = BTreeSet::new();
-        if rows.len() > 100000
-            || !rows.iter().all(|row| {
-                row["id"]
-                    .as_str()
-                    .is_some_and(|id| !id.is_empty() && id.len() < 1024 && ids.insert(id))
-            })
-        {
-            return Err("记录 ID 无效或重复。".into());
-        }
-    }
+    normalize_collection(&key, &mut value)?;
     let mut state = state.0.lock().map_err(|_| "数据锁异常")?;
     let dir = folder(&app)?;
     if state.is_none() {
@@ -254,6 +433,7 @@ pub fn cmd_data_commit(
     let updated = merge_value(base, current.get(&key).unwrap_or(&empty), &value)?;
     let mut next = current.clone();
     next.insert(key, updated);
+    let mut next = normalize_document(next)?;
     next.insert(
         "__revision".into(),
         (current
@@ -367,5 +547,53 @@ mod audit_tests {
     #[test]
     fn job_progress_is_an_accepted_persistent_collection() {
         assert!(KEYS.contains(&"jobProgress"));
+    }
+    #[test]
+    fn nested_records_reject_invalid_types_roles_ids_and_states() {
+        for value in [
+            json!({"interviewSessions":[{"id":"s","messages":"broken"}]}),
+            json!({"interviewSessions":[{"id":"s","messages":[{"id":"m","role":"UNKNOWN","text":"x"}]}]}),
+            json!({"interviewSessions":[{"id":"s","messages":[{"id":"m","role":"ASSISTANT","text":null}]}]}),
+            json!({"interviewSessions":[{"id":"s","status":"INVALID"}]}),
+            json!({"examSessions":[{"id":"s","questions":null}]}),
+            json!({"examSessions":[{"id":"s","questions":[{"id":"q","answer":[]}]}]}),
+            json!({"examSessions":[{"id":"s","questions":[{"id":"q"},{"id":"q"}]}]}),
+            json!({"materials":[{"id":"m","entries":{}}]}),
+            json!({"freeChats":[{"id":"s","messages":[{"role":"user","content":42}]}]}),
+            json!({"questionBanks":[{"id":"q","questions":[{"question":42,"answer":"x"}]}]}),
+            json!({"__schemaVersion":2}),
+            json!({"__schemaVersion":"1"}),
+        ] {
+            assert!(
+                normalize_document(value.as_object().unwrap().clone()).is_err(),
+                "accepted {value}"
+            );
+        }
+    }
+    #[test]
+    fn legacy_omitted_lists_migrate_without_rewriting_source_files() {
+        let old = json!({"examSessions":[{"id":"s","questions":[{"id":"q"}]}],"materials":[{"id":"m"}],"customLegacyField":"preserved"});
+        let source = old.as_object().unwrap().clone();
+        let migrated = normalize_document(source.clone()).unwrap();
+        assert_eq!(migrated["__schemaVersion"], 1);
+        assert_eq!(migrated["examSessions"][0]["questions"][0]["answer"], "");
+        assert_eq!(migrated["materials"][0]["entries"], json!([]));
+        assert_eq!(migrated["customLegacyField"], "preserved");
+        assert_eq!(source, old.as_object().unwrap().clone());
+        assert_eq!(normalize_document(migrated.clone()).unwrap(), migrated);
+    }
+    #[test]
+    fn corrupt_nested_json_is_not_accepted_from_disk_or_modified_on_failure() {
+        let mut random = [0u8; 8];
+        getrandom::fill(&mut random).unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "mianxu-schema-{:x}.json",
+            u64::from_le_bytes(random)
+        ));
+        let text = r#"{"examSessions":[{"id":"s","questions":false}]}"#;
+        fs::write(&path, text).unwrap();
+        assert!(read_document(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+        fs::remove_file(&path).unwrap();
     }
 }

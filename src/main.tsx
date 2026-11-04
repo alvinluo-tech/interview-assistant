@@ -20,23 +20,38 @@ document.body.classList.toggle('overlay', scene === 'overlay');
 // （浮窗自带样式体系、模拟面试窗固定深色，都不归这里管）
 if (scene === 'main') initDesktopAppearance();
 
-void (async () => {
+const root = createRoot(document.getElementById('root')!);
+let starting = false, aiInitialized = false, storeSynced = false, dataSynced = false;
+async function start() {
+  if (starting) return;
+  starting = true;
+  root.render(<main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground" role="status">正在加载本机资料…</main>);
+  try {
   if (isTauri()) {
-    await initializeAiSettings();
+    if (!aiInitialized) {await initializeAiSettings();aiInitialized = true;}
     await hydrateStore();
-    await initStoreSync();
+    if (!storeSynced) {await initStoreSync();storeSynced = true;}
     if (scene === 'main') refreshDesktopAppearance();
     await hydrateData();
-    await initDataSync();
+    if (!dataSynced) {await initDataSync();dataSynced = true;}
     if(!getDataError())await ensureDefaultData();
   }
   const { App } = await import('./App');
-  createRoot(document.getElementById('root')!).render(
+  root.render(
     <React.StrictMode>
       <App scene={scene} />
     </React.StrictMode>,
   );
-})();
+  } catch (error) {
+    root.render(<main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground">
+      <h1 className="text-lg font-semibold">暂时无法加载本机资料</h1>
+      <p className="max-w-lg text-sm text-muted-foreground">请检查磁盘空间、资料目录权限或文件占用，解决后重试。已有资料会保留。</p>
+      <p role="alert" className="max-w-lg break-words text-sm">{String((error as Error).message || error)}</p>
+      <button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={() => void start()}>重试启动</button>
+    </main>);
+  } finally {starting = false;}
+}
+void start();
 
 // 全局错误兜底（对齐原版：window.error/unhandledrejection → 上报 + toast）
 const errorSink: string[] = [];

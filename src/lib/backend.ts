@@ -115,8 +115,8 @@ export async function initDataSync() {
       cache.set(e.payload.key, e.payload.value);
       listeners.forEach((l) => l());
     });
-  } catch {
-    // 忽略
+  } catch (error) {
+    if(nativeData())throw error;
   }
 }
 
@@ -264,6 +264,7 @@ export async function createSession(
 
 export async function updateSession(id: string, patch: Partial<InterviewSession>) {
   const sessions = readData<InterviewSession[]>('interviewSessions', []);
+  if (!sessions.some(session => session.id === id)) throw new Error('面试记录不存在或已在其他窗口删除；本次内容尚未保存。');
   await persist(
     'interviewSessions',
     sessions.map((s) => (s.id === id ? { ...s, ...patch } : s)),
@@ -327,6 +328,7 @@ export async function createExamSession(
 
 export async function updateExamSession(id: string, patch: Partial<ExamSessionRecord>) {
   const list = readData<ExamSessionRecord[]>('examSessions', []);
+  if (!list.some(session => session.id === id)) throw new Error('笔试记录不存在或已在其他窗口删除；本次内容尚未保存。');
   await persist(
     'examSessions',
     list.map((s) => (s.id === id ? { ...s, ...patch } : s)),
@@ -339,6 +341,7 @@ export async function completeExamSession(id: string) {
 
 export async function saveGoal(g: Omit<Goal, 'id' | 'createdAt'> & { id?: string }): Promise<Goal> {
   const goals = readData<Goal[]>('goals', []);
+  if(g.id&&!goals.some(item=>item.id===g.id))throw new Error('岗位已删除，编辑内容尚未保存。');
   if (g.id) {
     const next = goals.map((x) => (x.id === g.id ? { ...x, ...g, id: x.id } : x));
     await persist('goals', next);
@@ -365,6 +368,7 @@ export async function ensureGoal(name: string, companyName?: string): Promise<Go
 
 export async function saveResume(r: { id?: string; title: string; summary?: string; content?: string; document?: Resume['document']; isSample?: boolean }): Promise<Resume> {
   const resumes = readData<Resume[]>('resumes', []);
+  if(r.id&&!resumes.some(item=>item.id===r.id))throw new Error('简历已删除，编辑内容尚未保存。');
   if (r.id) {
     const next = resumes.map((x) => (x.id === r.id ? { ...x, ...r, id: x.id, summary: r.summary ?? x.summary } : x));
     await persist('resumes', next);
@@ -390,6 +394,7 @@ export async function deleteResume(id: string) {
 
 export async function saveMaterial(m: { id?: string; name?: string; content?: string; source?: Material['source'] }): Promise<Material> {
   const materials = readData<Material[]>('materials', []);
+  if(m.id&&!materials.some(item=>item.id===m.id))throw new Error('资料已删除，编辑内容尚未保存。');
   if (m.id) {
     const next = materials.map((x) =>
       x.id === m.id
@@ -419,6 +424,8 @@ export async function deleteMaterial(id: string) {
 
 export async function saveEntry(materialId: string, entry: { id?: string; question: string; answer: string;origin?:MaterialEntry['origin'] }) {
   const materials = readData<Material[]>('materials', []);
+  const owner=materials.find(item=>item.id===materialId);
+  if(!owner||(entry.id&&!owner.entries.some(item=>item.id===entry.id)))throw new Error('资料或问答已删除，编辑内容尚未保存。');
   const next = materials.map((m) => {
     if (m.id !== materialId) return m;
     if (entry.id) {

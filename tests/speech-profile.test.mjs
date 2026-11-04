@@ -60,6 +60,17 @@ test('Singapore CosyVoice keeps workspace origin and obeys duplex task boundarie
  assert.equal(sent[0].payload.parameters.voice,'longanyang');assert.equal(sent[0].payload.parameters.language_hints[0],'en');assert.equal(sent[0].payload.parameters.rate,1.1);assert.equal(sent[1].payload.input.text,'问题正文');assert.equal(audio.length,1);assert.equal(audio[0].sampleRate,24000);assert.equal(closed,1);assert.equal(listener,undefined);
 });
 
+test('CosyVoice burst overflow closes the socket and queued audio never resumes after failure', async () => {
+  const {requestBailianSpeechSocket}=load('src/lib/ttsSocket.ts');
+  let listener, closed=0, writes=0;
+  const connect=async()=>({addListener(fn){listener=fn;return()=>{listener=undefined;};},disconnect:async()=>{closed++;},send:async()=>{
+    queueMicrotask(()=>{for(let i=0;i<300;i++) listener?.({type:'Binary',data:[0,0]});});
+  }});
+  await assert.rejects(requestBailianSpeechSocket({...provider(),apiKey:'test'},'cosyvoice-v3-flash','问题','longanyang',undefined,undefined,undefined,()=>{writes++;},1000,connect),/积压/);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(closed,1);assert.equal(listener,undefined);assert.equal(writes,0);
+});
+
 test('cancel while connecting closes a late CosyVoice socket and never publishes audio',async()=>{
  const {requestBailianSpeechSocket}=load('src/lib/ttsSocket.ts');let ready,closed=0;const controller=new AbortController();
  const pending=requestBailianSpeechSocket({...provider(),apiKey:'test'},'cosyvoice-v3-flash','问题','longanyang',undefined,undefined,controller.signal,()=>assert.fail('late audio'),1000,()=>new Promise(resolve=>{ready=resolve;}));

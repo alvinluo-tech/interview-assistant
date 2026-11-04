@@ -8,8 +8,11 @@ type Listener = () => void;
 
 const listeners = new Set<Listener>();
 const cache = new Map<string, unknown>();
+const changes = new Map<string,number>();
 let storePromise: Promise<import('@tauri-apps/plugin-store').Store> | null = null;
-let hydrating = false;
+let hydration: Promise<void> | null = null;
+let hydrated = false;
+let writes: Promise<void> = Promise.resolve();
 
 const STORE_FILE = 'store.json';
 
@@ -21,48 +24,54 @@ function mirrorDesktopTheme(key: string, value: unknown) {
 async function getStore() {
   if (!storePromise) {
     storePromise = import('@tauri-apps/plugin-store').then((m) =>
-      m.load(STORE_FILE, { autoSave: true }),
-    );
+      m.load(STORE_FILE, { autoSave: false }),
+    ).catch(error => { storePromise = null; throw error; });
   }
   return storePromise;
 }
 
-export async function hydrateStore() {
-  if (hydrating) return;
-  hydrating = true;
-  try {
+export function hydrateStore(): Promise<void> {
+  if (hydrated) return Promise.resolve();
+  if (hydration) return hydration;
+  hydration = (async () => {
     const store = await getStore();
+    const loaded = new Map<string, unknown>();
     for (const key of ALL_KEYS) {
       const v = await store.get<unknown>(key);
-      if (v !== null && v !== undefined) {
-        cache.set(key, v);
-        mirrorDesktopTheme(key, v);
-      }
+      if (v !== null && v !== undefined) loaded.set(key, v);
     }
+    loaded.forEach((value, key) => {cache.set(key, value);mirrorDesktopTheme(key, value);});
+    hydrated = true;
     listeners.forEach((l) => l());
-  } catch (e) {
-    console.warn('[store] hydrate failed', e);
-  }
+  })().catch(error => {storePromise = null;throw error;}).finally(() => {hydration = null;});
+  return hydration;
 }
 
 /** 写设置（持久化 + 广播 + 跨窗口同步） */
-export async function setSetting<T>(key: string, value: T,options?:{strict?:boolean}) {
-  if(!options?.strict){cache.set(key, value);mirrorDesktopTheme(key, value);listeners.forEach((l) => l());}
+export function setSetting<T>(key: string, value: T,_options?:{strict?:boolean}): Promise<void> {
+  const write = writes.catch(() => {}).then(async () => {
+  const native=typeof window!=='undefined'&&'__TAURI_INTERNALS__' in window;
+  const observed=changes.get(key)||0;
   let previous:unknown,changed=false;
   try {
+    if(native){
+      const {invoke}=await import('@tauri-apps/api/core');
+      await invoke('cmd_set_setting',{key,value});
+    }else{
     const store = await getStore();
-    if(options?.strict)previous=await store.get(key);
+    previous=await store.get(key);
     await store.set(key, value);
     changed=true;
     await store.save();
-  } catch (e) {
-    if(options?.strict){
-      if(changed){const store=await getStore();if(previous===undefined)await store.delete(key);else await store.set(key,previous);}
-      throw new Error(`设置未保存，请检查存储位置和磁盘权限：${String((e as Error).message || e)}`);
     }
-    console.warn('[store] persist failed', e);
+  } catch (e) {
+    if(changed)try{const store=await getStore();if(previous===undefined)await store.delete(key);else await store.set(key,previous);}catch{/* Preserve the original failure. No automatic save is enabled. */}
+    throw new Error(`设置未保存，请检查存储位置和磁盘权限：${String((e as Error).message || e)}`);
   }
-  if(options?.strict){cache.set(key,value);mirrorDesktopTheme(key, value);listeners.forEach(listener=>listener());}
+  if(!native||(changes.get(key)||0)===observed){cache.set(key,value);changes.set(key,observed+1);mirrorDesktopTheme(key, value);listeners.forEach(listener=>listener());}
+  // The native transaction already broadcasts in commit order. Re-broadcasting
+  // after its IPC response could overwrite a newer setting from another window.
+  if(native)return;
   // 跨窗口同步：主窗口的改动要立刻反映到浮窗（各自独立 JS 上下文）
   try {
     const { emit } = await import('@tauri-apps/api/event');
@@ -71,6 +80,11 @@ export async function setSetting<T>(key: string, value: T,options?:{strict?:bool
   } catch {
     // 非 Tauri 环境忽略
   }
+  });
+  writes = write;
+  // Attach an observer even for legacy fire-and-forget callers; awaited callers still reject.
+  void write.catch(error => {void import('./events').then(({bus})=>bus.emit('toast',{type:'error',title:'设置未保存',description:String(error.message||error)})).catch(()=>{});});
+  return write;
 }
 
 /** 订阅其它窗口的 store 变更（每个 webview 启动时调用一次） */
@@ -79,11 +93,12 @@ export async function initStoreSync() {
     const { listen } = await import('@tauri-apps/api/event');
     await listen<{ key: string; value: unknown }>('ml-store-changed', (e) => {
       cache.set(e.payload.key, e.payload.value);
+      changes.set(e.payload.key,(changes.get(e.payload.key)||0)+1);
       mirrorDesktopTheme(e.payload.key, e.payload.value);
       listeners.forEach((l) => l());
     });
-  } catch {
-    // 忽略
+  } catch (error) {
+    if(typeof window!=='undefined'&&'__TAURI_INTERNALS__' in window)throw error;
   }
 }
 
@@ -102,7 +117,7 @@ export function useSetting<T>(key: string, fallback: T): [T, (v: T) => void] {
     () => getSetting(key, fallback),
     () => fallback,
   );
-  return [value, (v: T) => void setSetting(key, v)];
+  return [value, (v: T) => {void setSetting(key, v);}];
 }
 
 export function subscribeStore(cb: Listener): () => void {

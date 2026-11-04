@@ -11,9 +11,30 @@ export function createSpeechOutput(state: (speaking: boolean) => void, error: (r
   const context = contextFactory();
   const sources = new Set<AudioBufferSourceNode>();
   let closed = false, finished = false, nextTime = 0, lastByte: number | undefined;
+  const waiting = new Set<() => void>();
+  const waitForCapacity = async () => {
+    let lastClock = context.currentTime;
+    let lastProgress = Date.now();
+    while (!closed && (sources.size >= 32 || nextTime - context.currentTime > 2)) {
+      if (context.currentTime > lastClock) {
+        lastClock = context.currentTime;
+        lastProgress = Date.now();
+      }
+      if (context.state !== 'running' || Date.now() - lastProgress > 5000) {
+        stop();
+        throw new Error('音频播放已暂停或设备没有响应，请恢复音频设备后重试。');
+      }
+      await new Promise<void>(resolve => {
+        const release = () => { clearTimeout(timer); waiting.delete(release); resolve(); };
+        const timer = setTimeout(release, 50);
+        waiting.add(release);
+      });
+    }
+  };
   const stop = () => {
     if (closed) return;
     closed = true;
+    for (const release of waiting) release();
     for (const source of sources) {
       source.onended = null;
       try {source.stop();} catch { /* A device failure may leave a source unstarted. */ }
@@ -50,14 +71,20 @@ export function createSpeechOutput(state: (speaking: boolean) => void, error: (r
       for (let i = 0; i < length; i++) samples[i] = view.getInt16(i * 2,true) / 32768;
     }
     if (!buffer.length && buffer.duration === 0) return;
-    const source = context.createBufferSource(); source.buffer = buffer; source.connect(context.destination);
-    // A small initial buffer absorbs network jitter. Subsequent buffers remain sample-contiguous.
-    const start = Math.max(nextTime, context.currentTime + (nextTime ? 0.02 : 0.12));
-    nextTime = start + buffer.duration; sources.add(source);
-    source.onended = () => {
-      sources.delete(source); source.disconnect();
-      if (!closed && finished && !sources.size) stop();
-    };
-    try {source.start(start); state(true);} catch (reason) {stop(); error(reason); throw reason;}
+    // Bound both playback lead time and node count, including large single responses.
+    for (let offset = 0; offset < buffer.duration; offset += 0.5) {
+      await waitForCapacity();
+      if (closed) return;
+      const duration = Math.min(0.5, buffer.duration - offset);
+      const source = context.createBufferSource(); source.buffer = buffer; source.connect(context.destination);
+      const start = Math.max(nextTime, context.currentTime + (nextTime ? 0.02 : 0.12));
+      nextTime = start + duration; sources.add(source);
+      source.onended = () => {
+        sources.delete(source); source.disconnect();
+        for (const release of waiting) release();
+        if (!closed && finished && !sources.size) stop();
+      };
+      try {source.start(start, offset, duration); state(true);} catch (reason) {stop(); error(reason); throw reason;}
+    }
   }};
 }

@@ -9,8 +9,8 @@ export async function requestBailianSpeechSocket(provider:AiProvider,model:strin
   const transport=connect;
   const scope=requestScope(timeoutMs,signal);
   let socket:RealtimeSocket|undefined;
-  const taskId=crypto.randomUUID();let off=()=>{},received=0,started=false,finished=false;
-  let queue=Promise.resolve();let resolve!:()=>void,reject!:(error:unknown)=>void;
+  const taskId=crypto.randomUUID();let off=()=>{},received=0,started=false,finished=false,failed=false;
+  let queue=Promise.resolve();let queuedFrames=0,queuedBytes=0;let resolve!:()=>void,reject!:(error:unknown)=>void;
   const done=new Promise<void>((yes,no)=>{resolve=yes;reject=no;});void done.catch(()=>{});
   let rejectAbort!:(reason:unknown)=>void;const aborted=new Promise<never>((_,reject)=>{rejectAbort=reject;});void aborted.catch(()=>{});
   const abort=()=>{const reason=scope.signal.reason || new DOMException('已停止朗读','AbortError');reject(reason);rejectAbort(reason);void socket?.disconnect();};
@@ -25,8 +25,28 @@ export async function requestBailianSpeechSocket(provider:AiProvider,model:strin
       if(finished)return;
       if(message.type==='Binary'&&Array.isArray(message.data)){
         const bytes=Uint8Array.from(message.data as number[]);received+=bytes.length;
-        if(received>32*1024*1024){reject(new Error('语音音频过长'));return;}
-        queue=queue.then(()=>{scope.signal.throwIfAborted();return push({format:'pcm16',sampleRate:24000,bytes});});void queue.catch(reject);return;
+        if (received > 32*1024*1024) {
+          failed = true; finished = true;
+          reject(new Error('语音音频过长'));
+          return;
+        }
+        queuedFrames++; queuedBytes += bytes.length;
+        if (queuedFrames > 256 || queuedBytes > 8*1024*1024) {
+          failed = true; finished = true;
+          reject(new Error('语音播放积压过多，已停止本次朗读，请缩短问题后重试。'));
+          return;
+        }
+        queue = queue.then(async () => {
+          try {
+            if (failed) return;
+            scope.signal.throwIfAborted();
+            await push({format:'pcm16', sampleRate:24000, bytes});
+          } finally {
+            queuedFrames--; queuedBytes -= bytes.length;
+          }
+        });
+        void queue.catch(reject);
+        return;
       }
       if(message.type==='Close'){reject(new Error('语音连接在播放完成前断开。'));return;}
       if(message.type!=='Text'||typeof message.data!=='string')return;
@@ -39,5 +59,5 @@ export async function requestBailianSpeechSocket(provider:AiProvider,model:strin
     await Promise.race([socket.send(JSON.stringify({header:{action:'run-task',task_id:taskId,streaming:'duplex'},payload:{task_group:'audio',task:'tts',function:'SpeechSynthesizer',model,
       parameters:{text_type:'PlainText',voice,format:'pcm',sample_rate:24000,...(render?{rate:render.rate,language_hints:[render.language==='en-US'?'en':'zh']}:{}),...(instruction?{instruction}:{})},input:{}}})),aborted]);
     await done;await Promise.race([queue,aborted]);scope.signal.throwIfAborted();if(!received)throw new Error('语音接口未返回音频。');
-  }finally{finished=true;off();scope.signal.removeEventListener('abort',abort);scope.cleanup();await socket?.disconnect().catch(()=>{});}
+  }catch(error){failed=true;throw error;}finally{finished=true;off();scope.signal.removeEventListener('abort',abort);scope.cleanup();await socket?.disconnect().catch(()=>{});}
 }

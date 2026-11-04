@@ -35,7 +35,7 @@ import { DualScreenCard } from './DualScreenCard';
 export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void }) {
   const goals = useData<Goal[]>('goals', [])[0];
   const examSessions = useData<ExamSessionRecord[]>('examSessions', [])[0];
-  const interrupted = examSessions.find(session => session.interrupted && !session.interviewSessionId);
+  const interrupted = examSessions.find(session => (session.interrupted || session.status==='ACTIVE') && !session.interviewSessionId);
   const [mode, setMode] = useSetting<ExamModeKey>('exam.mode', 'quick');
   const [goalId, setGoalId] = useSetting<string | null>('exam.goalId', goals[0]?.id ?? null);
   const [showCopyCode, setShowCopyCode] = useSetting('exam.showCopyCodeButton', false);
@@ -106,7 +106,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
         />
 
         {interrupted && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border p-3 text-xs">
-          <span className="flex-1">上次笔试意外中断：{interrupted.title}。可恢复已保存的题目和答案。</span>
+          <span className="flex-1">上次笔试尚未完成：{interrupted.title}。恢复后可继续作答或重试保存；如提示有未保存内容，请勿退出应用。</span>
           <Button size="sm" variant="outline" disabled={starting} onClick={() => void start(interrupted)}>恢复上次笔试</Button>
         </div>}
 

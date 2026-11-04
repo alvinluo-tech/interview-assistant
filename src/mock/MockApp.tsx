@@ -288,7 +288,7 @@ function MockRoom() {
   // 空格键开关麦克风
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || e.repeat) return;
+      if (e.code !== 'Space' || e.repeat || e.isComposing || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || confirmEnd || languageOpen) return;
       const el = e.target as HTMLElement;
       if (['TEXTAREA','INPUT','BUTTON','SELECT'].includes(el.tagName) || el.isContentEditable) return;
       e.preventDefault();
@@ -297,8 +297,9 @@ function MockRoom() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording]);
+    // Refresh the handler after every render: transcribing/thinking also gate startRec.
+    // Subscribing only on recording changes leaves the previous turn's busy state captured.
+  });
 
   const finish = useCallback(
     async (finalMessages: ChatMessage[]) => {
@@ -378,7 +379,7 @@ function MockRoom() {
     } catch (e) {
       if (controller.signal.aborted || generation !== requestGeneration.current) return;
       if (!answerSaved) setDraft(text);
-      showToast({ type: 'error', title: answerSaved ? '回答已保存，正在重试出题' : '回答未保存，请重试', description: String((e as Error).message ?? e) });
+      showToast({ type: 'error', title: answerSaved ? '回答已保存，下一题生成失败' : '回答未保存，请重试', description: String((e as Error).message ?? e) });
       if (answerSaved) scheduleQuestionRetry(e);
     } finally {
       if (generation === requestGeneration.current) {busyRef.current = false; setThinking(false);}
@@ -459,7 +460,7 @@ function MockRoom() {
               <div className="mock-participant-caption"><Mic size={13} />{recording ? '正在听你回答' : '文字或语音作答'}</div>
             </div>
           </div>
-          <div className="mock-question" aria-live="polite"><span className="mock-question-label">{thinking ? '面试官正在思考' : '当前问题'}</span><p>{currentQuestion?.text || (thinking ? '面试官正在准备开场问题…' : '准备好后开始对话。')}</p>
+          <div className="mock-question" role="region" aria-label="当前面试问题" tabIndex={0} aria-live="polite"><span className="mock-question-label">{thinking ? '面试官正在思考' : '当前问题'}</span><p>{currentQuestion?.text || (thinking ? '面试官正在准备开场问题…' : '准备好后开始对话。')}</p>
             {questionTranslation&&<p className="mt-2 text-sm text-neutral-400" aria-label="辅助译文">{questionTranslation}</p>}
             {currentQuestion && <button disabled={recording || transcribing || thinking} title={speechPhase !== 'idle' ? '停止本次朗读，自动播报开关保持不变' : '重新朗读当前问题；已生成的云端音频优先从本场缓存播放'} aria-label={speechPhase !== 'idle' ? '停止朗读' : '朗读当前问题'} onClick={() => {if (speechPhase !== 'idle') player.stop();else if (!ttsOn) setTtsOn(true);else void player.speak(currentQuestion.text);}}>{speechPhase === 'preparing' ? <Loader2 size={16} className="animate-spin" /> : speechPhase === 'speaking' ? <Square size={16} /> : <Volume2 size={16} />}</button>}
           </div>

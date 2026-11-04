@@ -60,6 +60,48 @@ test('interview pages disclose continuation and do not include pending or supers
   assert.equal(first.total,10);assert.equal(first.next_offset,8);assert.equal(second.messages.length,2);assert.equal(second.next_offset,null);
 });
 
+test('every part of a long exam question and answer is retrievable without duplicating entries',()=>{
+  const h=harness();const question='问题'.repeat(4000),answer='答案'.repeat(5000);
+  h.data.examSessions[0].questions=[{id:'q-long',questionText:question,answer}];
+  let textOffset=0,fullQuestion='',fullAnswer='';
+  do{
+    const reply=JSON.parse(h.api.executeFreeChatTool('read_local_record',JSON.stringify({category:'exams',id:'e1',offset:0,entry_id:'q-long',text_offset:textOffset}),true));
+    assert.equal(reply.questions.length,1);fullQuestion+=reply.questions[0].question;fullAnswer+=reply.questions[0].answer;textOffset=reply.questions[0].next_text_offset;
+  }while(textOffset!==null);
+  assert.equal(fullQuestion,question);assert.equal(fullAnswer,answer);
+  h.data.examSessions[0].questions.push({id:'other',answer:'另一题'});
+  const chunk=JSON.parse(h.api.executeFreeChatTool('read_local_record','{"category":"exams","id":"e1","offset":0,"entry_id":"q-long","text_offset":3000}',true));
+  assert.equal(chunk.next_offset,null,'An entry continuation must not invent a collection-page offset');
+  for(const extra of [{entry_id:'missing'},{text_offset:0},{entry_id:'q-long',text_offset:-1},{entry_id:'q-long',text_offset:NaN}])assert.throws(()=>h.api.executeFreeChatTool('read_local_record',JSON.stringify({category:'exams',id:'e1',offset:0,...extra}),true));
+});
+
+test('search keeps unknown entry origins unknown even inside AI-created materials',()=>{
+  const h=harness();h.data.materials=[{id:'material',name:'参考',source:'ai',entries:[{id:'old',question:'订单优化',answer:'旧资料'},{id:'new',question:'订单优化',answer:'模型参考',origin:'model_generated'}]}];
+  const reply=JSON.parse(h.api.executeFreeChatTool('search_local_knowledge','{"query":"订单优化"}',true));
+  assert.equal(reply.find(item=>item.entry_id==='old').origin,'legacy_unknown');
+  assert.equal(reply.find(item=>item.entry_id==='new').origin,'model_generated');
+  assert.match(reply.find(item=>item.entry_id==='new').source_note,/不是用户经历/);
+});
+
+test('record cursors accept long valid record IDs and late text offsets within the storage bound',()=>{
+  const h=harness(),id='r'.repeat(700);
+  h.data.resumes=[{id,title:'长资料',content:'x'.repeat(1_000_100)+'简历尾部'}];
+  const resume=JSON.parse(h.api.executeFreeChatTool('read_local_record',JSON.stringify({category:'resumes',id,offset:1_000_100}),true));assert.equal(resume.text,'简历尾部');
+  h.data.examSessions[0].questions=[{id:'long',answer:'x'.repeat(2_000_100)+'答案尾部'}];
+  const exam=JSON.parse(h.api.executeFreeChatTool('read_local_record',JSON.stringify({category:'exams',id:'e1',offset:0,entry_id:'long',text_offset:2_000_100}),true));assert.equal(exam.questions[0].answer,'答案尾部');assert.equal(exam.questions[0].next_text_offset,null);
+});
+
+test('list pagination handles empty, exact and oversized pages and rejects malformed cursors',()=>{
+  const h=harness();
+  for(const count of [0,20,21,100]){
+    h.data.examSessions=Array.from({length:count},(_,i)=>({id:`e${i}`,createdAt:i,title:'记录',questions:[]}));
+    const found=[];let cursor;
+    do{const result=JSON.parse(h.api.executeFreeChatTool('list_local_data',JSON.stringify({category:'exams',...(cursor?{cursor}:{})}),true));assert.equal(result.offset,found.length);found.push(...result.items.map(item=>item.id));cursor=result.next_cursor;}while(cursor);
+    assert.equal(found.length,count);assert.equal(new Set(found).size,count);
+  }
+  for(const cursor of ['bad','null','{}','{"time":"1","id":"x"}'])assert.throws(()=>h.api.executeFreeChatTool('list_local_data',JSON.stringify({category:'exams',cursor}),true),/游标/);
+});
+
 test('tool round trip sends standard tool results and returns the answer',async()=>{
   const h=harness([{choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{id:'call1',type:'function',function:{name:'list_local_data',arguments:'{"category":"goals"}'}}]}}]},
     {choices:[{finish_reason:'stop',message:{content:'有工程师岗位'}}]}]);

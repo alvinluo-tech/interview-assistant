@@ -31,7 +31,7 @@ test('answer prompts preserve the selected JD and relevant document excerpts rat
 
 test('mock interviewer receives the same full document context', async () => {
   let sent;
-  const mock = moduleFrom('src/lib/mock.ts', { './knowledgeContext': moduleFrom('src/lib/knowledgeContext.ts'), './ai': { chatStream: async options => { sent = options.messages; return '请介绍一下你的支付幂等设计'; } } });
+  const mock = moduleFrom('src/lib/mock.ts', { './knowledgeContext': moduleFrom('src/lib/knowledgeContext.ts'), './ai': { chatStream: async options => { sent = options.messages; return '{"question":"请介绍一下你的支付幂等设计","kind":"NEW"}'; } } });
   await mock.generateOpeningQuestion({ goalName: '后端', difficultyLabel: '3-5 年', turnBudget: 5, basicsRatio: 50, assistMode: false,
     knowledgeContext: '【J1】必须掌握支付幂等\n【R1】负责 Redis request_id 设计' });
   assert.doesNotMatch(sent[0].content, /Redis request_id/);

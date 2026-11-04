@@ -48,12 +48,13 @@ const translations=new Set<AbortController>();
 const roleChanges=new Map<string,number>();
 const knownInterviewer=(message:ChatMessage)=>message.role==='INTERVIEWER'&&!message.metadata?.superseded&&(!message.metadata?.speaker||message.metadata.speaker.role==='interviewer');
 const localSpeaker=()=>state.audio.source!=='SPEAKER'&&getSetting<string>('interview.speakerMode','manual')==='local';
-async function deliverPhoneSpeech(text:string,pcm:Int16Array|null,generation:number){
+async function deliverPhoneSpeech(text:string,pcm:Int16Array|null,generation:number,signal?:AbortSignal){
+ if(signal?.aborted)return;
  const id=crypto.randomUUID(),owner=speakerOwner;
  let decision:SpeakerDecision={role:'unknown',score:0,revision:1,source:'local-match'};
- if(localSpeaker()&&owner){try{decision=await identifySpeaker(owner,id,pcm);}catch(error){if(generation===captureGeneration)setState({errorMessage:`身份暂未确认：${String((error as Error).message||error)}`});}}
- if(generation!==captureGeneration||state.status==='ended')return;
- await deliverUtterance(text,decision,id);
+ if(localSpeaker()&&owner){try{decision=await identifySpeaker(owner,id,pcm);}catch(error){if(generation===captureGeneration&&!signal?.aborted)setState({errorMessage:`身份暂未确认：${String((error as Error).message||error)}`});}}
+ if(generation!==captureGeneration||state.status==='ended'||signal?.aborted)return;
+ await deliverUtterance(text,decision,id,signal);
 }
 async function translateMessage(id:string){
  const language=getSpeechProfile('interview').translationLanguage;if(language==='none')return;
@@ -338,12 +339,13 @@ function finalizeUtterance() {
     setState({ partial: '', audio: { ...state.audio, bufferedMs: 0, speaking: false } });
     return;
   }
-  if (state.audio.pending >= 12) {
+  if (state.audio.pending >= 3) {
     if (live) removeLive(live.id);
     setState({ errorMessage: '语音转写服务处理较慢，本段未发送。请暂停说话，等待转写完成后重试。' });
     return;
   }
   const generation = captureGeneration;
+  const queuedAt = performance.now();
   const wavBlob = encodeWavFromPcm(pcm);
   if (live) updateLive(live.id, { phase: 'finalizing' });
   setState({ audio: { ...state.audio, bufferedMs: 0, speaking: false, pending: state.audio.pending + 1 } });
@@ -351,8 +353,33 @@ function finalizeUtterance() {
     if (generation !== captureGeneration) return;
     const controller = new AbortController();
     transcriptionControllers.add(controller);
-    try { await recognizeUtterance(wavBlob, controller, generation, live?.id); }
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let cancelled: (() => void) | undefined;
+    try {
+      if (performance.now() - queuedAt > 10000) {
+        if (live) removeLive(live.id);
+        setState({errorMessage:'语音识别积压，本段已过期，请重说当前问题。'});
+        return;
+      }
+      await Promise.race([
+        recognizeUtterance(wavBlob, controller, generation, live?.id),
+        new Promise<void>((resolve) => {
+          cancelled = resolve;
+          controller.signal.addEventListener('abort', cancelled, {once:true});
+          timeout = setTimeout(() => {
+            controller.abort();
+            if (generation === captureGeneration) {
+              if (live) removeLive(live.id);
+              setState({errorMessage:'语音识别等待过长，已取消本段，请重说当前问题。'});
+            }
+            resolve();
+          }, 20000);
+        }),
+      ]);
+    }
     finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+      if (cancelled) controller.signal.removeEventListener('abort', cancelled);
       transcriptionControllers.delete(controller);
       if (generation === captureGeneration) setState({ audio: { ...state.audio, pending: Math.max(0, state.audio.pending - 1) } });
     }
@@ -386,24 +413,25 @@ async function recognizeUtterance(wavBlob: Blob, controller: AbortController, ge
   if(state.audio.source!=='SPEAKER'){
     let pcm:Int16Array|null=null;
     if(localSpeaker()){const bytes=await wavBlob.arrayBuffer();const view=new DataView(bytes);if(bytes.byteLength>=44){pcm=new Int16Array((bytes.byteLength-44)/2);for(let i=0;i<pcm.length;i++)pcm[i]=view.getInt16(44+i*2,true);}}
-    await deliverPhoneSpeech(text,pcm,generation);return;
+    await deliverPhoneSpeech(text,pcm,generation,controller.signal);return;
   }
   if (text.length < 6 && liveId === undefined) {
     setState({ partial: text });
     window.setTimeout(() => {
-      if (generation === captureGeneration && state.partial === text) {
+      if (generation === captureGeneration && !controller.signal.aborted && state.partial === text) {
         setState({ partial: '' });
-        void deliverUtterance(text);
+        void deliverUtterance(text,undefined,undefined,controller.signal);
       }
     }, 3000);
     return;
   }
   setState({ partial: '' });
-  await deliverUtterance(text);
+  await deliverUtterance(text,undefined,undefined,controller.signal);
 }
 
 /** 分句定稿：入列 + 自动作答 */
-async function deliverUtterance(text: string,speaker?:SpeakerDecision,observationId?:string) {
+async function deliverUtterance(text: string,speaker?:SpeakerDecision,observationId?:string,signal?:AbortSignal) {
+  if (signal?.aborted) return;
   const sessionId=state.sessionId;
   if(!speaker||speaker.role==='interviewer')bus.emit('interviewer:utterance', text);
   const msg: ChatMessage = {
@@ -417,7 +445,7 @@ async function deliverUtterance(text: string,speaker?:SpeakerDecision,observatio
   const messages = [...state.messages, msg];
   setState({ messages });
   await persistMessages(messages);
-  if(state.sessionId!==sessionId)return;
+  if(state.sessionId!==sessionId||signal?.aborted)return;
   void translateMessage(msg.id);
   if(speaker&&speaker.role!=='interviewer')return;
   if (getSetting('interview.autoAnswer', true)) {

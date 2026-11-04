@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { evaluateFixture } from './compile-fixture.mjs';
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
-function engine({ completionFails = false, imageSaveFails = false, captureFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[] } = {}) {
+function engine({ completionFails = false, imageSaveFails = false, captureFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[],writeFailure={value:false} } = {}) {
   let resolveRequest, options, requests = 0, sentImages = [], captures = 0;
   let resolveSession, resolveCapture, created = 0;
   const calls = [], saved = [],prompts=[],createdInputs=[];
@@ -25,7 +25,7 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
       if (name === './backend') return {
         readData: (_key, fallback) => _key==='examSessions'?records:fallback,
         createExamSession: async input => { createdInputs.push(input);created++; return deferredSession ? new Promise(resolve => { resolveSession = resolve; }) : { id: 'synthetic-session' }; },
-        updateExamSession: async (_id, record) => { calls.push('persist'); saved.push(record); },
+        updateExamSession: async (_id, record) => {if(writeFailure.value)throw new Error('synthetic disk full');calls.push('persist'); saved.push(record); },
         completeExamSession: async () => { if (completionFails) throw new Error('Disk unavailable'); calls.push('complete'); },
       };
       if (name === './ai') return { EXAM_SYSTEM_PROMPT: '', buildExamUserPrompt: () => 'test', chatWithImages: async (_prompt, _images, opts) => {
@@ -143,7 +143,21 @@ test('a record-save failure cannot trap the user in an unclosable exam overlay',
   const h = engine({ completionFails: true }); await h.api.startExamSession(null);
   await assert.rejects(h.api.endExamSession(false), /Disk unavailable/);
   assert.ok(h.calls.includes('hide') && h.calls.includes('main'));
-  assert.equal(h.api.getSolverState().sessionId, null);
+  assert.equal(h.api.getSolverState().sessionId, 'synthetic-session');
+  assert.match(h.api.getSolverState().errorMessage,/未保存内容已保留/);
+});
+
+test('a failed ending restores the unsaved tail on resume and can retry without late output replacing it',async()=>{
+  const writeFailure={value:false},h=engine({writeFailure,records:[{id:'synthetic-session',status:'ACTIVE',questions:[]}]});
+  const request=h.api.solve({screenshots:['image']});await flush();h.options().onDelta('<exam-question>题目</exam-question><exam-answer>尚未保存的尾部');
+  writeFailure.value=true;await assert.rejects(h.api.endExamSession(false),/disk full/);
+  assert.ok(h.calls.includes('hide')&&h.calls.includes('main'));
+  h.api.prepareExamRun('resume-after-failure',null,undefined,'synthetic-session');
+  assert.equal(h.api.getSolverState().turns[0].body,'尚未保存的尾部');
+  assert.match(h.api.getSolverState().errorMessage,/未保存内容已恢复/);
+  writeFailure.value=false;await h.api.endExamSession(false);h.resolve('迟到答案');await request;
+  assert.equal(h.saved.at(-1).questions[0].answer,'尚未保存的尾部');
+  assert.equal(h.api.getSolverState().sessionId,null);
 });
 
 test('exam records retain recognized question text separately from the answer', async () => {

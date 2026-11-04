@@ -122,6 +122,7 @@ let turnSequence = 0;
 let examRunId: string | null = null;
 let checkpointTimer: number | null = null;
 let turnWrites: Promise<void> = Promise.resolve();
+const unsavedTurns = new Map<string,SolverTurn[]>();
 function turnId() { return `t${Date.now()}-${++turnSequence}`; }
 function cancelRequest() {
   generation++;
@@ -173,8 +174,8 @@ export function prepareExamRun(runId:string, goalId:string|null,interviewSession
   setState({sessionId:null,goalId,interviewSessionId,selectedTurnId:undefined,mode:examModeInfo(getSetting(modeSettingKey(),'quick')).key as ExamModeKey,
     phase:'idle',turns:[],pendingScreenshots:[],activeTurnId:null,elapsedSec:0,statusText:'',errorMessage:null});
   const saved=readData<import('./backend').ExamSessionRecord[]>('examSessions',[]).find(session=>session.status==='ACTIVE' && (interviewSessionId ? session.interviewSessionId===interviewSessionId : !!resumeSessionId && session.id===resumeSessionId && !session.interviewSessionId));
-  if(saved){const turns=saved.questions.map(question=>({...question,body:question.answer,reasoning:'',reasoningDone:true,reasoningDurationMs:0,followUpOptions:[]}));
-    setState({sessionId:saved.id,turns,selectedTurnId:turns[turns.length-1]?.id});}
+  if(saved){const pending=unsavedTurns.get(saved.id);const turns=pending||saved.questions.map(question=>({...question,body:question.answer,reasoning:'',reasoningDone:true,reasoningDurationMs:0,followUpOptions:[]}));
+    setState({sessionId:saved.id,turns,selectedTurnId:turns[turns.length-1]?.id,...(pending?{phase:'error' as const,errorMessage:'上次未保存内容已恢复，请重试保存后再关闭。'}:{})});}
   else if(resumeSessionId) setState({phase:'error',errorMessage:'未找到可恢复的笔试记录，请返回工作台重新尝试。'});
 }
 
@@ -233,7 +234,8 @@ async function persistTurns() {
       createdAt: t.createdAt,
     }));
   const sessionId = state.sessionId;
-  const write = turnWrites.catch(() => {}).then(() => updateExamSession(sessionId, { questions }));
+  const snapshot=state.turns.map(turn=>({...turn}));
+  const write = turnWrites.catch(() => {}).then(() => updateExamSession(sessionId, { questions })).then(()=>{unsavedTurns.delete(sessionId);},error=>{unsavedTurns.set(sessionId,snapshot);throw error;});
   turnWrites = write;
   await write;
 }
@@ -562,12 +564,18 @@ export async function abortSolve(): Promise<void> {
 
 export async function endExamSession(relaunch: boolean): Promise<void> {
   cancelRequest();
+  const current=generation,sessionId=state.sessionId;
   const { hideOverlay, setSessionActive } = await import('./bridge');
+  let saved = false;
   try {
-    const sessionId = state.sessionId;
     if (sessionId) { await persistTurns(); await completeExamSession(sessionId); }
+    saved = true;
+  } catch (error) {
+    if(current===generation)setState({phase:'error',statusText:'',activeTurnId:null,errorMessage:`结束前保存失败，未保存内容已保留。请勿退出应用；恢复上次笔试后重试保存或复制答案：${String((error as Error).message || error)}`});
+    throw error;
   } finally {
-    setState({ sessionId: null, phase: 'idle', turns: [], statusText: '', pendingScreenshots: [], activeTurnId: null, errorMessage: null });
+    if(current===generation){
+    if(saved)setState({ sessionId: null, phase: 'idle', turns: [], statusText: '', pendingScreenshots: [], activeTurnId: null, errorMessage: null });
     if (tickTimer) { window.clearInterval(tickTimer); tickTimer = null; }
     try { await setSessionActive(false); }
     finally {
@@ -575,6 +583,7 @@ export async function endExamSession(relaunch: boolean): Promise<void> {
       await cmd('cmd_dual_stop').catch(() => {});
       try { await hideOverlay(); }
       finally { const { showMain } = await import('./bridge'); void relaunch; await showMain(); }
+    }
     }
   }
 }
