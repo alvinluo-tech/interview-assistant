@@ -325,6 +325,93 @@ mod tests {
     use super::*;
 
     #[test]
+    fn connection_slots_are_bounded_and_released_on_drop() {
+        let slots = Arc::new(ConnectionSlots::new(2));
+        let first = slots.try_acquire().unwrap();
+        let second = slots.try_acquire().unwrap();
+        assert!(slots.try_acquire().is_none());
+        drop(first);
+        let third = slots.try_acquire().unwrap();
+        assert!(slots.try_acquire().is_none());
+        drop((second, third));
+        assert_eq!(slots.used.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn concurrent_connections_cannot_exceed_the_global_limit() {
+        let slots = Arc::new(ConnectionSlots::new(4));
+        let ready = Arc::new(std::sync::Barrier::new(17));
+        let release = Arc::new(std::sync::Barrier::new(17));
+        let mut threads = Vec::new();
+        for _ in 0..16 {
+            let (slots,ready,release) = (slots.clone(),ready.clone(),release.clone());
+            threads.push(std::thread::spawn(move || {
+                let permit = slots.try_acquire();
+                ready.wait();
+                release.wait();
+                drop(permit);
+            }));
+        }
+        ready.wait();
+        assert_eq!(slots.used.load(Ordering::SeqCst), 4);
+        release.wait();
+        for thread in threads { thread.join().unwrap(); }
+        assert_eq!(slots.used.load(Ordering::SeqCst), 0);
+    }
+
+    fn tcp_pair() -> (TcpStream,TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server,_) = listener.accept().unwrap();
+        (server,client)
+    }
+
+    #[test]
+    fn headers_complete_within_the_deadline_and_keep_prefetched_bytes() {
+        let (mut server,mut client) = tcp_pair();
+        client.write_all(b"GET /?token=synthetic HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let bytes = read_request_head(&mut server,&AtomicBool::new(false),std::time::Instant::now()+std::time::Duration::from_secs(1)).unwrap();
+        assert!(bytes.ends_with(b"\r\n\r\n"));
+    }
+
+    #[test]
+    fn slow_drip_headers_do_not_renew_the_absolute_deadline() {
+        let (mut server,mut client) = tcp_pair();
+        let stop = Arc::new(AtomicBool::new(false));
+        let sender_stop = stop.clone();
+        let sender = std::thread::spawn(move || {
+            while !sender_stop.load(Ordering::SeqCst) {
+                if client.write_all(b"x").is_err() { break; }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        });
+        let began = std::time::Instant::now();
+        let result = read_request_head(&mut server,&stop,began+std::time::Duration::from_millis(80));
+        stop.store(true,Ordering::SeqCst);sender.join().unwrap();
+        assert_eq!(result.unwrap_err().kind(),std::io::ErrorKind::TimedOut);
+        assert!(began.elapsed()<std::time::Duration::from_secs(1));
+    }
+
+    #[test]
+    fn oversized_and_incomplete_headers_are_rejected() {
+        let (mut server,mut client) = tcp_pair();
+        client.write_all(&vec![b'x';8193]).unwrap();
+        let result = read_request_head(&mut server,&AtomicBool::new(false),std::time::Instant::now()+std::time::Duration::from_secs(1));
+        assert_eq!(result.unwrap_err().kind(),std::io::ErrorKind::InvalidData);
+        let (mut server,mut client) = tcp_pair();
+        client.write_all(b"GET / HTTP/1.1\r\n").unwrap();
+        drop(client);
+        assert_eq!(read_request_head(&mut server,&AtomicBool::new(false),std::time::Instant::now()+std::time::Duration::from_secs(1)).unwrap_err().kind(),std::io::ErrorKind::UnexpectedEof);
+    }
+
+    #[test]
+    fn stopping_a_session_cancels_its_pending_header_reads() {
+        let (mut server,_client) = tcp_pair();
+        let result = read_request_head(&mut server,&AtomicBool::new(true),std::time::Instant::now()+std::time::Duration::from_secs(1));
+        assert_eq!(result.unwrap_err().kind(),std::io::ErrorKind::Interrupted);
+    }
+
+    #[test]
     fn pairing_requires_a_nonempty_exact_token_on_the_correct_route() {
         let token = "0123456789abcdef0123456789abcdef";
         assert!(authorized_request(&format!("GET /?token={token} HTTP/1.1"), token, false));
