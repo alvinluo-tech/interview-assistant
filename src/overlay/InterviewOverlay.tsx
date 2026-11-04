@@ -60,8 +60,6 @@ import {
 import { useDwell, usePlatform } from './platform';
 import {getSpeechProfile,useSpeechProfile} from '@/lib/speechPreferences';
 
-let bootstrapping: Promise<void> | null = null;
-
 export function InterviewOverlay({ preview }: { preview?: boolean }) {
   exposeEngineDebug();
   const rawStyle = useSetting('overlay.style', DEFAULT_OVERLAY_STYLE)[0];
@@ -76,14 +74,13 @@ export function InterviewOverlay({ preview }: { preview?: boolean }) {
   // 浮窗侧负责创建会话并开始采集（工作台只传参数）
   useEffect(() => {
     if (preview) return;
-    if (bootstrapping) return;
-    const state = getInterviewEngineState();
-    if (state.sessionId || state.status === 'connecting') return;
+    const controller = new AbortController();
     const cfg = (
       window as unknown as { __ml_pendingConfig?: { goalId: string | null; resumeId: string | null; materialIds: string[]; audioSource: 'SPEAKER' | 'PHONE' | 'MICROPHONE' } }
     ).__ml_pendingConfig;
-    bootstrapping = (async () => {
+    void (async () => {
       const { getSetting } = await import('@/lib/store');
+      if (controller.signal.aborted) return;
       type PendingCfg = {
         goalId: string | null;
         resumeId: string | null;
@@ -93,10 +90,15 @@ export function InterviewOverlay({ preview }: { preview?: boolean }) {
       const pending: PendingCfg | null =
         cfg ?? (getSetting<PendingCfg | null>('interview.pendingConfig', null) ?? null);
       if (!pending) return;
+      const current = getInterviewEngineState();
+      if (current.sessionId) {
+        if (current.status === 'connecting') await beginListening(current.audio.source,current.sessionId);
+        return;
+      }
       // 已有进行中的会话（浮窗重载/重新显示）→ 恢复历史，不新建
       const storedId = getSetting<string | null>('interview.sessionId', null);
       if (storedId && resumeInterviewSession(storedId, pending.goalId, pending.resumeId)) {
-        await beginListening(pending.audioSource ?? 'SPEAKER');
+        await beginListening(pending.audioSource ?? 'SPEAKER',storedId);
         return;
       }
       const session = await startInterview({
@@ -104,14 +106,18 @@ export function InterviewOverlay({ preview }: { preview?: boolean }) {
         resumeId: pending.resumeId,
         materialIds: pending.materialIds ?? [],
         audioSource: pending.audioSource ?? 'SPEAKER',
-      });
-      if (getInterviewEngineState().sessionId !== session.id || getInterviewEngineState().status === 'ended') return;
+      },controller.signal);
+      const ownsSession = () => !controller.signal.aborted && getInterviewEngineState().sessionId === session.id && getInterviewEngineState().status !== 'ended';
+      if (!ownsSession()) return;
       const { setSetting } = await import('@/lib/store');
+      if (!ownsSession()) return;
       await setSetting('interview.sessionId', session.id);
-      await beginListening(pending.audioSource ?? 'SPEAKER');
+      if (!ownsSession()) return;
+      await beginListening(pending.audioSource ?? 'SPEAKER',session.id);
     })().catch((e) => {
-      reportInterviewError(e);
-    }).finally(() => { bootstrapping = null; });
+      if (!controller.signal.aborted) reportInterviewError(e);
+    });
+    return () => controller.abort();
   }, [preview]);
 
   return <InterviewShell skin={skin} preview={preview} />;

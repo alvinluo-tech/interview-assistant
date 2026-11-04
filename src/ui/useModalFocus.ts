@@ -1,23 +1,90 @@
 import {useEffect,useRef,type RefObject} from 'react';
 
-/** Keep keyboard input within a modal even when controls change during streaming. */
-export function useModalFocus(root:RefObject<HTMLElement|null>,open:boolean,onEscape?:()=>void,initial?:RefObject<HTMLElement|null>) {
+interface ModalEntry {
+  element: HTMLElement;
+  parent?: HTMLElement | null;
+  previous: HTMLElement | null;
+  initial?: RefObject<HTMLElement | null>;
+  escape: {current:(()=>void)|undefined};
+  zIndex: string;
+}
+const stack: ModalEntry[] = [];
+const inert = new Map<HTMLElement,boolean>();
+let overflow = '', observer: MutationObserver | undefined;
+const top = () => stack[stack.length-1];
+export const isTopModal = (element: HTMLElement | null) => !!element && top()?.element === element;
+const controls = (entry: ModalEntry) => Array.from(entry.element.querySelectorAll<HTMLElement>(
+  'button,input,textarea,select,a[href],summary,[contenteditable],[tabindex]',
+)).filter(item => item.tabIndex >= 0 && !item.matches(':disabled') && !item.closest('[inert]') && item.getClientRects().length > 0);
+const focus = (entry: ModalEntry) => {
+  const preferred = entry.initial?.current;
+  (preferred?.isConnected && entry.element.contains(preferred) ? preferred : controls(entry)[0] || entry.element).focus();
+};
+function sync() {
+  const wanted = new Set<HTMLElement>();
+  let element: HTMLElement | null = top()?.element || null;
+  while (element?.parentElement) {
+    const parent: HTMLElement = element.parentElement;
+    for (const child of Array.from(parent.children)) if (child !== element && child instanceof HTMLElement) wanted.add(child);
+    if (parent === document.body) break;
+    element = parent;
+  }
+  for (const [child,previous] of inert) if (!wanted.has(child)) {child.inert=previous;inert.delete(child);}
+  for (const child of wanted) {if(!inert.has(child))inert.set(child,child.inert);child.inert=true;}
+  stack.forEach((entry,index)=>{entry.element.style.zIndex=String(50+index*10);});
+}
+function onFocus(event: FocusEvent) {
+  const entry=top();if(entry && !entry.element.contains(event.target as Node))focus(entry);
+}
+function onKey(event: KeyboardEvent) {
+  const entry=top();if(!entry)return;
+  if(event.isComposing)return;
+  if(event.key==='Escape') {
+    // A locked modal must also stop Escape from dismissing a lower layer.
+    event.preventDefault();event.stopImmediatePropagation();entry.escape.current?.();return;
+  }
+  if(event.key!=='Tab')return;
+  const items=controls(entry),first=items[0]||entry.element,last=items[items.length-1]||entry.element;
+  if(!items.length || !entry.element.contains(document.activeElement) || (!event.shiftKey && document.activeElement===last) ||
+    (event.shiftKey && (document.activeElement===first || document.activeElement===entry.element))) {
+    event.preventDefault();(event.shiftKey?last:first).focus();
+  }
+}
+
+/** One stack owns focus/inert/Escape, including portals and nested StrictMode mounts. */
+export function useModalFocus(root: RefObject<HTMLElement|null>,open: boolean,onEscape?:()=>void,
+  initial?: RefObject<HTMLElement|null>,parent?: RefObject<HTMLElement|null>) {
   const escape=useRef(onEscape);escape.current=onEscape;
   useEffect(()=>{
     const element=root.current;if(!open||!element)return;
-    const previous=document.activeElement as HTMLElement|null;
-    const backgrounds=Array.from(document.body.children).filter(child=>!child.contains(element)) as HTMLElement[];
-    const inert=backgrounds.map(child=>child.inert);backgrounds.forEach(child=>{child.inert=true;});
-    const controls=()=>Array.from(element.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex]:not([tabindex="-1"])')).filter(item=>!item.closest('[inert]')&&item.getClientRects().length>0);
-    const focus=()=>{(initial?.current||controls()[0]||element).focus();};
-    const onFocus=(event:FocusEvent)=>{if(!element.contains(event.target as Node))focus();};
-    const onKey=(event:KeyboardEvent)=>{
-      if(event.key==='Escape'&&escape.current){event.preventDefault();event.stopPropagation();escape.current();return;}
-      if(event.key!=='Tab')return;
-      const items=controls(),first=items[0]||element,last=items[items.length-1]||element;
-      if(!element.contains(document.activeElement)||(!event.shiftKey&&document.activeElement===last)||(event.shiftKey&&(document.activeElement===first||document.activeElement===element))){event.preventDefault();(event.shiftKey?last:first).focus();}
+    const entry: ModalEntry={element,parent:parent?.current,previous:document.activeElement as HTMLElement|null,initial,escape,zIndex:element.style.zIndex};
+    if(!stack.length) {
+      overflow=document.body.style.overflow;document.body.style.overflow='hidden';
+      document.addEventListener('focusin',onFocus,true);window.addEventListener('keydown',onKey,true);
+      observer=new MutationObserver(sync);observer.observe(document.body,{childList:true});
+    }
+    // Child effects can run before their parent's effect on the first mount.
+    const child=stack.findIndex(item=>item.parent===element);
+    if(child<0)stack.push(entry);else stack.splice(child,0,entry);
+    sync();if(top()===entry)focus(entry);
+    return()=>{
+      const index=stack.indexOf(entry);if(index<0)return;
+      const wasTop=top()===entry;
+      stack.splice(index,1);element.style.zIndex=entry.zIndex;
+      // Closing a whole subtree returns focus to its opener, not a detached input.
+      for(const item of stack)if(item.previous && element.contains(item.previous))item.previous=entry.previous;
+      sync();
+      if(!stack.length) {
+        observer?.disconnect();observer=undefined;document.body.style.overflow=overflow;
+        document.removeEventListener('focusin',onFocus,true);window.removeEventListener('keydown',onKey,true);
+      }
+      const restore = () => {
+        const current=top();
+        if(entry.previous?.isConnected && !entry.previous.closest('[inert]') && (!current||current.element.contains(entry.previous)))entry.previous.focus();
+        else if(current?.element.isConnected && !current.element.contains(document.activeElement))focus(current);
+      };
+      // Restore synchronously so StrictMode's next setup records the real opener.
+      if(wasTop) {restore();queueMicrotask(restore);}
     };
-    focus();document.addEventListener('focusin',onFocus);window.addEventListener('keydown',onKey,true);
-    return()=>{document.removeEventListener('focusin',onFocus);window.removeEventListener('keydown',onKey,true);backgrounds.forEach((child,index)=>{child.inert=inert[index];});queueMicrotask(()=>{if(previous?.isConnected&&!previous.closest('[inert]'))previous.focus();});};
-  },[root,open,initial]);
+  },[root,open,initial,parent]);
 }

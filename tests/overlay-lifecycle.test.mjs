@@ -2,31 +2,44 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluateFixture} from './compile-fixture.mjs';
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
-const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
+const deferred=()=>{let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});return {promise,resolve,reject};};
 function fixture(file,modules,extra={}){return evaluateFixture(file,{exports:{},console,AbortController,DOMException,Date,performance,Int16Array,Float32Array,Uint8Array,ArrayBuffer,DataView,Blob,require:name=>{if(!(name in modules))throw Error(`Unmocked ${name}`);return modules[name];},...extra});}
 
-function visibility(){
-  const pending=deferred(),effects=[],events={},state=[];let index=0;
+function visibility({deferRegistration=false}={}){
+  const pending=deferred(),effects=[],events={},state=[],registrations=[];let index=0,queries=0;
+  const register=(name,fn)=>{const apply=()=>{events[name]=fn;return ()=>delete events[name];};if(!deferRegistration)return Promise.resolve(apply());const wait=deferred();registrations.push(()=>wait.resolve(apply()));return wait.promise;};
   const api=fixture('src/overlay/OverlayApp.tsx',{
     react:{useEffect:fn=>effects.push(fn),useRef:value=>({current:value}),useState:value=>{const at=index++;state[at]=value;return [value,next=>state[at]=typeof next==='function'?next(state[at]):next];}},
     'react/jsx-runtime':{},'@tauri-apps/api/window':{},
-    '@/lib/bridge':{onEvent:(name,fn)=>{events[name]=fn;return ()=>delete events[name];},overlayShowSeq:()=>pending.promise},
+    '@/lib/bridge':{onEvent:(name,fn)=>{events[name]=fn;return ()=>delete events[name];},listenEvent:register,overlayShowSeq:()=>{queries++;return pending.promise;}},
     '@/lib/store':{useSetting:()=>[{}],getSetting:()=> 'exam'},'@/lib/overlayStyle':{normalizeStyle:value=>value},
     './ExamOverlay':{},'./InterviewOverlay':{},'./platform':{},'./widgets':{},'@/lib/interviewLifecycle':{},'@/ui/primitives':{},
   },{window:{}});
-  api.OverlayApp();const close=effects[2]();return {pending,state,events,close};
+  api.OverlayApp();const close=effects[2]();return {pending,state,events,close,registrations,get queries(){return queries;}};
 }
 test('a hidden overlay cannot be reactivated by an older visibility snapshot',async()=>{
-  const h=visibility();h.events['overlay-shown']({seq:7});h.events['overlay-hidden']();h.pending.resolve(7);await flush();assert.equal(h.state[0],false);h.close();
+  const h=visibility();await flush();h.events['overlay-shown']({seq:7});h.events['overlay-hidden']();h.pending.resolve(7);await flush();assert.equal(h.state[0],false);h.close();
 });
 test('a late initial snapshot cannot change a newer shown sequence',async()=>{
-  const h=visibility();h.events['overlay-shown']({seq:9});h.pending.resolve(7);await flush();assert.equal(h.state[0],true);assert.equal(h.state[2],9);h.close();
+  const h=visibility();await flush();h.events['overlay-shown']({seq:9});h.pending.resolve(7);await flush();assert.equal(h.state[0],true);assert.equal(h.state[2],9);h.close();
 });
 test('a disposed visibility effect ignores its pending snapshot',async()=>{
   const h=visibility();h.close();h.pending.resolve(3);await flush();assert.equal(h.state[0],false);
 });
 test('duplicate native shown events mount the business component only once',async()=>{
-  const h=visibility();h.events['overlay-shown']({seq:9});const before=h.state[1];h.events['overlay-shown']({seq:9});assert.equal(h.state[1],before);h.pending.resolve(0);await flush();h.close();
+  const h=visibility();await flush();h.events['overlay-shown']({seq:9});const before=h.state[1];h.events['overlay-shown']({seq:9});assert.equal(h.state[1],before);h.pending.resolve(0);await flush();h.close();
+});
+test('visibility snapshot waits until both native subscriptions become ready',async()=>{
+  const h=visibility({deferRegistration:true});await flush();assert.equal(h.queries,0);h.registrations[0]();await flush();assert.equal(h.queries,0);h.registrations[1]();await flush();assert.equal(h.queries,1);h.pending.resolve(0);await flush();h.close();
+});
+test('disposing pending visibility subscriptions releases late registrations without querying',async()=>{
+  const h=visibility({deferRegistration:true});h.close();h.registrations.forEach(register=>register());await flush();assert.equal(h.queries,0);assert.equal(Object.keys(h.events).length,0);
+});
+test('events during partial visibility subscription setup cannot start a business component',async()=>{
+  const h=visibility({deferRegistration:true});h.registrations[0]();await flush();h.events['overlay-shown']({seq:8});assert.equal(h.state[0],false);h.registrations[1]();await flush();h.pending.resolve(0);await flush();assert.equal(h.state[0],false);h.close();
+});
+test('a failed initial visibility query keeps subscriptions available for later shown and hidden events',async()=>{
+  const h=visibility();await flush();h.pending.reject(Error('synthetic query failure'));await flush();assert.equal(typeof h.events['overlay-hidden'],'function');h.events['overlay-shown']({seq:9});assert.equal(h.state[0],true);h.events['overlay-hidden']();assert.equal(h.state[0],false);h.close();
 });
 
 function interview({deferSetting=true,createGate,storedSession=false}={}){

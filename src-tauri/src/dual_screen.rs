@@ -8,7 +8,7 @@
  */
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -17,6 +17,7 @@ pub struct DualState {
     token: Mutex<String>,
     peer_tx: Mutex<Option<Arc<mpsc::SyncSender<String>>>>,
     stop_flag: Mutex<Arc<AtomicBool>>,
+    connections: Arc<ConnectionSlots>,
 }
 
 impl Default for DualState {
@@ -26,6 +27,7 @@ impl Default for DualState {
             token: Mutex::new(String::new()),
             peer_tx: Mutex::new(None),
             stop_flag: Mutex::new(Arc::new(AtomicBool::new(false))),
+            connections: Arc::new(ConnectionSlots::new(32)),
         }
     }
 }
@@ -34,6 +36,45 @@ impl DualState {
 }
 
 const PAGE: &str = include_str!("dual_page.html");
+
+// Shared across restarts: unfinished old handshakes still count toward the cap.
+struct ConnectionSlots { used: AtomicUsize, limit: usize }
+struct ConnectionPermit { slots: Arc<ConnectionSlots> }
+impl ConnectionSlots {
+    fn new(limit: usize) -> Self { Self { used: AtomicUsize::new(0), limit } }
+    fn try_acquire(self: &Arc<Self>) -> Option<ConnectionPermit> {
+        self.used.fetch_update(Ordering::SeqCst,Ordering::SeqCst,|used| (used<self.limit).then_some(used+1)).ok()?;
+        Some(ConnectionPermit { slots: self.clone() })
+    }
+}
+impl Drop for ConnectionPermit {
+    fn drop(&mut self) { self.slots.used.fetch_sub(1,Ordering::SeqCst); }
+}
+
+fn read_request_head(stream: &mut TcpStream, stopped: &AtomicBool, deadline: std::time::Instant) -> std::io::Result<Vec<u8>> {
+    use std::io::{Error,ErrorKind};
+    let mut buf = Vec::with_capacity(2048);
+    let mut chunk = [0u8;1024];
+    loop {
+        if stopped.load(Ordering::SeqCst) { return Err(Error::new(ErrorKind::Interrupted,"session stopped")); }
+        let remaining = deadline.checked_duration_since(std::time::Instant::now())
+            .filter(|remaining| !remaining.is_zero()).ok_or_else(|| Error::new(ErrorKind::TimedOut,"header deadline"))?;
+        stream.set_read_timeout(Some(remaining.min(std::time::Duration::from_millis(100))))?;
+        match stream.read(&mut chunk) {
+            Ok(0) => return Err(Error::new(ErrorKind::UnexpectedEof,"incomplete headers")),
+            Ok(n) => {
+                buf.extend_from_slice(&chunk[..n]);
+                if let Some(end) = buf.windows(4).position(|bytes| bytes==b"\r\n\r\n") {
+                    if end+4>8192 { return Err(Error::new(ErrorKind::InvalidData,"headers too large")); }
+                    return Ok(buf);
+                }
+                if buf.len()>=8192 { return Err(Error::new(ErrorKind::InvalidData,"headers too large")); }
+            }
+            Err(error) if matches!(error.kind(),ErrorKind::TimedOut|ErrorKind::WouldBlock|ErrorKind::Interrupted) => {},
+            Err(error) => return Err(error),
+        }
+    }
+}
 
 fn random_token() -> Result<String, String> {
     let mut bytes = [0u8; 32];
@@ -93,6 +134,7 @@ pub fn cmd_dual_start(app: AppHandle, state: State<'_, DualState>) -> Result<ser
     *state.token.lock().unwrap() = token.clone();
 
     let app_handle = app.clone();
+    let connections = state.connections.clone();
     std::thread::spawn(move || {
         listener.set_nonblocking(true).ok();
         loop {
@@ -101,8 +143,14 @@ pub fn cmd_dual_start(app: AppHandle, state: State<'_, DualState>) -> Result<ser
             }
             match listener.accept() {
                 Ok((stream, _addr)) => {
+                    let Some(permit) = connections.try_acquire() else { drop(stream); continue; };
                     let app = app_handle.clone();
-                    std::thread::spawn(move || handle_conn(app, stream, session_gen));
+                    let stopped = stop.clone();
+                    let accepted_at = std::time::Instant::now();
+                    let _ = std::thread::Builder::new().name("phone-connection".into()).spawn(move || {
+                        let _permit = permit;
+                        handle_conn(app, stream, session_gen, &stopped,accepted_at);
+                    });
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     std::thread::sleep(std::time::Duration::from_millis(50));
@@ -116,27 +164,17 @@ pub fn cmd_dual_start(app: AppHandle, state: State<'_, DualState>) -> Result<ser
     Ok(serde_json::json!({ "port": port, "token": token, "urls": urls }))
 }
 
-fn handle_conn(app: AppHandle, mut stream: TcpStream, session_gen: u64) {
-    // 读到请求头为止（简陋解析，够用）
-    let mut buf = Vec::with_capacity(2048);
-    let mut chunk = [0u8; 1024];
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
-    loop {
-        match stream.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => {
-                buf.extend_from_slice(&chunk[..n]);
-                if buf.windows(4).any(|w| w == b"\r\n\r\n") || buf.len() > 8192 {
-                    break;
-                }
-            }
-            Err(_) => break,
-        }
-    }
+fn handle_conn(app: AppHandle, mut stream: TcpStream, session_gen: u64, stopped: &AtomicBool,accepted_at: std::time::Instant) {
+    if stream.set_write_timeout(Some(std::time::Duration::from_secs(2))).is_err() { return; }
+    let deadline = accepted_at+std::time::Duration::from_secs(5);
+    let Ok(buf) = read_request_head(&mut stream,stopped,deadline) else { return; };
+    let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now()).filter(|time| !time.is_zero()) else { return; };
+    if stream.set_write_timeout(Some(remaining.min(std::time::Duration::from_secs(2)))).is_err() { return; }
     let head = String::from_utf8_lossy(&buf).to_string();
     let first_line = head.lines().next().unwrap_or_default().to_string();
     let is_ws = head.to_ascii_lowercase().contains("upgrade: websocket");
     let state: State<DualState> = app.state();
+    if stopped.load(Ordering::SeqCst) || state.generation.load(Ordering::SeqCst)!=session_gen { return; }
     let token_ok = authorized_request(&first_line, &state.token.lock().unwrap(), is_ws);
     if !token_ok {
         let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
@@ -157,7 +195,6 @@ fn handle_conn(app: AppHandle, mut stream: TcpStream, session_gen: u64) {
     // WebSocket：tungstenite 接管（回放已读的请求头）
     stream.set_nonblocking(false).ok();
     // Keep the handshake timeout and bound writes, including stopped peers.
-    stream.set_write_timeout(Some(std::time::Duration::from_secs(2))).ok();
     let prefixed = PrefixedStream { prefix: buf, pos: 0, inner: stream };
     let config = tungstenite::protocol::WebSocketConfig {
         max_message_size: Some(64 * 1024),

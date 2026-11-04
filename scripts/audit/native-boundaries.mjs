@@ -113,6 +113,11 @@ try{
     finally{await writeFile(file,backup);}
     return {verdict:'pass',observed:{invalidRestoreRejected:true,liveDataUnchanged:true}};
   });
+  await check('N13','Bundled native content enforces CSP while IPC and trusted bootstrap scripts work',async()=>{
+    const observed=await desktop.evaluate(`(async()=>{window.__cspInjected=false;const element=document.createElement('script');element.textContent='window.__cspInjected=true';document.head.append(element);await new Promise(resolve=>setTimeout(resolve,50));element.remove();return {inlineBlocked:!window.__cspInjected,bootstrapLoaded:Array.isArray(window.__auditErrors),nativeIpcAvailable:typeof __TAURI_INTERNALS__.invoke==='function'};})()`);
+    assert.equal(observed.inlineBlocked,true);assert.equal(observed.bootstrapLoaded,true);assert.equal(observed.nativeIpcAvailable,true);
+    return {verdict:'pass',observed};
+  });
   assert.deepEqual(await desktop.evaluate('__auditErrors'),[]);
 }finally{
   await writeFile(`artifacts/audit/${process.argv.includes('--verify')?'fixed-':''}native-boundaries.json`,JSON.stringify({createdAt:new Date().toISOString(),identifier,results},null,2));

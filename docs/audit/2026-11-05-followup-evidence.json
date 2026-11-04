@@ -1,0 +1,1278 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-11-04T16:47:18.509Z",
+  "report": "2026-11-05-followup-fixes.md",
+  "sourceFingerprintSha256": "8de8fab6effa12fea7b4de48d64386810da93359a1a88db8a9cf66e4da65a9f2",
+  "sourceHashes": [
+    {
+      "file": "package.json",
+      "sha256": "25681cf5531325f84e37d5681b11a424c91e033b33bfd89c2b9f4810a0fcacc9"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "8ed30eabee5bf7c8714c2f72b53fa7453437323dfb7f6228a2ec469a49af52fc"
+    },
+    {
+      "file": "scripts/audio-smoke.mjs",
+      "sha256": "46e47d9fd9a5ac83bf71a6abf1c5fd9af626c85d1876df779681e5646bc031d6"
+    },
+    {
+      "file": "scripts/audit/boundary-probes.mjs",
+      "sha256": "258afdbaba51aed10a36e0968e75e68af15470ec703ec9f7e833f0fcd54796c5"
+    },
+    {
+      "file": "scripts/audit/browser-boundaries.mjs",
+      "sha256": "f77dfef64173474e95a1dc759c646609cd68c1793f7cb67671e23d9a4616ad71"
+    },
+    {
+      "file": "scripts/audit/csp-boundaries.mjs",
+      "sha256": "cb1d8cbf753299787ea6801f0b8260461512ca435d6d542ef73ca12a7752b615"
+    },
+    {
+      "file": "scripts/audit/deep-review-phone-render.mjs",
+      "sha256": "e99acf5cc55546ba43fa2c8d9765fe797471b5ee7ae7782b05aa1f8e886c3823"
+    },
+    {
+      "file": "scripts/audit/deep-review-revalidation.mjs",
+      "sha256": "2654ed9d9028e67190c28f620e4d83def7d6fbf3e2f8d4a0c151ad1c713e362f"
+    },
+    {
+      "file": "scripts/audit/modal-boundaries.mjs",
+      "sha256": "fc535abcc817c04153fab3fa0e732bdc533dcfd9e750c0e7a70f2e3b59ba39ab"
+    },
+    {
+      "file": "scripts/audit/native-boundaries.mjs",
+      "sha256": "a67417fa83d7ee2a711156667aeee8bcad7956256c833c82f78fdccab0da82c4"
+    },
+    {
+      "file": "scripts/audit/protocol-fuzz.mjs",
+      "sha256": "abd84ed597ad43c020ced6fb92880e605e452a834e3ed54156adf2985ad46a4a"
+    },
+    {
+      "file": "scripts/audit/run-browser-suites.mjs",
+      "sha256": "2d74a42234927d95cf2bcfc4c69e8235fee69ed7a20c207082b473ec9d30c18d"
+    },
+    {
+      "file": "scripts/audit/second-review-revalidation.mjs",
+      "sha256": "6b2a71ff198283ea2f5d1bf05c90e79c4f2f14d0380d11486ed73e386e245332"
+    },
+    {
+      "file": "scripts/audit/write-evidence.mjs",
+      "sha256": "59e4efb86c59747ac9c1d8077f8e91d3bdba9e414b66be80dac9e9cbe3801d24"
+    },
+    {
+      "file": "scripts/audit/write-fix-evidence.mjs",
+      "sha256": "c39fe0d7d55cb27bce0d32b873fb7798e5727cdb07379dd4c53eb6750b5e99e0"
+    },
+    {
+      "file": "scripts/audit/write-followup-evidence.mjs",
+      "sha256": "cfd8f001cc16a92e32ebf4d3e74ae024c5aa6f5dc5a7c0a536389c5dcd2f421c"
+    },
+    {
+      "file": "scripts/bailian-ui-smoke.mjs",
+      "sha256": "99aa262e09dd17934bae9d32e323be3eff124209fa662848a71d71730abe1e7e"
+    },
+    {
+      "file": "scripts/bug-review-ui-smoke.mjs",
+      "sha256": "ab931fdde6da8ca8c01b42103d2f7a4b5fe051dca4b6b0d6178a45e07198331d"
+    },
+    {
+      "file": "scripts/byok-smoke.mjs",
+      "sha256": "a40d3b40425627e45a0ccf475b368d917da907f046bbb8ae45b5310484f673a7"
+    },
+    {
+      "file": "scripts/check-realtime-module.mjs",
+      "sha256": "d098c44ae7ad11bc24d70d5b94db5213974e14ea5a635b8d6f8e9f5091425feb"
+    },
+    {
+      "file": "scripts/configure-updater-secrets.ps1",
+      "sha256": "04071dc8d8296e06cba1cb4ee87f243dfa8badb8ce36fa0f99c42ebc7c2a91cc"
+    },
+    {
+      "file": "scripts/context-smoke.mjs",
+      "sha256": "3d5874485d9bd617a51f5ab5a0c4ed6a8a18ac708ba0c4494ad6aa3958628309"
+    },
+    {
+      "file": "scripts/customize-installer-template.mjs",
+      "sha256": "5a0ef20def154144e48279f65b61e033cae44b8005d06929b8407752491283a8"
+    },
+    {
+      "file": "scripts/desktop-cdp.mjs",
+      "sha256": "6783d88eb3a3c4a8700de69e56aea87d14bd0727c8d81455c1b34c23b3ab3d1c"
+    },
+    {
+      "file": "scripts/experience-ui-smoke.mjs",
+      "sha256": "2876ef61129c2bfc8c989e5c1956158606a3d56b64ad89e3880503477ee3aea5"
+    },
+    {
+      "file": "scripts/installer-branding-smoke.mjs",
+      "sha256": "02b106067ae3ec904963e74dab18d79abf0703db3b4aa2c921b5087901ba2b37"
+    },
+    {
+      "file": "scripts/make-brand-icons.py",
+      "sha256": "480c7ba6a31ebacfa12f476f225bcaa0f927be02611bf51704c040cca380c2d8"
+    },
+    {
+      "file": "scripts/make-installer-branding.ps1",
+      "sha256": "b4efefaafff052c8994fc857234a0f232c077f26b0bf6ae748a43f12f17e281a"
+    },
+    {
+      "file": "scripts/mock-room-smoke.mjs",
+      "sha256": "22f74e517716338b69c48c9969c75745a597026fd554aee830a3e6f7ef5f3c76"
+    },
+    {
+      "file": "scripts/native-installer-preview.mjs",
+      "sha256": "4d769d43ffd3f28b67d2975f3e21b4bbcdcee99e3c46df5b40cbf701b2da17a0"
+    },
+    {
+      "file": "scripts/native-update-preview.mjs",
+      "sha256": "48de977b3fe4955a5fcaabc9900f3bfa5ed52b8be0c812b9a99df170ce12b82d"
+    },
+    {
+      "file": "scripts/overlay-ui-smoke.mjs",
+      "sha256": "23561b33b697b9b2bf78c00d0dceee544bf9ac0f43dab2dbe05621e8ef5ac5ec"
+    },
+    {
+      "file": "scripts/patch-i18n-zhtw.mjs",
+      "sha256": "110331d90a668183dbfa6416f7cbc1fb4c9a1925db1287aeb59143152ba52ab5"
+    },
+    {
+      "file": "scripts/privacy-smoke.mjs",
+      "sha256": "df0205e76a82f2e108d60d7dee60f9715cfb184631b2ae58109365c4ad335a47"
+    },
+    {
+      "file": "scripts/realtime-smoke.mjs",
+      "sha256": "1cbb646ffeb579bd4545d9040862e2147db4ca237fad0d09a0681034359936c7"
+    },
+    {
+      "file": "scripts/release.mjs",
+      "sha256": "5bd9cfeff99438ffcafb16bcbd83885ce1154ca87a219fcb8efaad8755677046"
+    },
+    {
+      "file": "scripts/reliability-smoke.mjs",
+      "sha256": "48f7c1543216b4ecb62fd502c0891805d710825b567e33141266707c4fab8ee3"
+    },
+    {
+      "file": "scripts/setup-updater-key.ps1",
+      "sha256": "2611822d55f89844683152d533b10f9f4333b1bfdd29fb1fd695142ba803a460"
+    },
+    {
+      "file": "scripts/sync-pdf-assets.mjs",
+      "sha256": "8369b4d6705039095dc9db9c888ece8d9033ee1b0397e412312c0b74f4fae8f8"
+    },
+    {
+      "file": "scripts/test-byok.mjs",
+      "sha256": "b359ec418f7327fa47b4aac6c0dca983242acdfac0fed7ed08d53af596237e2d"
+    },
+    {
+      "file": "scripts/test-update-design.mjs",
+      "sha256": "1c843602757b9ff954a294583bc61d33a2941d94c7a40e7506990e98f8861133"
+    },
+    {
+      "file": "scripts/updater-ui-smoke.mjs",
+      "sha256": "4c4dd7dae180e60fbb08e5724baa96b4d2f505b227c4bf60743c1d666e960e22"
+    },
+    {
+      "file": "src-tauri/macos-capture/src/lib.rs",
+      "sha256": "03fb7bb35fdb1317b27d3dfd8297a882103814af38660d693770455fe89ede94"
+    },
+    {
+      "file": "src-tauri/macos-capture/src/media.rs",
+      "sha256": "6ddd4fa9c14533548c5418fe55b9180a333253ef1524d824ee12fb6bf599f0ca"
+    },
+    {
+      "file": "src-tauri/macos-capture/src/native.rs",
+      "sha256": "188eea8f7b9fded43c22ebcb89cab0eaca0b3013520aff3580911fbf48ce1aa4"
+    },
+    {
+      "file": "src-tauri/macos-capture/src/selection.rs",
+      "sha256": "7c8e37be3dcb96fb086b46cfeee8390e13dad35d77d66b995941ef51468163d4"
+    },
+    {
+      "file": "src-tauri/macos-capture/src/tests.rs",
+      "sha256": "ac201801b9f757e3b9cc3b90ecdf76996e8db3206f260020a396c67cf536dcfa"
+    },
+    {
+      "file": "src-tauri/macos-capture/src/window.rs",
+      "sha256": "142a480516a1fcded0c788bcf03ebb09dc6ebf830a1682e47512a8540b3a3941"
+    },
+    {
+      "file": "src-tauri/src/ai_settings.rs",
+      "sha256": "ff52f098eb8592bbb15d3f8c2e213e17c1c37adc6fe3a8c68d2d8d443cff9597"
+    },
+    {
+      "file": "src-tauri/src/attachments.rs",
+      "sha256": "716caa884823646c6c72a0c3a30448058b8a0b5e00ab134cd76bf355bc0a7b62"
+    },
+    {
+      "file": "src-tauri/src/audio.rs",
+      "sha256": "0423dd022a697ac902e5d8b3fc9f369509264ad302a0d92269e33f1d34910538"
+    },
+    {
+      "file": "src-tauri/src/audio_dsp.rs",
+      "sha256": "ca808c36ef4c0bab9cc2832edbf1d96b2b3e4289e7a3e31d10c82b9d0d79c731"
+    },
+    {
+      "file": "src-tauri/src/audio_windows.rs",
+      "sha256": "e67655d323e75340c74cb1016b539a9efbab967506f12112d44f12bc1b26ec17"
+    },
+    {
+      "file": "src-tauri/src/capabilities.rs",
+      "sha256": "daba9a54e18c34d42eaef3906763bb2d098de4b0c1857d753f77dd9891539a12"
+    },
+    {
+      "file": "src-tauri/src/capture.rs",
+      "sha256": "456adfb4a27885abf3b3f5ac65cd0a8323d1f2e234ffd41657a92e1deb8abb2e"
+    },
+    {
+      "file": "src-tauri/src/code_sandbox.rs",
+      "sha256": "fcc8b7707d38532964c9269e582cc7ce88cf6cc55803c897bf4c48d853457dda"
+    },
+    {
+      "file": "src-tauri/src/data_store.rs",
+      "sha256": "99908e675dc8974555572f168f550a25881933f03ae2273a2dd1e8bebb50c859"
+    },
+    {
+      "file": "src-tauri/src/disguise.rs",
+      "sha256": "235e91ba9d84f40887ed43fc8116dfb661494aba46e2eaaeede4372d76475dd5"
+    },
+    {
+      "file": "src-tauri/src/dual_page.html",
+      "sha256": "b34a4f178de72f47fdc70ffa1c9c8aed3093fb2f2c52cc777307dbbfdfe87d6f"
+    },
+    {
+      "file": "src-tauri/src/dual_screen.rs",
+      "sha256": "5d1bf42e8d47846ca9fafae374363bbd16c297cb4b44067ed388c788c8bbc6d1"
+    },
+    {
+      "file": "src-tauri/src/hotkeys.rs",
+      "sha256": "7663078585401803f6c6be0a81728888c585dd184426cc2e13ca9fcb31bdbc2e"
+    },
+    {
+      "file": "src-tauri/src/identity_resources.rs",
+      "sha256": "67a1226818917f280631583cd9f0dafdc2a52b1e97e2eed39daa817141bbbca9"
+    },
+    {
+      "file": "src-tauri/src/lib.rs",
+      "sha256": "5e22174bfe10c85a5369bfc22d430326265705ce9daddd92f169e60e3340923a"
+    },
+    {
+      "file": "src-tauri/src/macos_secrets.rs",
+      "sha256": "9b9624d356c3e620cece5f8558cd54ec79d4152f07fed0da6a2a6107072d69f6"
+    },
+    {
+      "file": "src-tauri/src/main.rs",
+      "sha256": "fc3440bf11f0091dc80e736521d2b51e4caa393ae5527cc5b03c98ea3e5c70cf"
+    },
+    {
+      "file": "src-tauri/src/misc.rs",
+      "sha256": "fef76302ac7ec0a747f0eaf79729e2525db8f6c0e295d206ebe88b88b65473a2"
+    },
+    {
+      "file": "src-tauri/src/overlay.rs",
+      "sha256": "44e1aae3e6b61bef6a012b4e1288814ece823ecbb5a50efc742f1373543b5488"
+    },
+    {
+      "file": "src-tauri/src/protection.rs",
+      "sha256": "486c2afbcd770460b0d68b23dcbfb4bda3c14d3f47a443fbe08d07eb7c80f9c6"
+    },
+    {
+      "file": "src-tauri/src/screen_permissions.rs",
+      "sha256": "da2a0e2f8186a819e3abb93b3c5853bec08cc2b17a82b0712a7b05b583bc0ed8"
+    },
+    {
+      "file": "src-tauri/src/settings.rs",
+      "sha256": "16431d8ca91148e28bce747824ba407522613480254433c1984efeb9c7773dab"
+    },
+    {
+      "file": "src-tauri/src/speaker.rs",
+      "sha256": "65ad14bdd85a1e3650dcf433e0c1879572c40cccec4d2a5b001d19aa9009ab80"
+    },
+    {
+      "file": "src-tauri/src/speech.rs",
+      "sha256": "4b4aa96690d5ca9262be2f56608761b981e08f10a8ba876d628e5e8f10e067c4"
+    },
+    {
+      "file": "src-tauri/src/update_install.rs",
+      "sha256": "317c660e20acae34c28e92fbbb2af8a681392cb50074bea3238a7da73707c0b7"
+    },
+    {
+      "file": "src-tauri/src/updater.rs",
+      "sha256": "760f91c65983b195cfdb341a3cf57c3f0537fef819f6ccaef353e915f09cd38d"
+    },
+    {
+      "file": "src-tauri/src/window_macos.rs",
+      "sha256": "578aaff61a1ccd075c769d80c5c1c5232dbfe52dcb907edee59acd9149fbd7cf"
+    },
+    {
+      "file": "src-tauri/tauri.conf.json",
+      "sha256": "9c82ff8bff3c1f68e773d10d256ffddaa4193474252d47902a38aa0909a7ed0a"
+    },
+    {
+      "file": "src/App.tsx",
+      "sha256": "308aea612051e135d7e04d8e27971bf2f1864be49b845a930e3402d1ec713495"
+    },
+    {
+      "file": "src/ErrorBoundary.tsx",
+      "sha256": "e26b0747f53c06f5cc9beff099b3de6d4be52a258682c55eeff7455208df672d"
+    },
+    {
+      "file": "src/assets/brand.png",
+      "sha256": "2dc1652884dbf3b2bc8318bc91826cbe562bb3a6b96dcef6c354b5d0807ef683"
+    },
+    {
+      "file": "src/assets/react.svg",
+      "sha256": "35ef61ed53b323ae94a16a8ec659b3d0af3880698791133f23b084085ab1c2e5"
+    },
+    {
+      "file": "src/index.css",
+      "sha256": "5502d9972af47c24fbb851f9a5ed6bb4207e76159b70859f7d8807bb451f6d84"
+    },
+    {
+      "file": "src/lib/ai.ts",
+      "sha256": "64aea462e65dc9b610d2566880a372cf51a609d158a9ad403c0b852d239e37e5"
+    },
+    {
+      "file": "src/lib/aiConfig.ts",
+      "sha256": "7b1fb51c9d690da34433053e7513f3563b93e078f0d1df4bf718784c48eae3fc"
+    },
+    {
+      "file": "src/lib/aiContext.ts",
+      "sha256": "adf33fcf60b8405f7a5e41bc2f88d91c48abfc75f53b21495b75fd0dded9dc00"
+    },
+    {
+      "file": "src/lib/aiProtocol.ts",
+      "sha256": "48c328e3f3359535fe33edc3a39c80c1d73fd5c3dcad18c223eb31fef667027f"
+    },
+    {
+      "file": "src/lib/aiRequests.ts",
+      "sha256": "cd565f764f8f9d91527c58ec00fac93cfd154c41ee7c3937974e144627d3c0a4"
+    },
+    {
+      "file": "src/lib/aiSettings.ts",
+      "sha256": "ff13320be8ea6fd4ae5a744d1058c0d8dd6d4264532fb8ef8931a0858a888b73"
+    },
+    {
+      "file": "src/lib/aiTaskPolicy.ts",
+      "sha256": "59d0158c6edad8d509495ec3690d9d78f80b7e8c1735b61a6a73087249e03ecd"
+    },
+    {
+      "file": "src/lib/aiTransport.ts",
+      "sha256": "a4c0c2b0f6963765e403e63e3576bab24fa7cc71d66dce72839f9ab47bff60d6"
+    },
+    {
+      "file": "src/lib/backend.ts",
+      "sha256": "4fd97d011195a73c874a981d892a399602a634ce35713d7f80732c32ccdc59f0"
+    },
+    {
+      "file": "src/lib/bridge.ts",
+      "sha256": "7fe2e1a816353b03de2598e33340e3a836a5b69f0079749d194ee26e83fbc3b9"
+    },
+    {
+      "file": "src/lib/changelog.ts",
+      "sha256": "b3a4609c88f7c7eb2428b83ef5e81980d2e90338068bff5b2078efed1705f0ed"
+    },
+    {
+      "file": "src/lib/desktopAppearance.ts",
+      "sha256": "b7f67ca5b80fde81c408a7e1268cf8df97e8d2a7d6b9820497e9e4196eba30ef"
+    },
+    {
+      "file": "src/lib/documentImport.ts",
+      "sha256": "10979bcbd2d2104b2159915f65653eda2d0423ac758db35886db50492f5831c4"
+    },
+    {
+      "file": "src/lib/documentIngest.ts",
+      "sha256": "34b5668c9668a49bc3e8250cbd423a63473a2fbbfa62ca557e3f60849a3934a7"
+    },
+    {
+      "file": "src/lib/dualCamera.tsx",
+      "sha256": "8da6a20edef1125f9be56ca305153f9fdd712e16bbcbde66842265bf5c74f178"
+    },
+    {
+      "file": "src/lib/dualScreen.ts",
+      "sha256": "5917c1e6ad49025e20b02679b0d6401a7bf2ef6036080de4d8b0a673c17dd87a"
+    },
+    {
+      "file": "src/lib/env.ts",
+      "sha256": "d7d04a039f29ca64f2a76e8495efab1e8d2a0bdf0b5a27a996a74e325fd57bed"
+    },
+    {
+      "file": "src/lib/events.ts",
+      "sha256": "7727951e561b6a0603c9388f6fb07af2a31a70e4d36a2cb89e36d928ba650dc2"
+    },
+    {
+      "file": "src/lib/examEngine.ts",
+      "sha256": "7d383788cd887896340c5e9cec0a8be914f1f47864e8564fe57ad83b55e12c83"
+    },
+    {
+      "file": "src/lib/freeChat.ts",
+      "sha256": "04e8c2e24e7b45041658a1f833ade094825fafd7e669696b27b8bde6c6e97474"
+    },
+    {
+      "file": "src/lib/hotkeys.ts",
+      "sha256": "029ab83dfffa12590c80b653131ac94d469e53ab20ae8d7e0a33d8a82210d889"
+    },
+    {
+      "file": "src/lib/i18n.ts",
+      "sha256": "db726ad80785a536a9efbe0f4c75af68b8d3702d3b000e5c39ff65f347548f31"
+    },
+    {
+      "file": "src/lib/interviewEngine.ts",
+      "sha256": "f6270a6ce0574ac4d736a9028765116f43f3057bab53ac69e666ef487155f86d"
+    },
+    {
+      "file": "src/lib/interviewLifecycle.ts",
+      "sha256": "c29f8b85db2e1f265ca40a589ea9987d57f23dda183e827b5e2d8f043b0a50fc"
+    },
+    {
+      "file": "src/lib/knowledgeContext.ts",
+      "sha256": "e10e612d4d6e6d7172b53264d996d8ed2f37373173509381ead33ff7fdbb57f7"
+    },
+    {
+      "file": "src/lib/microphone.ts",
+      "sha256": "92177f69185b2ae8f07eab0c455aed917d9c47e35a63f57d6db5d6d578c01b87"
+    },
+    {
+      "file": "src/lib/mock.ts",
+      "sha256": "bbed6ef0d455581d7cf9e3fc8c839b8c942bed6992f97227df2aff5f601bc382"
+    },
+    {
+      "file": "src/lib/overlayStyle.ts",
+      "sha256": "a8dcc14d5e08e835acb2bc0b94ac8ce72eb0766783ebe95c0b55a15338826d36"
+    },
+    {
+      "file": "src/lib/preparation.ts",
+      "sha256": "b9541a886fe2051940717efea8b87025c1312f20ac5f4d913679e830848874fa"
+    },
+    {
+      "file": "src/lib/questionSpeaker.ts",
+      "sha256": "080665544ee0e5578a3ca8e185a2d2662b359be61f6bb0ba366532b586f064b0"
+    },
+    {
+      "file": "src/lib/questionSpeech.ts",
+      "sha256": "3cee8f33ba810b34963499bcfd764e8e55103c591ed3db2b3d71489cb62a2897"
+    },
+    {
+      "file": "src/lib/realtimeAsr.ts",
+      "sha256": "5bd2d2ace604c4181cb361fa3e42746c82c3f284e683a5f7103290d174d3a903"
+    },
+    {
+      "file": "src/lib/realtimeAsrProtocol.ts",
+      "sha256": "fc52e6f27c2e273f4c5b119c3d6d1455ec122ef4b9bffb6f8ff52a1fe624df79"
+    },
+    {
+      "file": "src/lib/realtimeTransport.ts",
+      "sha256": "31345254d9dc4d0c843b899746474a7e10c86f2df41e0c449711a651b27c5da9"
+    },
+    {
+      "file": "src/lib/sessionKnowledge.ts",
+      "sha256": "64d0cbdd96be12708ca66cec5b7de02de59ed796c6739ebb6ba02e3130546296"
+    },
+    {
+      "file": "src/lib/speakerClient.ts",
+      "sha256": "9e1509fb4f37d4dc179c7a849f3438c0756030eb19d1b624dbd0b7688fc47499"
+    },
+    {
+      "file": "src/lib/speakerRouting.ts",
+      "sha256": "51e79495886a99f3447de70f6f81626801e5a262eec01a7a38334b9f5a0665a6"
+    },
+    {
+      "file": "src/lib/speechCatalog.ts",
+      "sha256": "fac5df609e3079cf508cf73ee01257cd6f73838fb4c0ab200ee6221f213724a8"
+    },
+    {
+      "file": "src/lib/speechPreferences.ts",
+      "sha256": "dbc712d89eddc386443c0a5fe8609b1b2733467be543c8fc7fdec284723bc604"
+    },
+    {
+      "file": "src/lib/speechProfile.ts",
+      "sha256": "fe97184a91046d4fb5745b0b768ceb52cbc6de44bb3b177db98ff1c6bc39259e"
+    },
+    {
+      "file": "src/lib/speechProtocol.ts",
+      "sha256": "c5a0f7cc014c625aef1011b843c738f37cc1d4511cedafdc6343aff113a782a9"
+    },
+    {
+      "file": "src/lib/speechTranslation.ts",
+      "sha256": "172e0678b42b3001d1ff79b78a795d4f2970bd1e54ba0014f756321419060b64"
+    },
+    {
+      "file": "src/lib/store.ts",
+      "sha256": "aa87f1a47a00efd63479302de192031bfe2881312759fe3080c93943791a445c"
+    },
+    {
+      "file": "src/lib/taskPrompts.ts",
+      "sha256": "c14df20c81d469fb40629a028c826ada59e19be52e38185c25e99432b5cc71bd"
+    },
+    {
+      "file": "src/lib/ttsConfig.ts",
+      "sha256": "654cd796feec22d44837e8a507a143fdf7763ba86e6976b383ff153d31b9d60f"
+    },
+    {
+      "file": "src/lib/ttsPlayback.ts",
+      "sha256": "deb98dd41598ad4972a328ab83eae2cffb4e78d02b4ed20338916b3a9b4df6bd"
+    },
+    {
+      "file": "src/lib/ttsProtocol.ts",
+      "sha256": "abdce0bd7ec915cce0aa84658c1c50f8d15ee1286cbdc3f33342e50c582ce261"
+    },
+    {
+      "file": "src/lib/ttsSession.ts",
+      "sha256": "5d0a556d119b7345893e30897fe7365e5e19896fbb6b1d5b5d67c8c188a1386f"
+    },
+    {
+      "file": "src/lib/ttsSocket.ts",
+      "sha256": "bc1f3375616fac709e10993c2830679ecc4387f0f0ac9bc20d9dd874efbb0501"
+    },
+    {
+      "file": "src/lib/updateCheck.ts",
+      "sha256": "bb782ca71e6f4d63878223dd27847d602a2d026ec58dca417db568247302ae48"
+    },
+    {
+      "file": "src/lib/updatePresentation.ts",
+      "sha256": "9ec12a8e5d85039f852e0ba4ae5b9d6be5d837fbceb61b25c67576e9622c280e"
+    },
+    {
+      "file": "src/lib/updater.ts",
+      "sha256": "2a026bc14b08bc5ff5de19286761f8bd3488f6eba07893bff68a67d002aeda72"
+    },
+    {
+      "file": "src/lib/voiceCall.ts",
+      "sha256": "f084e87aad3d9bbd105cbd5bf87a4618130985d065fd5acccc906f46290de6eb"
+    },
+    {
+      "file": "src/main.tsx",
+      "sha256": "a2da7ed785fb84f441ad6b1f746864ecc25dcd1398a71f24341d0f1a713c7af8"
+    },
+    {
+      "file": "src/main/ChangelogDialog.tsx",
+      "sha256": "d39e07fc6fa1105970c352695f1449ca0fb5c4a24638875605d48567a141d4a5"
+    },
+    {
+      "file": "src/main/CodeVerificationPanel.tsx",
+      "sha256": "1e3f605e294dc12db728dfcef9fe8ed38eb9f78e1caacd081dae29e135cef19e"
+    },
+    {
+      "file": "src/main/DocumentImportDialog.tsx",
+      "sha256": "036e3e286fd48114729b927fe970d47bc70c79fdc19d52d55fab147a5d798868"
+    },
+    {
+      "file": "src/main/FeedbackDialog.tsx",
+      "sha256": "edfc12f4ec3e21ef72571c853f284c45599b1ee4967a6c5c9de929798e4c3d78"
+    },
+    {
+      "file": "src/main/LocalProfileDialog.tsx",
+      "sha256": "9337f51d2ca9bd90c84f98bd7f344991f2b9ff370ff817ade8a6bb6b4563e301"
+    },
+    {
+      "file": "src/main/MainWindow.tsx",
+      "sha256": "beefcc440725600dc83893625d06c161a209a3014c22e7e21b19d366784fee18"
+    },
+    {
+      "file": "src/main/Onboarding.tsx",
+      "sha256": "53f29b7e0e5659d7c90dbf7de56ca5c05596908a580fc21305a145937461bd3e"
+    },
+    {
+      "file": "src/main/UpdateNotice.tsx",
+      "sha256": "b648c0bb4ea0fee83a0fce517c96e5ef6f6202c31206194c08c7450363771a70"
+    },
+    {
+      "file": "src/main/UsageNotice.tsx",
+      "sha256": "fe12b6f0b790b3fb273eee73665c3e68667f27326c2f7f141f600255ddd7bb1e"
+    },
+    {
+      "file": "src/main/sections/AiServicesTab.tsx",
+      "sha256": "733b845226589c762628acf3df0d0e2d6758b485d08002f28df5565cd6c870ae"
+    },
+    {
+      "file": "src/main/sections/DeveloperInfo.tsx",
+      "sha256": "5493fdb6cce8242f4b32b35fcb747ac10e43ccc966a2ba465ab946a6eef86947"
+    },
+    {
+      "file": "src/main/sections/DualScreenCard.tsx",
+      "sha256": "fbe87cd838d55902165834596a74ba7b79ec91950c10ef908717801ee5275b94"
+    },
+    {
+      "file": "src/main/sections/ExamWorkbench.tsx",
+      "sha256": "1765dab2375c9a4ebc75bda73e009cf01395ef9f18b093246844a9dc9e434842"
+    },
+    {
+      "file": "src/main/sections/FreeChatPage.tsx",
+      "sha256": "eb4df5a022e9af6a78031e69273ad17fcf4d43782dd01eddaca664f065e1d329"
+    },
+    {
+      "file": "src/main/sections/InterviewWorkbench.tsx",
+      "sha256": "4931a0430aa9a1f8d1b05e2eb0ac73fa5a50dcdef902ab154db989ba76b80105"
+    },
+    {
+      "file": "src/main/sections/JobProgressCards.tsx",
+      "sha256": "76a166ceb63ebd8966f971bf3ea213dddadb34660cf4d0fc0e0571916bb43178"
+    },
+    {
+      "file": "src/main/sections/MicrophoneCheck.tsx",
+      "sha256": "fd07a94d84d67a76458223692ccbce0834f2167f8cd066a4d6138703117e7287"
+    },
+    {
+      "file": "src/main/sections/MockPage.tsx",
+      "sha256": "00d06be945ee82a0e4d6f56f48498d49acb63ba6115e3160e39de1df2e0fa48e"
+    },
+    {
+      "file": "src/main/sections/MockReportDialog.tsx",
+      "sha256": "5c64564afc35571816252b96184e323c1694c4be47f33ca8c847cd43423e5abd"
+    },
+    {
+      "file": "src/main/sections/OutputExclusions.tsx",
+      "sha256": "65ea8282ea2f3bbe51a568e8c346dc0b50a3f96fcb68518b7533d6746dd0db10"
+    },
+    {
+      "file": "src/main/sections/PhoneSpeakerSetup.tsx",
+      "sha256": "0f5fcad990200e06689e02249428230885cd0286eec77d830264505c89158016"
+    },
+    {
+      "file": "src/main/sections/PromptWorkbench.tsx",
+      "sha256": "0137fb95ee8f0f1e7885b86aae4880648aa4dee3b22f66661ccd36a0b6e794c2"
+    },
+    {
+      "file": "src/main/sections/QuestionBankPage.tsx",
+      "sha256": "bdfd4e956435164ae5a6822852c86ea32c8c40407a35b703a2ddc5a1ef244677"
+    },
+    {
+      "file": "src/main/sections/RecordsPage.tsx",
+      "sha256": "319fbe2cf658413bc00ff61a6587bfe4e2cb7acd6b949fd5fc78f78309c013be"
+    },
+    {
+      "file": "src/main/sections/ResourcePage.tsx",
+      "sha256": "46ecf5bcb63f748d4740ce11a6df101d93677ffde79bc0ba773a4b2314fdcc79"
+    },
+    {
+      "file": "src/main/sections/SettingsPage.tsx",
+      "sha256": "1b3df017054c9bc327bd9e7e3a47aa08d303ad33305553259beb5732b3d12561"
+    },
+    {
+      "file": "src/main/sections/SpeechProfilePanel.tsx",
+      "sha256": "65fc25aa0e26e3dd5ee3488acf65ebe8b04eb44dc76485037a74c165a0a30771"
+    },
+    {
+      "file": "src/main/sections/StealthTab.tsx",
+      "sha256": "792e92d2d753279e84e6ee3e64fc5360952be6a21b1ad6d327fde3a6d003256d"
+    },
+    {
+      "file": "src/main/sections/StorageSettings.tsx",
+      "sha256": "337ffb9d97855ce01d923ffb17f6c26264f1ff211327e9378b477722f3d11a9a"
+    },
+    {
+      "file": "src/main/sections/voice-call.css",
+      "sha256": "8b8ce5beb8ddf6a8607e825e38eb201f16d6e37776f98a7b1488a35262e705d7"
+    },
+    {
+      "file": "src/main/update-notice.css",
+      "sha256": "9e28989c74c584bc6bf9bcf350131b5fd300c3481dee053b0ec696bcaa5e627c"
+    },
+    {
+      "file": "src/mock/AvatarMark.tsx",
+      "sha256": "85c664ae50baa99602ccfddf5cae50d993ef57621a392890f0aba45885893be7"
+    },
+    {
+      "file": "src/mock/MockApp.tsx",
+      "sha256": "f3a382d03fd546e6c2eab56bd5961fa3c58bdfb35c724e2710e9c333a794734e"
+    },
+    {
+      "file": "src/mock/room.css",
+      "sha256": "a7c28455f30aace5c7558cf161ae23afe25c0e7a3ce1f0f7055b9de637c72305"
+    },
+    {
+      "file": "src/overlay/ExamOverlay.tsx",
+      "sha256": "d5880b2c71ce3de6c3ba61078b755980df72efca5ebbad63a2edeb17f2a13850"
+    },
+    {
+      "file": "src/overlay/GenerationDetails.tsx",
+      "sha256": "73a50ad448736fca550f4288675003e182ebfe4f8def789aa1ff3c1dbaa0f29f"
+    },
+    {
+      "file": "src/overlay/InterviewOverlay.tsx",
+      "sha256": "4c56e26b2309aeb500fe1999ce304d53e19fdaa5a6f3f7f62d217b95fa984c95"
+    },
+    {
+      "file": "src/overlay/Md.tsx",
+      "sha256": "87f05029aa27183bb8544e30da3771bd0947a71e54f930b8bdae7fb03e3f8498"
+    },
+    {
+      "file": "src/overlay/OverlayApp.tsx",
+      "sha256": "f268be8f40c086332c2f12d8f97c75ad87d5c92a174f45f45e83db96beba0ef1"
+    },
+    {
+      "file": "src/overlay/platform.tsx",
+      "sha256": "9c515975ca8032826aa6abad9241f9699279f10d3e7336d90df76dba0ae69b4b"
+    },
+    {
+      "file": "src/overlay/widgets.tsx",
+      "sha256": "3a48872d49688b8ec745ceffd3f6b6675c99b67968241fa8a776b7fd8859dd2b"
+    },
+    {
+      "file": "src/ui/primitives.tsx",
+      "sha256": "d1fac6e19c08010399fa9638b601f93fd7922419a6b6c7bebe73c5e1496c4ff6"
+    },
+    {
+      "file": "src/ui/useModalFocus.ts",
+      "sha256": "b93c13031ffdfc4850b592c2d5ee0544a20d5eec0497a1d95cbdda8bd19eea5a"
+    },
+    {
+      "file": "src/vite-env.d.ts",
+      "sha256": "424faf9241dd699dda995b367ed36665732da1e6ec1f33b2fd40394488ecac92"
+    },
+    {
+      "file": "tests/ai-optimization.test.mjs",
+      "sha256": "433be1302a412b7b1f4eec1bad31044ea6febf97297f71158851cce874948ccd"
+    },
+    {
+      "file": "tests/audit-regression.test.mjs",
+      "sha256": "165e3f858cdf49db25b112af064baff68fb8621b3d3bfc54a64f438c8339f9a3"
+    },
+    {
+      "file": "tests/bug-review.test.mjs",
+      "sha256": "cfeafa66a60dbd012b9e07f427e69a592289871e5fe9e332a8cc0ecaabd25813"
+    },
+    {
+      "file": "tests/byok.test.mjs",
+      "sha256": "a9bdd00d869201d01f13446e34754f25fb7391016305c9e36f8fb8dc833c7d08"
+    },
+    {
+      "file": "tests/compile-fixture.mjs",
+      "sha256": "39e2fd29734aa0457a97eb73cb068939fc3f2e67e85f2565aa7952985169b67c"
+    },
+    {
+      "file": "tests/context-documents.test.mjs",
+      "sha256": "436d3a73dcf7738235efd5a10134d8374399631cfce7193e808d18a6371cc00b"
+    },
+    {
+      "file": "tests/desktop-appearance.test.mjs",
+      "sha256": "1c69dceb985e067ea2f09c6490eb30f9214bd2eed44bcbbc91dea0c8368ff6e1"
+    },
+    {
+      "file": "tests/desktop-security.test.mjs",
+      "sha256": "978444150fa6b5d3c20c6b67c584d251cd07a87a224ad5826778a68e44618087"
+    },
+    {
+      "file": "tests/dev-service.test.mjs",
+      "sha256": "8e1e695bd446d447edd78ac264a0f0342eb051603c61f66086e8645076226ea1"
+    },
+    {
+      "file": "tests/dual-screen.test.mjs",
+      "sha256": "e75caec49f6d86d7a5f573d9f876c638ddb45ae03edd13e9841c90d40337e43e"
+    },
+    {
+      "file": "tests/exam-lifecycle.test.mjs",
+      "sha256": "5c230ecdc30ae07267dfb2d4cabc9d58ccb33216b7c281a67887b9c873f82d79"
+    },
+    {
+      "file": "tests/fixtures/bailian-ui.html",
+      "sha256": "0c07212f2e5d7f6603383f4d565f7414e16bc17a1ecb663e32374423601d414e"
+    },
+    {
+      "file": "tests/fixtures/mock-ai.mjs",
+      "sha256": "224c16ed78a5c1fd20d901c7dcf9241b742ff01a6851a0ac21f1aa699e1028b7"
+    },
+    {
+      "file": "tests/fixtures/realtimeTransport.ts",
+      "sha256": "f477c64eaaea368c44b63d0ea42ba7e0d242ce762b26a40b2ecc73fb35a19ffe"
+    },
+    {
+      "file": "tests/fixtures/tauri.audio-smoke.conf.json",
+      "sha256": "df578a92e52bae303a70474b1a1b45a360a8d7c3ea5895ef8888f31f9619619d"
+    },
+    {
+      "file": "tests/fixtures/tauri.byok-smoke.conf.json",
+      "sha256": "9e9bab52585ccd9a71804c2c960a2ca711ee033385db6c6f015e6e4f50fa7bdc"
+    },
+    {
+      "file": "tests/fixtures/updater-signed.json",
+      "sha256": "f3779a392bc8c453422c7b1bc6b33427768a66bf421dcee7f79b9a8c65b312f9"
+    },
+    {
+      "file": "tests/free-chat.test.mjs",
+      "sha256": "ce79cf5af87c11cd5cf9b6c1f9a3d428c771dc4a11575f43529175a7ad5b9966"
+    },
+    {
+      "file": "tests/installer-branding.test.mjs",
+      "sha256": "8bfa33a62a49c04ce3afed8a9d50e0e0b8fea3ded04191920b493d3aee9bd286"
+    },
+    {
+      "file": "tests/interview-audio.test.mjs",
+      "sha256": "8f00d41ef21216afa7483a40190dbdac8dfad82755e3a22cd282d65b51e99941"
+    },
+    {
+      "file": "tests/interview-lifecycle.test.mjs",
+      "sha256": "a72dc4ce3292ac4b6ced1bc023d14a3bfef4ac03d855e171e83e1a9fb9657cdd"
+    },
+    {
+      "file": "tests/mock-cancellation.test.mjs",
+      "sha256": "0634917dda2d2e212d6f11e1af6ffb072b5d7f07523550877e734c8d6ead53f5"
+    },
+    {
+      "file": "tests/mock-question.test.mjs",
+      "sha256": "6b24006397a665f6ee4059c2a5f0e9dfdbe3fb9805009b7cc2bf9ef288482f42"
+    },
+    {
+      "file": "tests/modal-cleanup.test.mjs",
+      "sha256": "06cb0473840a2c8c4c3b3e1a92fa0a394ea36e092232d210f9702406f37226a1"
+    },
+    {
+      "file": "tests/native-platform.test.mjs",
+      "sha256": "bb51ba54f03ada6781815232691fee1e018d5c62ceeee8c3fb84ff96e854934a"
+    },
+    {
+      "file": "tests/overlay-lifecycle.test.mjs",
+      "sha256": "a590758921723732099c30609a7c37eea8f7438e41149a9d43603e544b728818"
+    },
+    {
+      "file": "tests/question-speech.test.mjs",
+      "sha256": "8bca488297ba6fa6177b1bd0df54841d486c1d634a6abbb6af9e9e8b8e8d4dfd"
+    },
+    {
+      "file": "tests/realtime-asr.test.mjs",
+      "sha256": "fe5b82b4e9fb38776b14c9a7d32503c9b7a68c66f7d68383bc8c82330c3a6c2b"
+    },
+    {
+      "file": "tests/release.test.mjs",
+      "sha256": "597da6175c7eeb182d63a48cf8e8f0421fbaedf0696f639f7a4e283bd2d3fd66"
+    },
+    {
+      "file": "tests/reliability.test.mjs",
+      "sha256": "0c95d13d3a9a21a530cf3167e462d1540611042e2f64aa37ff02662b27b727f5"
+    },
+    {
+      "file": "tests/speech-profile.test.mjs",
+      "sha256": "65be67937eba20985cf363006712bee4790d4ea64651b2fb9ed832f225583871"
+    },
+    {
+      "file": "tests/speech-protocol.test.mjs",
+      "sha256": "dda457a62922c8fc7aba89c0da4efc3b1fc6f2301f6d7b493164a7882f5a07a1"
+    },
+    {
+      "file": "tests/tts.test.mjs",
+      "sha256": "9a433a0ede685b14e283008e9af0c6c6e9ee49f62b5862bfc21e2c3b0b471eaf"
+    },
+    {
+      "file": "tests/update-presentation.test.mjs",
+      "sha256": "4a0d0ddcddcd600f32f9b41bc27fa8576d4d0023deb2efb5e2f6a46197e43c0e"
+    },
+    {
+      "file": "tests/updater-client.test.mjs",
+      "sha256": "3b79eac4088a1643640657c224a0113d0b0171cf7d570bde67984b2b7ca840ac"
+    },
+    {
+      "file": "tests/updater-install-policy.rs",
+      "sha256": "099f80230091bd5b3f569738968b7f3f2f706e57a927e6104d8899b72ec75a4d"
+    },
+    {
+      "file": "tests/updater-secrets.test.mjs",
+      "sha256": "42afaf9aa146c64d533e2c329b2b87e30f4e4bffd7248327db268923df5e9483"
+    },
+    {
+      "file": "tests/voice-call.test.mjs",
+      "sha256": "059b7e903bdaadad6e574a9f71c20a85125158b4cad0968f4393d41515f8866b"
+    }
+  ],
+  "summary": {
+    "fixedFindings": [
+      "R01",
+      "R02",
+      "R03",
+      "R04"
+    ],
+    "securityHardening": [
+      "global connection quota and absolute header/handshake deadline",
+      "production CSP and native IPC compatibility"
+    ],
+    "nodeTestsPassed": 310,
+    "rustTestsPassed": 73,
+    "rustTestsIgnored": 2,
+    "browserBoundaryChecks": 13,
+    "modalChecks": 12,
+    "browserSuitesPassed": 5,
+    "nativeChecksPassed": 12,
+    "nativeChecksNotVerified": 1,
+    "fuzzCasesPassed": 2016,
+    "normalDevelopmentBinaryRestored": true
+  },
+  "modalCoverage": {
+    "functions": 14,
+    "totalFunctions": 15,
+    "functionCoverage": 93.33333333333333,
+    "coverage": [
+      {
+        "scriptId": "18",
+        "url": "http://127.0.0.1:1446/src/ui/useModalFocus.ts",
+        "functions": [
+          {
+            "functionName": "",
+            "ranges": [
+              {
+                "startOffset": 0,
+                "endOffset": 15417,
+                "count": 2
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "top",
+            "ranges": [
+              {
+                "startOffset": 288,
+                "endOffset": 317,
+                "count": 17
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "isTopModal",
+            "ranges": [
+              {
+                "startOffset": 345,
+                "endOffset": 397,
+                "count": 0
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "controls",
+            "ranges": [
+              {
+                "startOffset": 416,
+                "endOffset": 677,
+                "count": 2
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "",
+            "ranges": [
+              {
+                "startOffset": 554,
+                "endOffset": 676,
+                "count": 8
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "focus",
+            "ranges": [
+              {
+                "startOffset": 693,
+                "endOffset": 872,
+                "count": 2
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "sync",
+            "ranges": [
+              {
+                "startOffset": 874,
+                "endOffset": 1546,
+                "count": 5
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "",
+            "ranges": [
+              {
+                "startOffset": 1464,
+                "endOffset": 1542,
+                "count": 5
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "onFocus",
+            "ranges": [
+              {
+                "startOffset": 1547,
+                "endOffset": 1663,
+                "count": 2
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "onKey",
+            "ranges": [
+              {
+                "startOffset": 1664,
+                "endOffset": 2420,
+                "count": 2
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "useModalFocus",
+            "ranges": [
+              {
+                "startOffset": 2518,
+                "endOffset": 4633,
+                "count": 6
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "",
+            "ranges": [
+              {
+                "startOffset": 2655,
+                "endOffset": 4587,
+                "count": 5
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "",
+            "ranges": [
+              {
+                "startOffset": 3313,
+                "endOffset": 3346,
+                "count": 1
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "",
+            "ranges": [
+              {
+                "startOffset": 3479,
+                "endOffset": 4583,
+                "count": 2
+              }
+            ],
+            "isBlockCoverage": false
+          },
+          {
+            "functionName": "restore",
+            "ranges": [
+              {
+                "startOffset": 4124,
+                "endOffset": 4432,
+                "count": 4
+              }
+            ],
+            "isBlockCoverage": false
+          }
+        ]
+      }
+    ]
+  },
+  "csp": {
+    "pdfText": "Synthetic CSP resume",
+    "pdfWorker": true,
+    "wasm": true,
+    "imageDecoded": true,
+    "blobMediaLoaded": true,
+    "evalBlocked": true,
+    "inlineBlocked": true,
+    "networkBlocked": true,
+    "violations": [
+      {
+        "directive": "script-src",
+        "blocked": "eval"
+      },
+      {
+        "directive": "script-src-elem",
+        "blocked": "inline"
+      },
+      {
+        "directive": "connect-src",
+        "blocked": "https://csp-blocked.invalid/probe"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R02",
+      "status": "fixed",
+      "activeListenerCountAfterCleanup": 0,
+      "pendingTimers": 0,
+      "productionCallSites": 0,
+      "scope": "Unused hook; cleanup checked even if a cancelled timer fires late"
+    },
+    {
+      "id": "R01",
+      "status": "fixed",
+      "scenario": "Resource page / new goal dialog / Tab",
+      "focus": {
+        "inside": true,
+        "tag": "INPUT",
+        "label": null,
+        "text": ""
+      },
+      "semantics": true,
+      "voiceDialogPreviouslyFixed": true
+    },
+    {
+      "id": "D03-overlay-hidden-versus-late-snapshot",
+      "status": "fixed",
+      "finding": "R03",
+      "observed": {
+        "hiddenBeforeResponse": true,
+        "activeAfterLateResponse": false,
+        "showSeq": 7
+      },
+      "scope": "Production root effect; controlled IPC response ordering, no OS window or audio opened"
+    },
+    {
+      "id": "D04-interview-end-during-bootstrap-setting-write",
+      "status": "fixed",
+      "finding": "R04",
+      "observed": {
+        "status": "ended",
+        "sessionId": null,
+        "micStarts": 0,
+        "micCloses": 0
+      },
+      "scope": "Production component and engine; delayed setting persistence and synthetic microphone. Real device not accessed"
+    }
+  ],
+  "nativeChecks": [
+    {
+      "id": "N01",
+      "invariant": "Native storage merges concurrent additions and independent fields, and rejects conflicting fields",
+      "verdict": "pass",
+      "observed": {
+        "mergedRows": 2,
+        "independentFieldsPreserved": true,
+        "conflictRejected": true
+      }
+    },
+    {
+      "id": "N02",
+      "invariant": "A real read-only data file cannot result in a successful commit or changed memory",
+      "verdict": "pass",
+      "observed": {
+        "rejected": true,
+        "memoryAndDiskUnchanged": true
+      }
+    },
+    {
+      "id": "N03",
+      "invariant": "Manual backup restoration preserves committed records and increases the revision",
+      "verdict": "pass",
+      "observed": {
+        "restoredRows": 2,
+        "revisionMonotonic": true
+      }
+    },
+    {
+      "id": "N04",
+      "invariant": "Unknown collections, duplicate IDs and invalid attachment references must fail closed",
+      "verdict": "pass",
+      "observed": {
+        "invalidCollectionsAndIdsRejected": true,
+        "traversalReferencesRejected": 4
+      }
+    },
+    {
+      "id": "N05",
+      "invariant": "A stored screenshot can be read back without allowing more than six pages",
+      "verdict": "pass",
+      "observed": {
+        "storedAndRead": true,
+        "seventhPageRejected": true
+      }
+    },
+    {
+      "id": "N06",
+      "invariant": "Valid JSON with a broken nested record shape should be rejected at the native boundary",
+      "verdict": "pass",
+      "observed": {
+        "rejected": true,
+        "persistedMessagesType": "undefined"
+      }
+    },
+    {
+      "id": "N07",
+      "invariant": "Synthetic API keys round-trip through protected storage without plaintext on disk",
+      "verdict": "pass",
+      "observed": {
+        "roundTrip": true,
+        "plaintextOnDisk": false
+      }
+    },
+    {
+      "id": "N08",
+      "invariant": "Local phone pairing requires an exact token and becomes unavailable after stop",
+      "verdict": "pass",
+      "observed": {
+        "wrongTokenStatus": 403,
+        "correctTokenStatus": 200,
+        "peerAfterStop": 0,
+        "transport": "http/ws"
+      }
+    },
+    {
+      "id": "N09",
+      "invariant": "The updater must refuse installation without a verified download",
+      "verdict": "pass",
+      "observed": {
+        "initialPhase": "idle",
+        "resultPhase": "error",
+        "installationRejected": true,
+        "networkRequests": 0
+      }
+    },
+    {
+      "id": "N10",
+      "invariant": "Code execution uses a local Linux engine and bounded synthetic execution",
+      "verdict": "not-verified",
+      "observed": {
+        "reason": "Error: {\"exceptionId\":11,\"text\":\"Uncaught (in promise)\",\"lineNumber\":0,\"columnNumber\":0,\"exception\":{\"type\":\"string\",\"value\":\"Docker Linux 引擎未就绪。请启动 Docker Desktop 并切换到 Linux 容器。\"}}",
+        "executed": false
+      }
+    },
+    {
+      "id": "N11",
+      "invariant": "Settings disk failures roll back shared native memory as well as the durable file",
+      "verdict": "pass",
+      "observed": {
+        "rejected": true,
+        "memoryValue": "exam",
+        "diskUnchanged": true
+      }
+    },
+    {
+      "id": "N12",
+      "invariant": "Invalid nested records in a backup cannot replace valid live data",
+      "verdict": "pass",
+      "observed": {
+        "invalidRestoreRejected": true,
+        "liveDataUnchanged": true
+      }
+    },
+    {
+      "id": "N13",
+      "invariant": "Bundled native content enforces CSP while IPC and trusted bootstrap scripts work",
+      "verdict": "pass",
+      "observed": {
+        "inlineBlocked": true,
+        "bootstrapLoaded": true,
+        "nativeIpcAvailable": true
+      }
+    }
+  ],
+  "limits": [
+    "Phone HTTP/WS transport encryption explicitly deferred by the user",
+    "No macOS hardware acceptance",
+    "No real audio/conferencing or installer/update/uninstaller handoff",
+    "Docker Linux execution not verified"
+  ]
+}

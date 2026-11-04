@@ -14,18 +14,18 @@ if(!existsSync('artifacts/audit/ui.html')){
 const fixEvidence=JSON.parse(readFileSync('docs/audit/2026-11-04-fix-evidence.json','utf8'));
 const production=fixEvidence.sourceHashes.filter(row=>row.file.startsWith('src/')||row.file.startsWith('src-tauri/src/'));
 const changes=production.filter(row=>createHash('sha256').update(readFileSync(row.file)).digest('hex')!==row.sha256).map(row=>row.file);
-assert.deepEqual(changes,[],'Production code changed after fix acceptance; revalidate affected findings');
+if(process.argv.includes('--baseline'))assert.deepEqual(changes,[],'Original audit baseline changed');
 const results=[];
 // Invoke the real hook with a controlled effect scheduler to inspect cleanup order.
-let cleanup;const timers=[],listeners=new Set();
-const api=evaluateFixture('src/ui/primitives.tsx',{exports:{},window:{setTimeout:fn=>{timers.push(fn);return timers.length;}},document:{addEventListener:(_event,fn)=>listeners.add(fn),removeEventListener:(_event,fn)=>listeners.delete(fn)},require:name=>{
+let cleanup;const timers=[],listeners=new Set(),pendingTimers=new Set();
+const api=evaluateFixture('src/ui/primitives.tsx',{exports:{},window:{setTimeout:fn=>{timers.push(fn);pendingTimers.add(fn);return fn;},clearTimeout:fn=>pendingTimers.delete(fn)},document:{addEventListener:(_event,fn)=>listeners.add(fn),removeEventListener:(_event,fn)=>listeners.delete(fn)},require:name=>{
   if(name==='react')return {createContext:()=>({}),useRef:value=>({current:value}),useEffect:effect=>{cleanup=effect();}};
   if(name==='../lib/events')return {bus:{}};
-  if(name==='lucide-react'||name==='react/jsx-runtime')return {};
+  if(['lucide-react','react/jsx-runtime','react-dom','./useModalFocus'].includes(name))return {};
   throw Error(name);
 }});
 api.useClickOutside(()=>{});cleanup();for(const timer of timers)timer();
-results.push({id:'R02',status:listeners.size?'confirmed-latent':'not-reproduced',activeListenerCountAfterCleanup:listeners.size,productionCallSites:0,scope:'Unused hook; no active page leak established'});
+results.push({id:'R02',status:listeners.size||pendingTimers.size?'confirmed-latent':'fixed',activeListenerCountAfterCleanup:listeners.size,pendingTimers:pendingTimers.size,productionCallSites:0,scope:'Unused hook; cleanup checked even if a cancelled timer fires late'});
 const url='http://127.0.0.1:1444/artifacts/audit/ui.html';
 const server=spawn(process.execPath,['node_modules/vite/bin/vite.js','--config','artifacts/audit/vite.config.mjs','--host','127.0.0.1','--port','1444','--strictPort'],{windowsHide:true,stdio:'ignore'});
 let browser,cdp;
@@ -41,10 +41,12 @@ try{
     focus=await cdp.evaluate("({inside:__ordinaryDialog.contains(document.activeElement),tag:document.activeElement.tagName,label:document.activeElement.getAttribute('aria-label'),text:document.activeElement.textContent?.trim().slice(0,40)})");
     if(!focus.inside){escaped=true;break;}
   }
-  results.push({id:'R01',status:escaped?'confirmed-active':'not-reproduced',scenario:'Resource page / new goal dialog / Tab',focus,voiceDialogPreviouslyFixed:true});
+  const semantics=await cdp.evaluate("!!document.querySelector('[role=dialog][aria-modal=true]')");
+  results.push({id:'R01',status:escaped||!semantics?'confirmed-active':'fixed',scenario:'Resource page / new goal dialog / Tab',focus,semantics,voiceDialogPreviouslyFixed:true});
   const shot=await cdp.command('Page.captureScreenshot',{format:'png'});await writeFile('artifacts/audit/second-review-dialog.png',Buffer.from(shot.data,'base64'));
 }finally{
   if(cdp?.socket){await cdp.command('Browser.close',{}).catch(()=>{});cdp.close();}browser?.kill();server.kill();
 }
-const evidence={createdAt:new Date().toISOString(),productionCodeUnchangedSinceFixEvidence:true,checkedProductionFiles:production.length,results};
+const evidence={createdAt:new Date().toISOString(),productionCodeUnchangedSinceFixEvidence:changes.length===0,changedProductionFiles:changes,checkedProductionFiles:production.length,results};
 await writeFile('artifacts/audit/second-review-revalidation.json',JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence));
+if(process.argv.includes('--verify')&&results.some(row=>row.status!=='fixed'))process.exitCode=1;

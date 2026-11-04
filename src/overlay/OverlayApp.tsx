@@ -12,6 +12,7 @@ import {
   setOverlaySize,
   positionOverlay,
   onEvent,
+  listenEvent,
 } from '@/lib/bridge';
 import { getSetting, setSetting, useSetting, DEFAULT_OVERLAY_STYLE, type OverlayStyle } from '@/lib/store';
 import { normalizeStyle, type OverlayMode } from '@/lib/overlayStyle';
@@ -42,34 +43,45 @@ export function OverlayApp() {
 
   // 显示/隐藏事件 → 会话状态
   useEffect(() => {
-    const offShown = onEvent<{ seq: number }>('overlay-shown', (p) => {
-      if (p.seq > 0 && seqRef.current >= p.seq) return;
+    let disposed = false, eventsReady = false, revision = 0, lastShownSeq = 0;
+    const cleanups: (() => void)[] = [];
+    const subscribe = async <T,>(name: string, handler: (payload:T)=>void) => {
+      const off = await listenEvent<T>(name,handler);
+      if(disposed)off();else cleanups.push(off);
+    };
+    const shown = (nativeSeq: number) => {
+      if (disposed || nativeSeq <= lastShownSeq) return;
+      lastShownSeq = nativeSeq;
       seqRef.current += 1;
       setActive(true);
       setSeq(seqRef.current);
-      setShowSeq(p.seq);
-    });
-    const offHidden = onEvent('overlay-hidden', () => {
-      setActive(false);
-      if (seqMode() === 'interview') void import('@/lib/interviewEngine').then(engine => engine.endInterview(false));
-    });
-    // 启动时主动查一次（崩溃恢复场景原生已显示）
+      setShowSeq(nativeSeq);
+    };
     void (async () => {
       try {
+        // Only read the initial snapshot after both producers can be observed.
+        await Promise.all([
+          subscribe<{seq:number}>('overlay-shown',p=>{revision++;if(eventsReady)shown(p.seq);}),
+          subscribe('overlay-hidden',()=>{
+            revision++;
+            if(disposed || !eventsReady)return;
+            setActive(false);
+            if(seqMode()==='interview')void import('@/lib/interviewEngine').then(engine=>engine.endInterview(false)).catch(error=>console.warn('[overlay] stop failed',error));
+          }),
+        ]);
+        if(disposed)return;
+        eventsReady=true;
+        const queriedAt=revision;
         const s = await overlayShowSeq();
-        if (s > 0) {
-          seqRef.current += 1;
-          setActive(true);
-          setSeq(seqRef.current);
-          setShowSeq(s);
-        }
+        if (!disposed && revision === queriedAt) {if(s>0)shown(s);else setActive(false);}
       } catch {
-        // ignore
+        // A failed snapshot read must not disable already-working event producers.
+        if(!eventsReady){disposed=true;cleanups.splice(0).forEach(off=>off());}
       }
     })();
     return () => {
-      offShown();
-      offHidden();
+      disposed = true;
+      cleanups.splice(0).forEach(off=>off());
     };
   }, []);
 

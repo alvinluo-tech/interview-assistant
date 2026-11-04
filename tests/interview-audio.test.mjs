@@ -373,6 +373,7 @@ test('transcription failures preserve listening and expose the reason before any
 });
 test('reentrant start requests open the microphone once', async () => {
   const h = harness();
+  await h.engine.startInterview({goalId:null,resumeId:null,materialIds:[],audioSource:'MICROPHONE'});
   await Promise.all([h.engine.beginListening('MICROPHONE'), h.engine.beginListening('MICROPHONE')]);
   assert.equal(h.permissionRequests, 1);
 });
@@ -390,6 +391,7 @@ test('end during microphone permission wait closes late capture without restarti
 });
 test('end immediately after start prevents pending initialization from requesting audio', async () => {
   const h = harness();
+  await h.engine.startInterview({goalId:null,resumeId:null,materialIds:[],audioSource:'MICROPHONE'});
   const starting = h.engine.beginListening('MICROPHONE');
   await h.engine.endInterview(false); await starting;
   assert.equal(h.permissionRequests, 0);

@@ -717,7 +717,8 @@ export async function startInterview(opts: {
   resumeId: string | null;
   materialIds: string[];
   audioSource: 'SPEAKER' | 'PHONE' | 'MICROPHONE';
-}): Promise<InterviewSession> {
+}, signal?: AbortSignal): Promise<InterviewSession> {
+  signal?.throwIfAborted();
   const generation = ++sessionGeneration;
   answerQueue.length = 0;
   const goals = readData<Goal[]>('goals', []);
@@ -730,7 +731,7 @@ export async function startInterview(opts: {
     resumeId: opts.resumeId,
     metadata: { audioSource: opts.audioSource, materialIds: opts.materialIds,knowledgeSnapshot:snapshot,aiPolicyVersion:'2026-10-30.1',speechProfile:getSpeechProfile('interview') },
   });
-  if (generation !== sessionGeneration) {
+  if (generation !== sessionGeneration || signal?.aborted) {
     await completeSession(session.id);
     return session;
   }
@@ -806,7 +807,8 @@ async function stopCapture(invalidate = true) {
   resetAudio();
 }
 
-export function beginListening(audioSource: AudioSource): Promise<void> {
+export function beginListening(audioSource: AudioSource, expectedSessionId = state.sessionId): Promise<void> {
+  if (!expectedSessionId || state.sessionId !== expectedSessionId || state.status === 'ended') return Promise.resolve();
   if (opening && openingGeneration === captureGeneration) return opening;
   const generation = ++captureGeneration;
   openingGeneration = generation;

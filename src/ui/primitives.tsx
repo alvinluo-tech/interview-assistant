@@ -5,6 +5,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useId,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -12,9 +13,12 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
+  type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { bus } from '../lib/events';
+import { isTopModal, useModalFocus } from './useModalFocus';
 
 // ---------------- Button ----------------
 
@@ -148,7 +152,7 @@ export function Slider({
 
 // ---------------- Dialog ----------------
 
-const DialogCtx = createContext<{ close: () => void }>({ close: () => {} });
+const DialogCtx = createContext<{ close: () => void; titleId?: string; root?: RefObject<HTMLElement|null> }>({ close: () => {} });
 export function useDialogClose() {
   return useContext(DialogCtx).close;
 }
@@ -166,29 +170,24 @@ export function Dialog({
   className?: string;
   dismissable?: boolean;
 }) {
-  useEffect(() => {
-    if (!open || !dismissable) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, dismissable]);
+  const root = useRef<HTMLDivElement>(null), parent = useContext(DialogCtx), titleId = useId();
+  useModalFocus(root,open,dismissable?onClose:undefined,undefined,parent.root);
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+  const dismiss = () => {if(dismissable && isTopModal(root.current))onClose();};
+  return createPortal(
+    <div ref={root} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
       <div
         className="absolute inset-0"
-        onClick={dismissable ? onClose : undefined}
+        onClick={dismiss}
       />
       <div
         className={`relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-card p-5 text-card-foreground shadow-xl ${className}`}
       >
-        <DialogCtx.Provider value={{ close: onClose }}>
+        <DialogCtx.Provider value={{ close: onClose, titleId, root }}>
           {dismissable && (
             <button
               type="button"
-              onClick={onClose}
+              onClick={dismiss}
               className="absolute right-3 top-3 rounded p-1 text-muted-foreground hover:bg-accent"
               aria-label="关闭"
             >
@@ -198,12 +197,13 @@ export function Dialog({
           {children}
         </DialogCtx.Provider>
       </div>
-    </div>
+    </div>,document.body,
   );
 }
 
 export function DialogTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mb-1 pr-6 text-base font-semibold">{children}</h2>;
+  const {titleId} = useContext(DialogCtx);
+  return <h2 id={titleId} className="mb-1 pr-6 text-base font-semibold">{children}</h2>;
 }
 export function DialogDesc({ children }: { children: ReactNode }) {
   return <p className="mb-4 text-sm text-muted-foreground">{children}</p>;
@@ -248,7 +248,7 @@ export function ToastViewport() {
     };
   }, []);
   return (
-    <div className="pointer-events-none fixed bottom-6 left-1/2 z-[60] flex w-full max-w-sm -translate-x-1/2 flex-col items-center gap-2 px-4">
+    <div className="pointer-events-none fixed bottom-6 left-1/2 z-[1000] flex w-full max-w-sm -translate-x-1/2 flex-col items-center gap-2 px-4">
       {items.map((t) => (
         <div
           key={t.id}
@@ -379,8 +379,9 @@ export function useClickOutside(onOutside: () => void) {
         onOutside();
       }
     };
-    window.setTimeout(() => document.addEventListener('mousedown', handler), 0);
-    return () => document.removeEventListener('mousedown', handler);
+    let disposed = false;
+    const timer = window.setTimeout(() => {if(!disposed)document.addEventListener('mousedown', handler);}, 0);
+    return () => {disposed=true;window.clearTimeout(timer);document.removeEventListener('mousedown', handler);};
   }, [onOutside]);
   return ref;
 }

@@ -7,6 +7,7 @@ import { openUpdateDialog, updater, useUpdater } from '@/lib/updater';
 import { downloadProgress, formatBytes, releaseDate, releaseNotes, updatePresentation } from '@/lib/updatePresentation';
 import brandIcon from '../../src-tauri/icons/128x128.png';
 import './update-notice.css';
+import {useModalFocus} from '@/ui/useModalFocus';
 
 export function UpdateStatusButton() {
   const state = useUpdater();
@@ -20,6 +21,7 @@ export function UpdateNotice() {
   const manual = useRef(false);
   const announced = useRef(false);
   const dialog = useRef<HTMLElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
   const id = useId();
   const locked = state.phase === 'installing';
   const canClose = useRef(true);
@@ -27,6 +29,7 @@ export function UpdateNotice() {
   const close = () => { if (canClose.current) { setOpen(false); void updater.defer(); } };
   const closeRef = useRef(close);
   closeRef.current = close;
+  useModalFocus(backdrop,open,()=>closeRef.current(),dialog);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -49,25 +52,6 @@ export function UpdateNotice() {
     else if (!open && updater.shouldPrompt() && !document.hidden) { manual.current = false; setOpen(true); void updater.defer(); }
     if (state.updatedFrom && !announced.current) { announced.current = true; showToast({ type: 'success', title: `已更新到 ${state.currentVersion}` }); }
   }, [state, open]);
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const frame = requestAnimationFrame(() => dialog.current?.focus());
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.stopPropagation(); closeRef.current(); }
-      if (event.key !== 'Tab') return;
-      const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], summary, [tabindex="0"]') || []).filter(node => node.getClientRects().length);
-      const first = controls[0], last = controls[controls.length - 1];
-      if (!first) { event.preventDefault(); dialog.current?.focus(); }
-      else if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    window.addEventListener('keydown', key, true);
-    return () => { cancelAnimationFrame(frame); document.body.style.overflow = overflow; window.removeEventListener('keydown', key, true); if (previous?.isConnected) previous.focus(); };
-  }, [open]);
-
   const view = updatePresentation(state);
   const notes = releaseNotes(state.notes || '');
   const progress = downloadProgress(state);
@@ -90,7 +74,7 @@ export function UpdateNotice() {
       <span className="update-banner-dot" /><span>{state.phase === 'ready' ? '更新已就绪' : '发现新版本'} {state.version}{state.busy ? ' · 会话结束后可安装' : ''}</span>
       <button onClick={openUpdateDialog}>查看更新 <ArrowRight size={13} /></button>
     </div>}
-    {open && createPortal(<div className="update-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
+    {open && createPortal(<div ref={backdrop} className="update-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} tabIndex={-1} className="update-card" data-phase={state.phase}>
         <div className="update-brand-row"><img src={brandIcon} width={42} height={42} alt="" /><div><strong>Mianxu</strong><span>客户端更新</span></div>
           {!locked && <button className="update-close" aria-label="关闭更新窗口" onClick={close}><X size={18} /></button>}

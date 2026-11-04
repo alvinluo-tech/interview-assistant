@@ -135,7 +135,7 @@ test('engine toasts reach the mounted notification viewport',()=>{
   const api=evaluateFixture('src/ui/primitives.tsx',{exports:{},window:{setTimeout(){}},require:name=>{
     if(name==='react')return {createContext:()=>({}),useEffect:fn=>fn(),useState:initial=>[initial,value=>updates.push(value)]};
     if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};
-    if(name==='lucide-react')return {};
+    if(['lucide-react','react-dom','./useModalFocus'].includes(name))return {};
     if(name==='../lib/events'||name==='@/lib/events')return {bus};
     throw new Error(name);
   }});
