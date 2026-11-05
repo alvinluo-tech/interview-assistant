@@ -2,20 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluateFixture} from './compile-fixture.mjs';
 
-function harness(responses=[]) {
+function harness(responses=[], stream) {
   const data={goals:[{id:'g1',createdAt:1,name:'工程师',companyName:'示例',description:'岗位介绍'}],resumes:[{id:'r1',createdAt:1,title:'简历',summary:'摘要',content:'敏感完整正文'}],interviewSessions:[{id:'i1',createdAt:5,title:'面试记录',status:'COMPLETED',type:'INTERVIEW',messages:[{id:'m1',role:'INTERVIEWER',text:'谈谈项目'}, {id:'m2',role:'ASSISTANT',text:'参考方案',metadata:{origin:'model_generated'}},{id:'m3',role:'ASSISTANT',text:'我的实际回答',metadata:{origin:'candidate_response'}}]}],examSessions:[{id:'e1',createdAt:3,title:'笔试',status:'COMPLETED',questions:[{id:'q1',questionText:'题目',answer:'参考答案'}]}],freeChats:[]};
-  const requests=[],chatCalls=[];
+  const requests=[],chatCalls=[],route={provider:{id:'provider',baseUrl:'https://model.invalid/v1',apiKey:'',models:[]},modelId:'model'};
   const api=evaluateFixture('src/lib/freeChat.ts',{exports:{},AbortController,Date,JSON,console,require:name=>{
     if(name==='./backend')return {getDataError:()=>null,readData:(key,fallback)=>data[key] ?? fallback,writeData:async(key,value)=>{data[key]=value;}};
     if(name==='./aiSettings')return {getAiSettings:()=>({timeoutMs:30000}),getAiLoadError:()=>null};
-    if(name==='./aiConfig')return {resolveAiRoute:()=>({provider:{models:[]},modelId:'model'})};
+    if(name==='./aiConfig')return {resolveAiRoute:()=>route};
     if(name==='./aiTransport')return {aiFetch:()=>{}};
-    if(name==='./aiProtocol')return {aiHeaders:()=>({}),withAiRequest:async(_p,_url,init)=>{requests.push(JSON.parse(init.body));return responses.shift();}};
-    if(name==='./aiRequests')return {chatStream:async(options)=>{chatCalls.push(options);options.onDelta?.('普通回答');return '普通回答';}};
+    if(name==='./aiProtocol')return {aiHeaders:()=>({}),withAiRequest:async(_p,_url,init)=>{requests.push(JSON.parse(init.body));const next=responses.shift();return typeof next==='function'?next():next;}};
+    if(name==='./aiRequests')return {chatStream:async(options)=>{chatCalls.push(options);if(stream)return stream(options);options.onDelta?.('普通回答');return '普通回答';}};
     if(name==='./aiTaskPolicy')return {checkInputBudget:()=>{},outputLimit:()=>4096};
     throw Error(name);
   }});
-  return {api,data,requests,chatCalls};
+  return {api,data,requests,chatCalls,route};
 }
 
 test('local tools require authorization, validate arguments, and exclude full resume content',()=>{
@@ -155,7 +155,7 @@ test('when the model keeps querying, the app summarizes collected results withou
   const rounds=Array.from({length:5},(_,index)=>({choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{id:`c${index}`,type:'function',function:{name:'list_local_data',arguments:'{"category":"goals"}'}}]}}]}));
   const h=harness(rounds),chunks=[];
   const answer=await h.api.askFreeChat([{role:'user',content:'分析我的准备情况'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>{},onDelta:text=>chunks.push(text)});
-  assert.match(answer,/达到上限/);assert.match(answer,/普通回答/);assert.equal(h.requests.length,5);assert.equal(h.chatCalls.length,1);
+  assert.match(answer,/重复查询/);assert.match(answer,/普通回答/);assert.equal(h.requests.length,2);assert.equal(h.chatCalls.length,1);
   const finalMessages=h.chatCalls[0].messages;assert.match(finalMessages.at(-1).content,/工程师/);assert.match(finalMessages.at(-1).content,/不可信/);
   assert.deepEqual(chunks,[answer]);
 });
@@ -178,4 +178,108 @@ test('conversation history persists locally and a second save updates the same t
   const h=harness();await h.api.saveFreeChat('id',[{role:'user',content:'你好'}]);
   await h.api.saveFreeChat('id',[{role:'user',content:'你好'},{role:'assistant',content:'您好'}]);
   assert.equal(h.data.freeChats.length,1);assert.equal(h.data.freeChats[0].messages.length,2);
+});
+
+test('spaced internal tool markup is never rendered as an answer',async()=>{
+  const leak={choices:[{finish_reason:'stop',message:{content:'< | | DSML | | calls>< | | DSML | | invoke name="read_local_record">'}}]};
+  const h=harness([leak,leak]);let output='';
+  await assert.rejects(h.api.askFreeChat([{role:'user',content:'分析'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>{},onDelta:t=>{output+=t;}}),/工具/);
+  assert.equal(output,'');
+});
+
+test('cancellation after provider response cannot read local data or publish an answer',async()=>{
+  const controller=new AbortController();
+  const h=harness([()=>{controller.abort();return {choices:[{finish_reason:'stop',message:{content:'过期的回答'}}]};}]);
+  let output='';await assert.rejects(h.api.askFreeChat([{role:'user',content:'分析'}],{signal:controller.signal,allowLocal:true,onTool:()=>assert.fail(),onDelta:t=>{output+=t;}}));
+  assert.equal(output,'');
+});
+
+test('duplicate call IDs reject the whole batch before any local query',async()=>{
+  const tool={id:'same',type:'function',function:{name:'list_local_data',arguments:'{"category":"resumes"}'}};
+  const h=harness([{choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[tool,tool]}}]}]);let queries=0;
+  await assert.rejects(h.api.askFreeChat([{role:'user',content:'分析'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>queries++,onDelta:()=>{}}),/无效|重复/);
+  assert.equal(queries,0);
+});
+
+test('local query rounds respect the configured text output budget',async()=>{
+  const h=harness([{choices:[{finish_reason:'stop',message:{content:'回答'}}]}]);
+  await h.api.askFreeChat([{role:'user',content:'你好'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>{},onDelta:()=>{}});
+  assert.equal(h.requests[0].max_tokens,4096);
+});
+
+test('all local tools enforce category grants, including search and material detail',()=>{
+  const h=harness();h.data.materials=[{id:'mat',name:'资料',content:'唯一搜索词',entries:[{id:'entry',question:'问题',answer:'模型答案',origin:'model_generated'}]}];
+  assert.throws(()=>h.api.executeFreeChatTool('read_local_record','{"category":"resumes","id":"r1","offset":0}',true,['exams']),/授权/);
+  const search=JSON.parse(h.api.executeFreeChatTool('search_local_knowledge','{"query":"唯一搜索词"}',true,['resumes']));assert.deepEqual(search,[]);
+  const detail=JSON.parse(h.api.executeFreeChatTool('read_local_record','{"category":"materials","id":"mat","offset":0}',true,['materials']));assert.match(detail.text,/model_generated/);assert.match(detail.text,/模型答案/);
+  assert.throws(()=>h.api.executeFreeChatTool('list_local_data','{"category":"exams"}',true,[]),/授权/);
+});
+
+test('an authorization revoked while waiting for the model prevents the local read',async()=>{
+  let allowed=true;
+  const h=harness([()=>{allowed=false;return {choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{id:'x',type:'function',function:{name:'read_local_record',arguments:'{"category":"resumes","id":"r1","offset":0}'}}]}}]};}]);
+  let queries=0;await assert.rejects(h.api.askFreeChat([{role:'user',content:'读取简历'}],{signal:new AbortController().signal,allowLocal:true,canQueryLocal:()=>allowed,onTool:()=>queries++,onDelta:()=>assert.fail()}),/撤销/);assert.equal(queries,0);assert.equal(h.requests.length,1);
+});
+
+test('ordinary streaming rejects split tool syntax even when local access is disabled',async()=>{
+  const h=harness([],async options=>{for(const chunk of ['< |',' | DS','ML | | calls>'])options.onDelta(chunk);return '< | | DSML | | calls>';});
+  let output='';await assert.rejects(h.api.askFreeChat([{role:'user',content:'你好'}],{signal:new AbortController().signal,allowLocal:false,onTool:()=>assert.fail(),onDelta:chunk=>output+=chunk}),/工具/);assert.equal(output,'');
+});
+
+test('a tool-free final answer is streamed and cancellation is still enforced',async()=>{
+  const controller=new AbortController();
+  const tool=id=>({choices:[{finish_reason:'tool_calls',message:{tool_calls:[{id,type:'function',function:{name:'list_local_data',arguments:'{"category":"goals"}'}}]}}]});
+  const h=harness([tool('a'),tool('b')],async options=>{controller.abort();options.onDelta('过期总结');return '过期总结';});let output='';
+  await assert.rejects(h.api.askFreeChat([{role:'user',content:'分析'}],{signal:controller.signal,allowLocal:true,onTool:()=>{},onDelta:t=>output+=t}));assert.equal(output,'');
+});
+
+test('query receipts contain status and identity without carrying private text',async()=>{
+  const tool={id:'r',type:'function',function:{name:'read_local_record',arguments:'{"category":"resumes","id":"r1","offset":0}'}};
+  const h=harness([{choices:[{finish_reason:'tool_calls',message:{tool_calls:[tool]}}]},{choices:[{finish_reason:'stop',message:{content:'分析'}}]}]),receipts=[];
+  await h.api.askFreeChat([{role:'user',content:'分析'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>{},onDelta:()=>{},onToolResult:q=>receipts.push(q)});
+  assert.equal(receipts[0].recordId,'r1');assert.equal(receipts[0].status,'success');assert.equal(receipts[0].title,'简历');assert.doesNotMatch(JSON.stringify(receipts),/敏感完整正文/);
+});
+
+test('failed assistant turns and historical leaked syntax do not contaminate the next prompt',async()=>{
+  const h=harness();await h.api.askFreeChat([{role:'user',content:'分析'},{role:'assistant',content:'错误的半段结论',status:'partial'},{role:'assistant',content:'< | | DSML | | calls>旧记录'},{role:'user',content:'继续'}],{signal:new AbortController().signal,allowLocal:false,onTool:()=>{},onDelta:()=>{}});
+  assert.equal(h.chatCalls[0].messages.filter(m=>m.role==='assistant').length,0);assert.match(h.api.displayFreeChatText('< | | DSML | | calls>'),/历史回答/);
+});
+
+test('a malformed tool_calls container cannot be accepted as a completed answer',async()=>{
+  const h=harness([{choices:[{finish_reason:'stop',message:{content:'不应被当作成功',tool_calls:{name:'read_local_record'}}}]}]);
+  await assert.rejects(h.api.askFreeChat([{role:'user',content:'查询'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>assert.fail(),onDelta:()=>assert.fail()}),/无效/);
+});
+
+test('a tool_calls finish reason without calls is a protocol error',async()=>{
+  const h=harness([{choices:[{finish_reason:'tool_calls',message:{content:'仍在查询',tool_calls:[]}}]}]);
+  await assert.rejects(h.api.askFreeChat([{role:'user',content:'查询'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>assert.fail(),onDelta:()=>assert.fail()}),/无效/);
+});
+
+test('unfinished and differently spaced DSML headers are hidden in historical display',()=>{
+  const h=harness();for(const text of ['<|DSML','< ｜ ｜ DSML','</ | | DSML | | invoke>'])assert.match(h.api.displayFreeChatText(text),/历史回答/);
+});
+
+test('at most 24 fresh tool queries execute before a tool-free summary',async()=>{
+  const batches=Array.from({length:5},(_,round)=>({choices:[{finish_reason:'tool_calls',message:{tool_calls:Array.from({length:6},(_,i)=>({id:`r${round}c${i}`,type:'function',function:{name:'list_local_data',arguments:JSON.stringify({category:'goals',offset:round*6+i})}}))}}]}));
+  const h=harness(batches),queries=[];const answer=await h.api.askFreeChat([{role:'user',content:'查询'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>{},onDelta:()=>{},onToolResult:q=>queries.push(q)});
+  assert.equal(queries.length,24);assert.equal(h.chatCalls.length,1);assert.match(answer,/达到上限/);
+});
+
+test('changing provider during local lookup prevents summary from forwarding data to the new provider',async()=>{
+  const batch=id=>({choices:[{finish_reason:'tool_calls',message:{tool_calls:[{id,type:'function',function:{name:'read_local_record',arguments:'{"category":"resumes","id":"r1","offset":0}'}}]}}]});
+  const h=harness([batch('one'),batch('two')]);let changed=false;
+  await assert.rejects(h.api.askFreeChat([{role:'user',content:'分析'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>{},onDelta:()=>assert.fail(),onToolResult:()=>{if(!changed){changed=true;h.route.provider={...h.route.provider,id:'different-provider'};}}}),/配置已变更/);
+  assert.equal(h.chatCalls.length,0);
+});
+
+test('search includes actual interview responses only within the granted category',()=>{
+  const h=harness();
+  const result=JSON.parse(h.api.executeFreeChatTool('search_local_knowledge','{"query":"实际回答"}',true,['interviews']));assert.equal(result[0].origin,'candidate_response');assert.equal(result[0].record_id,'i1');
+  assert.deepEqual(JSON.parse(h.api.executeFreeChatTool('search_local_knowledge','{"query":"实际回答"}',true,['resumes'])),[]);
+});
+
+test('malformed optional query metadata from imported history cannot crash the chat',()=>{
+  const h=harness();for(const value of [null,'bad',{name:'app_guide'}])assert.equal(h.api.readFreeChatQueries(value).length,0);
+  const queries=h.api.readFreeChatQueries([null,{name:'not_a_tool',status:'success'},{name:'read_local_record',status:'success',title:'标题',body:'不应重复保存的正文'},...Array.from({length:40},()=>({name:'app_guide',status:'cached'}))]);
+  assert.equal(queries.length,24);assert.equal(queries[0].title,'标题');assert.doesNotMatch(JSON.stringify(queries),/不应重复保存/);
 });
