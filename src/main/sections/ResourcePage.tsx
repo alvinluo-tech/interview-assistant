@@ -35,6 +35,7 @@ import {
 import {generatePreparation} from '@/lib/preparation';
 import { DocumentImportDialog } from '../DocumentImportDialog';
 import { DOCUMENT_ACCEPT } from '@/lib/documentIngest';
+import { t } from '@/lib/i18n';
 
 export function ResourcePage() {
   const [resumes] = useData<Resume[]>('resumes', []);
@@ -57,12 +58,12 @@ export function ResourcePage() {
       {/* 简历 */}
       <Card className="p-5">
         <SectionHeader
-          title="简历"
-          desc="上传 PDF / 图片 / 文本；AI 会照着你的经历组织回答。"
+          title={t('简历')}
+          desc={t('上传 PDF / 图片 / 文本；AI 会照着你的经历组织回答。')}
           right={
             <Button size="sm" variant="outline" disabled={uploading} onClick={() => { setImportKind('resume'); fileRef.current?.click(); }}>
               <Upload size={13} />
-              {uploading ? '上传中…' : '上传简历'}
+              {uploading ? t('上传中…') : t('上传简历')}
             </Button>
           }
         />
@@ -78,7 +79,7 @@ export function ResourcePage() {
           }}
         />
         {resumes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">还没有简历，先上传一份 PDF</p>
+          <p className="text-sm text-muted-foreground">{t('还没有简历，先上传一份 PDF')}</p>
         ) : (
           <div className="divide-y">
             {resumes.map((r) => (
@@ -86,11 +87,11 @@ export function ResourcePage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-sm">
                     <FileText size={13} className="text-muted-foreground" />
-                    <button className="truncate text-left hover:underline" title="查看或编辑简历正文" onClick={() => setPreviewResume(r)}>{r.title}</button>
-                    {r.isSample && <Badge variant="secondary">示例</Badge>}
+                    <button className="truncate text-left hover:underline" title={t('查看或编辑简历正文')} onClick={() => setPreviewResume(r)}>{r.title}</button>
+                    {r.isSample && <Badge variant="secondary">{t('示例')}</Badge>}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    上传于 {new Date(r.createdAt).toLocaleDateString('zh-CN')}
+                    {t('上传于 {date}', { date: new Date(r.createdAt).toLocaleDateString('zh-CN') })}
                   </div>
                 </div>
                 <Button
@@ -109,17 +110,17 @@ export function ResourcePage() {
       {/* 岗位 */}
       <Card className="p-5">
         <SectionHeader
-          title="岗位"
-          desc="岗位决定 AI 往哪个方向答；可以填 JD。"
+          title={t('岗位')}
+          desc={t('岗位决定 AI 往哪个方向答；可以填 JD。')}
           right={
             <Button size="sm" variant="outline" onClick={() => setGoalDialog({ open: true })}>
               <Plus size={13} />
-              新建岗位
+              {t('新建岗位')}
             </Button>
           }
         />
         {goals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">还没有岗位，新建一个再开始面试</p>
+          <p className="text-sm text-muted-foreground">{t('还没有岗位，新建一个再开始面试')}</p>
         ) : (
           <div className="divide-y">
             {goals.map((g) => (
@@ -130,8 +131,7 @@ export function ResourcePage() {
                     {g.companyName && <span className="ml-1.5 text-xs text-muted-foreground">· {g.companyName}</span>}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    公司：{g.companyName || '未填写'} · 创建于{' '}
-                    {new Date(g.createdAt).toLocaleDateString('zh-CN')}
+                    {t('公司：{company} · 创建于 {date}', { company: g.companyName || t('未填写'), date: new Date(g.createdAt).toLocaleDateString('zh-CN') })}
                   </div>
                   {g.description && (
                     <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{g.description}</p>
@@ -139,7 +139,7 @@ export function ResourcePage() {
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button size="sm" variant="ghost" onClick={() => setGoalDialog({ open: true, goal: g })}>
-                    编辑
+                    {t('编辑')}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setDeleting({ kind: 'goal', id: g.id, name: g.name })}>
                     <Trash2 size={13} />
@@ -154,30 +154,30 @@ export function ResourcePage() {
       {/* 面试资料 */}
       <Card className="p-5">
         <SectionHeader
-          title="面试资料"
-          desc="项目经历、标准问答、业务背景都可以放这里；面试时 AI 会优先参考。"
+          title={t('面试资料')}
+          desc={t('项目经历、标准问答、业务背景都可以放这里；面试时 AI 会优先参考。')}
           right={
             <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={uploading} onClick={() => { setImportKind('material'); fileRef.current?.click(); }}><Upload size={13} />导入文件</Button>
+            <Button size="sm" variant="outline" disabled={uploading} onClick={() => { setImportKind('material'); fileRef.current?.click(); }}><Upload size={13} />{t('导入文件')}</Button>
             <Button
               size="sm"
               variant="outline"
               onClick={async () => {
                 try {
-                const m = await saveMaterial({ name: '未命名资料', source: 'manual' });
+                const m = await saveMaterial({ name: t('未命名资料'), source: 'manual' });
                 setEditorId(m.id);
-                } catch(error) {showToast({type:'error',title:'资料未保存',description:String((error as Error).message||error)});}
+                } catch(error) {showToast({type:'error',title:t('资料未保存'),description:String((error as Error).message||error)});}
               }}
             >
               <Plus size={13} />
-              新建资料
+              {t('新建资料')}
             </Button>
             </div>
           }
         />
         {materials.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            还没有面试资料。项目经历、标准问答、业务背景都可以放这里
+            {t('还没有面试资料。项目经历、标准问答、业务背景都可以放这里')}
           </p>
         ) : (
           <div className="divide-y">
@@ -187,12 +187,12 @@ export function ResourcePage() {
                   <div className="flex items-center gap-1.5 text-sm">
                     <span className="truncate">{m.name}</span>
                     <Badge variant="secondary">
-                      {m.source === 'official' ? '官方' : m.source === 'ai' ? 'AI 生成' : m.source === 'file' ? '文件导入' : '自建'}
+                      {m.source === 'official' ? t('官方') : m.source === 'ai' ? t('AI 生成') : m.source === 'file' ? t('文件导入') : t('自建')}
                     </Badge>
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    {m.entries.length > 0 ? `${m.entries.length} 条预设问答` : `自由资料 ${m.content.length} 字`}
-                    {' · '}更新于 {new Date(m.updatedAt).toLocaleDateString('zh-CN')}
+                    {m.entries.length > 0 ? t('{count} 条预设问答', { count: m.entries.length }) : t('自由资料 {count} 字', { count: m.content.length })}
+                    {' · '}{t('更新于 {date}', { date: new Date(m.updatedAt).toLocaleDateString('zh-CN') })}
                   </div>
                 </button>
                 <Button
@@ -210,7 +210,7 @@ export function ResourcePage() {
 
       {(importFile || previewResume) && <DocumentImportDialog
         file={importFile || undefined}
-        title={importKind === 'material' && importFile ? '导入面试资料' : '检查简历正文'}
+        title={importKind === 'material' && importFile ? t('导入面试资料') : t('检查简历正文')}
         initial={previewResume ? { name: previewResume.document?.name || previewResume.title, text: previewResume.content || previewResume.summary || '',
           pages: previewResume.document?.pages || 1, method: previewResume.document?.method || 'text', importedAt: previewResume.document?.importedAt || previewResume.createdAt } : undefined}
         onClose={() => { setImportFile(null); setPreviewResume(null); setUploading(false); }}
@@ -222,7 +222,7 @@ export function ResourcePage() {
             await saveResume({ id: previewResume?.id, title: previewResume?.title || document.name.replace(/\.[^.]+$/, ''),
               content: text, summary: text.slice(0, 6000), document: metadata });
           }
-          showToast({ type: 'success', title: '正文已保存' });
+          showToast({ type: 'success', title: t('正文已保存') });
         }}
       />}
       {goalDialog.open && (
@@ -235,9 +235,9 @@ export function ResourcePage() {
       <ConfirmDialog
         open={deleting != null}
         title={
-          deleting?.kind === 'resume' ? '删除简历' : deleting?.kind === 'goal' ? '删除岗位' : '删除面试资料'
+          deleting?.kind === 'resume' ? t('删除简历') : deleting?.kind === 'goal' ? t('删除岗位') : t('删除面试资料')
         }
-        body={`删除后无法恢复，确定删除「${deleting?.name ?? ''}」吗？`}
+        body={t('删除后无法恢复，确定删除「{name}」吗？', { name: deleting?.name ?? '' })}
         onCancel={() => setDeleting(null)}
         onConfirm={async () => {
           if (!deleting) return;
@@ -246,7 +246,7 @@ export function ResourcePage() {
           else if (deleting.kind === 'goal') await deleteGoal(deleting.id);
           else await deleteMaterial(deleting.id);
           setDeleting(null);
-          } catch(error) {showToast({type:'error',title:'删除未完成，请重试',description:String((error as Error).message||error)});}
+          } catch(error) {showToast({type:'error',title:t('删除未完成，请重试'),description:String((error as Error).message||error)});}
         }}
       />
     </div>
@@ -261,24 +261,24 @@ function GoalDialog({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
   const [description, setDescription] = useState(goal?.description ?? '');
   return (
     <Dialog open onClose={onClose} dismissable={!saving} className="max-w-md">
-      <DialogTitle>{goal ? '编辑岗位' : '新建岗位'}</DialogTitle>
+      <DialogTitle>{goal ? t('编辑岗位') : t('新建岗位')}</DialogTitle>
       {error&&<p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium text-muted-foreground">
-          岗位名称
-          <Input disabled={saving} className="mt-1" placeholder="岗位名称" value={name} onChange={(e) => setName(e.target.value)} />
+          {t('岗位名称')}
+          <Input disabled={saving} className="mt-1" placeholder={t('岗位名称')} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
-          公司
-          <Input disabled={saving} className="mt-1" placeholder="公司" value={company} onChange={(e) => setCompany(e.target.value)} />
+          {t('公司')}
+          <Input disabled={saving} className="mt-1" placeholder={t('公司')} value={company} onChange={(e) => setCompany(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
-          JD / 面试方向
+          {t('JD / 面试方向')}
           <Textarea
             className="mt-1"
             rows={6}
             disabled={saving}
-            placeholder="把岗位 JD 粘进来，AI 会按这个方向组织回答"
+            placeholder={t('把岗位 JD 粘进来，AI 会按这个方向组织回答')}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -286,7 +286,7 @@ function GoalDialog({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button size="sm" variant="outline" disabled={saving} onClick={onClose}>
-          取消
+          {t('取消')}
         </Button>
         <Button
           size="sm"
@@ -296,11 +296,11 @@ function GoalDialog({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
             try {
             await saveGoal({ id: goal?.id, name: name.trim(), companyName: company.trim(), description });
             onClose();
-            }catch(error){setError(`保存失败，输入已保留：${String((error as Error).message||error)}`);}
+            }catch(error){setError(t('保存失败，输入已保留：{message}', { message: String((error as Error).message||error) }));}
             finally{savingRef.current=false;setSaving(false);}
           }}
         >
-          {saving?'正在保存…':'保存'}
+          {saving?t('正在保存…'):t('保存')}
         </Button>
       </div>
     </Dialog>
@@ -326,55 +326,55 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
 
   const save = async () => {
     try {
-    await saveMaterial({ id, name: name.trim() || '未命名资料', content });
-    showToast({ type: 'success', title: '已保存' });
-    }catch(error){showToast({type:'error',title:'资料保存失败，输入已保留',description:String((error as Error).message||error)});}
+    await saveMaterial({ id, name: name.trim() || t('未命名资料'), content });
+    showToast({ type: 'success', title: t('已保存') });
+    }catch(error){showToast({type:'error',title:t('资料保存失败，输入已保留'),description:String((error as Error).message||error)});}
   };
 
   return (
     <Dialog open onClose={onClose} className="max-w-2xl">
-      <DialogTitle>编辑面试资料</DialogTitle>
+      <DialogTitle>{t('编辑面试资料')}</DialogTitle>
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium text-muted-foreground">
-          资料名称
+          {t('资料名称')}
           <Input className="mt-1" maxLength={50} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
-          自由资料（选填）
+          {t('自由资料（选填）')}
           <Textarea
             className="mt-1"
             rows={7}
             maxLength={90000}
-            placeholder="项目经历 / 业务背景 / 专业资料"
+            placeholder={t('项目经历 / 业务背景 / 专业资料')}
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
           <span className="mt-1 block text-[11px] text-muted-foreground">
-            {content.length}/90000 字，改完点保存
+            {t('{count}/90000 字，改完点保存', { count: content.length })}
           </span>
         </label>
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              预设问答（{material.entries.length}）
+              {t('预设问答（{count}）', { count: material.entries.length })}
             </span>
             <div className="flex gap-1.5">
               <Button size="sm" variant="ghost" onClick={() => setGenOpen(true)}>
-                AI 出题
+                {t('AI 出题')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
                 <Plus size={12} />
-                添加
+                {t('添加')}
               </Button>
             </div>
           </div>
           <p className="mb-2 text-[11px] text-muted-foreground">
-            面试官问到相似问题时，AI 会优先照你预设的答案回答。
+            {t('面试官问到相似问题时，AI 会优先照你预设的答案回答。')}
           </p>
           {material.entries.length === 0 ? (
             <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              还没有问答。可以让 AI 按简历生成，或粘贴已整理好的问答
+              {t('还没有问答。可以让 AI 按简历生成，或粘贴已整理好的问答')}
             </p>
           ) : (
             <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
@@ -395,14 +395,14 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
                           setAddOpen(true);
                         }}
                       >
-                        编辑
+                        {t('编辑')}
                       </button>
                       <button
                         type="button"
                         className="text-[11px] text-muted-foreground hover:text-destructive"
-                        onClick={() => void deleteEntry(id, e.id).catch(error=>showToast({type:'error',title:'删除失败，请重试',description:String(error)}))}
+                        onClick={() => void deleteEntry(id, e.id).catch(error=>showToast({type:'error',title:t('删除失败，请重试'),description:String(error)}))}
                       >
-                        删除
+                        {t('删除')}
                       </button>
                     </div>
                   </div>
@@ -415,46 +415,46 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
 
       <div className="mt-4 flex justify-between">
         <Button size="sm" variant="ghost" onClick={onClose}>
-          完成
+          {t('完成')}
         </Button>
         <Button size="sm" onClick={() => void save()}>
-          保存
+          {t('保存')}
         </Button>
       </div>
 
       {/* 添加/编辑问答 */}
       {addOpen && (
         <Dialog open onClose={() => setAddOpen(false)}>
-          <DialogTitle>{q ? '编辑问答' : '添加问答'}</DialogTitle>
-          <DialogDesc>面试官问到相似问题时，AI 会优先照你预设的答案回答。</DialogDesc>
+          <DialogTitle>{q ? t('编辑问答') : t('添加问答')}</DialogTitle>
+          <DialogDesc>{t('面试官问到相似问题时，AI 会优先照你预设的答案回答。')}</DialogDesc>
           <div className="flex flex-col gap-3">
             <label className="text-xs font-medium text-muted-foreground">
-              问题
+              {t('问题')}
               <Textarea
                 className="mt-1"
                 rows={2}
                 maxLength={2000}
-                placeholder="例如：请做一个简短的自我介绍"
+                placeholder={t('例如：请做一个简短的自我介绍')}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
             </label>
             <label className="text-xs font-medium text-muted-foreground">
-              参考答案
+              {t('参考答案')}
               <Textarea
                 className="mt-1"
                 rows={8}
                 maxLength={8000}
-                placeholder="用你自己的真实经历和数据作答，越具体越好"
+                placeholder={t('用你自己的真实经历和数据作答，越具体越好')}
                 value={a}
                 onChange={(e) => setA(e.target.value)}
               />
-              <span className="mt-1 block text-[11px] text-muted-foreground">答案 {a.length}/8000 字</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">{t('答案 {count}/8000 字', { count: a.length })}</span>
             </label>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button size="sm" variant="outline" onClick={() => setAddOpen(false)}>
-              取消
+              {t('取消')}
             </Button>
             <Button
               size="sm"
@@ -465,10 +465,10 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
                 setQ('');
                 setA('');
                 setAddOpen(false);
-                }catch(error){showToast({type:'error',title:'问答保存失败，输入已保留',description:String((error as Error).message||error)});}
+                }catch(error){showToast({type:'error',title:t('问答保存失败，输入已保留'),description:String((error as Error).message||error)});}
               }}
             >
-              保存
+              {t('保存')}
             </Button>
           </div>
         </Dialog>
@@ -477,11 +477,11 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
       {/* AI 出题 */}
       {genOpen && (
         <Dialog open onClose={() => setGenOpen(false)}>
-          <DialogTitle>AI 生成问答</DialogTitle>
-          <DialogDesc>选择简历与岗位生成练习题。结果是 AI 准备建议，不代表真实题频或已确认个人经历。</DialogDesc>
+          <DialogTitle>{t('AI 生成问答')}</DialogTitle>
+          <DialogDesc>{t('选择简历与岗位生成练习题。结果是 AI 准备建议，不代表真实题频或已确认个人经历。')}</DialogDesc>
           <div className="mb-3 grid grid-cols-2 gap-2">
-            <label className="text-xs">参考简历<Select aria-label="出题参考简历" value={preparationResumeId} onChange={e=>setPreparationResumeId(e.target.value)}><option value="">不使用个人简历</option>{preparationResumes.map(resume=><option key={resume.id} value={resume.id}>{resume.title}</option>)}</Select></label>
-            <label className="text-xs">目标岗位<Select aria-label="出题目标岗位" value={preparationGoalId} onChange={e=>setPreparationGoalId(e.target.value)}><option value="">通用技术练习</option>{preparationGoals.map(goal=><option key={goal.id} value={goal.id}>{goal.name}</option>)}</Select></label>
+            <label className="text-xs">{t('参考简历')}<Select aria-label={t('出题参考简历')} value={preparationResumeId} onChange={e=>setPreparationResumeId(e.target.value)}><option value="">{t('不使用个人简历')}</option>{preparationResumes.map(resume=><option key={resume.id} value={resume.id}>{resume.title}</option>)}</Select></label>
+            <label className="text-xs">{t('目标岗位')}<Select aria-label={t('出题目标岗位')} value={preparationGoalId} onChange={e=>setPreparationGoalId(e.target.value)}><option value="">{t('通用技术练习')}</option>{preparationGoals.map(goal=><option key={goal.id} value={goal.id}>{goal.name}</option>)}</Select></label>
           </div>
           <div className="flex gap-2">
             {[5, 8, 12].map((n) => (
@@ -499,16 +499,16 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
                     for (const item of parsed.slice(0, n)) {
                       await saveEntry(id, { question: item.question, answer: item.answer,origin:'model_generated' });
                     }
-                    showToast({ type: 'success', title: `已生成 ${Math.min(parsed.length, n)} 条问答` });
+                    showToast({ type: 'success', title: t('已生成 {count} 条问答', { count: Math.min(parsed.length, n) }) });
                     setGenOpen(false);
                   } catch (e) {
-                    showToast({ type: 'error', title: `生成失败：${String((e as Error).message ?? e)}` });
+                    showToast({ type: 'error', title: t('生成失败：{message}', { message: String((e as Error).message ?? e) }) });
                   } finally {
                     setGenerating(false);
                   }
                 }}
               >
-                {generating ? 'AI 生成中…' : `${n} 条`}
+                {generating ? t('AI 生成中…') : t('{count} 条', { count: n })}
               </Button>
             ))}
           </div>

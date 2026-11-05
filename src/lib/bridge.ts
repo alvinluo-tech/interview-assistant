@@ -3,6 +3,7 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 import { listen, emit, emitTo } from '@tauri-apps/api/event';
+import { t } from './i18n';
 
 export function isTauri(): boolean {
   return '__TAURI_INTERNALS__' in window;
@@ -71,11 +72,11 @@ export const checkScreenCapturePermission = () => cmd<boolean>('cmd_check_screen
 export const requestScreenCapturePermission = () => cmd<boolean>('cmd_request_screen_capture_permission');
 export const openScreenRecordingSettings = () => cmd<boolean>('cmd_open_screen_recording_settings');
 async function ensureScreenCapturePermission(): Promise<void> {
-  if (!isTauri()) throw new Error('请在桌面应用中使用截图或系统收音。');
+  if (!isTauri()) throw new Error(t('请在桌面应用中使用截图或系统收音。'));
   if (await checkScreenCapturePermission()) return;
   await requestScreenCapturePermission();
   if (!await checkScreenCapturePermission()) {
-    throw new Error('尚未获得屏幕与系统音频录制权限。请前往「设置 → 隐蔽 → 录屏与系统收音权限」打开系统设置并允许本应用访问，必要时重启应用。');
+    throw new Error(t('尚未获得屏幕与系统音频录制权限。请前往「设置 → 隐蔽 → 录屏与系统收音权限」打开系统设置并允许本应用访问，必要时重启应用。'));
   }
 }
 export const startSystemAudioCapture = async () => {
@@ -159,7 +160,7 @@ export { listen, emit, emitTo };
 
 /** Await registration before starting a producer that can emit immediately. */
 export async function listenEvent<T>(event: string, handler: (payload: T) => void): Promise<() => void> {
-  if (!isTauri()) throw new Error('系统收音需要在桌面应用中使用');
+  if (!isTauri()) throw new Error(t('系统收音需要在桌面应用中使用'));
   return listen<T>(event, e => handler(e.payload));
 }
 

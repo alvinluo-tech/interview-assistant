@@ -1,5 +1,6 @@
 import { chatStream } from './ai';
 import { buildKnowledgeContext, type KnowledgeInput } from './knowledgeContext';
+import { t } from './i18n';
 export interface PreparationQuestion {
     category: string;
     probability: 'high' | 'medium' | 'low';
@@ -23,11 +24,11 @@ export async function generatePreparation(input: KnowledgeInput & {
         parsed = JSON.parse(clean);
     }
     catch {
-        throw new Error('题库返回格式无效，请重试。');
+        throw new Error(t('题库返回格式无效，请重试。'));
     }
     const questions = Array.isArray(parsed) ? parsed : parsed?.questions;
     if (!Array.isArray(questions) || questions.length < 1 || questions.length > Math.max(input.count, 30) || questions.some(question => !question || typeof question.question !== 'string' || !question.question.trim() || question.question.length > 10000 || typeof question.answer !== 'string' || !question.answer.trim() || question.answer.length > 50000
         || !categories.includes(question.category) || !['high', 'medium', 'low'].includes(question.probability)))
-        throw new Error('题库响应字段无效，未保存异常内容。');
+        throw new Error(t('题库响应字段无效，未保存异常内容。'));
     return questions.slice(0, input.count);
 }

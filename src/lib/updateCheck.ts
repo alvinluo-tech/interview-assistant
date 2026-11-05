@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 export interface UpdateSnapshot {
   phase: 'idle' | 'checking' | 'available' | 'upToDate' | 'downloading' | 'verifying' | 'ready' | 'installing' | 'error';
   currentVersion?: string;
@@ -49,8 +51,8 @@ export function createUpdateClient(deps: UpdateClientDependencies) {
     refresh: () => run('cmd_updater_status'),
     download: () => run('cmd_updater_download'),
     install: async () => {
-      if (snapshot.busy) throw new Error('请先结束正在进行的会话并关闭模拟面试窗口，再安装更新。');
-      if (snapshot.phase !== 'ready') throw new Error('请先下载并验证更新。');
+      if (snapshot.busy) throw new Error(t('请先结束正在进行的会话并关闭模拟面试窗口，再安装更新。'));
+      if (snapshot.phase !== 'ready') throw new Error(t('请先下载并验证更新。'));
       await run('cmd_updater_install');
     },
     shouldPrompt: () => {

@@ -3,6 +3,7 @@
  * 内置 useSyncExternalStore 订阅，change 时可选持久化。
  */
 import { useSyncExternalStore } from 'react';
+import { t } from './i18n';
 
 type Listener = () => void;
 
@@ -66,7 +67,7 @@ export function setSetting<T>(key: string, value: T,_options?:{strict?:boolean})
     }
   } catch (e) {
     if(changed)try{const store=await getStore();if(previous===undefined)await store.delete(key);else await store.set(key,previous);}catch{/* Preserve the original failure. No automatic save is enabled. */}
-    throw new Error(`设置未保存，请检查存储位置和磁盘权限：${String((e as Error).message || e)}`);
+    throw new Error(t('设置未保存，请检查存储位置和磁盘权限：{message}', { message: String((e as Error).message || e) }));
   }
   if(!native||(changes.get(key)||0)===observed){cache.set(key,value);changes.set(key,observed+1);mirrorDesktopTheme(key, value);listeners.forEach(listener=>listener());}
   // The native transaction already broadcasts in commit order. Re-broadcasting
@@ -83,7 +84,7 @@ export function setSetting<T>(key: string, value: T,_options?:{strict?:boolean})
   });
   writes = write;
   // Attach an observer even for legacy fire-and-forget callers; awaited callers still reject.
-  void write.catch(error => {void import('./events').then(({bus})=>bus.emit('toast',{type:'error',title:'设置未保存',description:String(error.message||error)})).catch(()=>{});});
+  void write.catch(error => {void import('./events').then(({bus})=>bus.emit('toast',{type:'error',title:t('设置未保存'),description:String(error.message||error)})).catch(()=>{});});
   return write;
 }
 

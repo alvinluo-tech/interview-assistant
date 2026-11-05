@@ -19,6 +19,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { bus } from '../lib/events';
 import { isTopModal, useModalFocus } from './useModalFocus';
+import { t } from '@/lib/i18n';
 
 // ---------------- Button ----------------
 
@@ -189,7 +190,7 @@ export function Dialog({
               type="button"
               onClick={dismiss}
               className="absolute right-3 top-3 rounded p-1 text-muted-foreground hover:bg-accent"
-              aria-label="关闭"
+              aria-label={t('关闭')}
             >
               <X size={16} />
             </button>
@@ -222,12 +223,12 @@ let toastSeq = 1;
 const toastListeners = new Set<(items: ToastItem[]) => void>();
 let toasts: ToastItem[] = [];
 
-export function showToast(t: { type?: ToastItem['type']; title: string; description?: string }) {
+export function showToast(input: { type?: ToastItem['type']; title: string; description?: string }) {
   const item: ToastItem = {
     id: toastSeq++,
-    type: t.type ?? 'info',
-    title: t.title,
-    description: t.description,
+    type: input.type ?? 'info',
+    title: input.title,
+    description: input.description,
   };
   toasts = [...toasts.slice(-2), item];
   toastListeners.forEach((l) => l(toasts));
@@ -249,19 +250,19 @@ export function ToastViewport() {
   }, []);
   return (
     <div className="pointer-events-none fixed bottom-6 left-1/2 z-[1000] flex w-full max-w-sm -translate-x-1/2 flex-col items-center gap-2 px-4">
-      {items.map((t) => (
+      {items.map((item) => (
         <div
-          key={t.id}
+          key={item.id}
           className={`pointer-events-auto w-full rounded-md border px-4 py-2.5 text-sm shadow-lg ${
-            t.type === 'error'
+            item.type === 'error'
               ? 'border-destructive/30 bg-destructive text-destructive-foreground'
-              : t.type === 'success'
+              : item.type === 'success'
                 ? 'border-primary/30 bg-primary text-primary-foreground'
                 : 'bg-card text-card-foreground'
           }`}
         >
-          <div className="font-medium">{t.title}</div>
-          {t.description && <div className="mt-0.5 text-xs opacity-80">{t.description}</div>}
+          <div className="font-medium">{item.title}</div>
+          {item.description && <div className="mt-0.5 text-xs opacity-80">{item.description}</div>}
         </div>
       ))}
     </div>
@@ -345,7 +346,7 @@ export function ConfirmDialog({
   body,
   onConfirm,
   onCancel,
-  confirmText = '删除',
+  confirmText = t('删除'),
 }: {
   open: boolean;
   title: string;
@@ -360,7 +361,7 @@ export function ConfirmDialog({
       <p className="mb-4 text-sm text-muted-foreground">{body}</p>
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onCancel}>
-          取消
+          {t('取消')}
         </Button>
         <Button variant="destructive" size="sm" onClick={onConfirm}>
           {confirmText}

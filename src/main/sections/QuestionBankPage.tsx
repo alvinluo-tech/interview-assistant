@@ -17,6 +17,7 @@ import { useData, writeData, saveEntry, saveMaterial, type Goal, type Material, 
 import {generatePreparation} from '@/lib/preparation';
 import { readData } from '@/lib/backend';
 import { getSetting } from '@/lib/store';
+import { t } from '@/lib/i18n';
 
 interface BankQuestion {
   category: string;
@@ -67,17 +68,17 @@ export function QuestionBankPage() {
   const generate = async () => {
     if (generating) return;
     setGenerating(true);
-    setProgress('正在读取简历与岗位…');
+    setProgress(t('正在读取简历与岗位…'));
     try {
       const goal = goals.find((g) => g.id === goalId);
       const resume = resumes.find((r) => r.id === resumeId);
-      setProgress('AI 正在生成准备题…');
+      setProgress(t('AI 正在生成准备题…'));
       const parsed=await generatePreparation({resume,goal,count:10,experience,
         materials:materials.filter(material=>getSetting<string[]>('interview.pendingMaterialIds',[]).includes(material.id))});
       await saveBank({questions:parsed});
-      showToast({ type: 'success', title: `已生成 ${parsed.length} 道题` });
+      showToast({ type: 'success', title: t('已生成 {count} 道题', { count: parsed.length }) });
     } catch (e) {
-      showToast({ type: 'error', title: `生成失败：${String((e as Error).message ?? e)}` });
+      showToast({ type: 'error', title: t('生成失败：{message}', { message: String((e as Error).message ?? e) }) });
     } finally {
       setGenerating(false);
       setProgress('');
@@ -87,25 +88,25 @@ export function QuestionBankPage() {
   const saveToMaterial = async (q: BankQuestion) => {
     let target = materials[0];
     if (!target) {
-      target = await saveMaterial({ name: '面试题库收藏', source: 'ai' });
+      target = await saveMaterial({ name: t('面试题库收藏'), source: 'ai' });
       void readData;
     }
     await saveEntry(target.id, { question: q.question, answer: q.answer,origin:'model_generated' });
-    showToast({ type: 'success', title: '已存进面试资料，面试时助手会用上这道题的答案' });
+    showToast({ type: 'success', title: t('已存进面试资料，面试时助手会用上这道题的答案') });
   };
 
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-5">
         <SectionHeader
-          title="按你的简历，准备好怎么答"
-          desc="结合岗位与选定资料生成准备题、参考思路和可用经历，优先级用于安排练习。"
+          title={t('按你的简历，准备好怎么答')}
+          desc={t('结合岗位与选定资料生成准备题、参考思路和可用经历，优先级用于安排练习。')}
         />
         <div className="grid grid-cols-3 gap-2">
           <label className="text-xs font-medium text-muted-foreground">
-            这场面试
+            {t('这场面试')}
             <Select className="mt-1" value={goalId} onChange={(e) => setGoalId(e.target.value)}>
-              {goals.length === 0 && <option value="">不限岗位</option>}
+              {goals.length === 0 && <option value="">{t('不限岗位')}</option>}
               {goals.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.companyName ? `${g.companyName} · ${g.name}` : g.name}
@@ -114,9 +115,9 @@ export function QuestionBankPage() {
             </Select>
           </label>
           <label className="text-xs font-medium text-muted-foreground">
-            简历
+            {t('简历')}
             <Select className="mt-1" value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
-              <option value="">不带简历</option>
+              <option value="">{t('不带简历')}</option>
               {resumes.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.title}
@@ -125,11 +126,11 @@ export function QuestionBankPage() {
             </Select>
           </label>
           <label className="text-xs font-medium text-muted-foreground">
-            经验
+            {t('经验')}
             <Select className="mt-1" value={experience} onChange={(e) => setExperience(e.target.value)}>
               {EXPERIENCE_OPTIONS.map((x) => (
                 <option key={x} value={x}>
-                  {x}
+                  {t(x)}
                 </option>
               ))}
             </Select>
@@ -137,11 +138,11 @@ export function QuestionBankPage() {
         </div>
         <div className="mt-3 flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
-            {aiReady ? '生成约 10 道题，需要几十秒。' : '需要先在「设置 → AI 服务」配置接口。'}
+            {aiReady ? t('生成约 10 道题，需要几十秒。') : t('需要先在「设置 → AI 服务」配置接口。')}
           </span>
           <Button size="sm" onClick={() => void generate()} disabled={generating || !aiReady}>
             {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            {generating ? '正在准备…' : '生成我的面试准备'}
+            {generating ? t('正在准备…') : t('生成我的面试准备')}
           </Button>
         </div>
         {generating && progress && (
@@ -154,7 +155,7 @@ export function QuestionBankPage() {
 
       {questions.length > 0 && (
         <Card className="p-5">
-          <SectionHeader title={`${questions.length} 题`} desc="点开一题看参考思路；可以收藏或存进面试资料。" />
+          <SectionHeader title={t('{count} 题', { count: questions.length })} desc={t('点开一题看参考思路；可以收藏或存进面试资料。')} />
           <div className="flex flex-col gap-2">
             {questions.map((q, i) => {
               const open = openIdx === i;
@@ -170,9 +171,9 @@ export function QuestionBankPage() {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{q.question}</div>
                       <div className="mt-1 flex flex-wrap gap-1">
-                        <Badge variant="secondary">{CATEGORY_LABEL[q.category] ?? q.category}</Badge>
+                        <Badge variant="secondary">{t(CATEGORY_LABEL[q.category] ?? q.category)}</Badge>
                         <Badge variant={PROBABILITY_LABEL[q.probability]?.variant ?? 'secondary'}>
-                          {PROBABILITY_LABEL[q.probability]?.text ?? q.probability}
+                          {t(PROBABILITY_LABEL[q.probability]?.text ?? q.probability)}
                         </Badge>
                       </div>
                     </div>
@@ -188,16 +189,16 @@ export function QuestionBankPage() {
                             const next = new Set(favorites);
                             if (fav) next.delete(q.question);
                             else next.add(q.question);
-                            void saveBank({favorites:[...next]}).then(() => showToast({ type: 'success', title: fav ? '已取消收藏' : '已收藏' }))
-                              .catch(error => showToast({type:'error',title:'收藏保存失败',description:String(error)}));
+                            void saveBank({favorites:[...next]}).then(() => showToast({ type: 'success', title: fav ? t('已取消收藏') : t('已收藏') }))
+                              .catch(error => showToast({type:'error',title:t('收藏保存失败'),description:String(error)}));
                           }}
                         >
                           {fav ? <StarOff size={12} /> : <Star size={12} />}
-                          {fav ? '已收藏' : '收藏'}
+                          {fav ? t('已收藏') : t('收藏')}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => void saveToMaterial(q)}>
                           <Upload size={12} />
-                          存进面试资料
+                          {t('存进面试资料')}
                         </Button>
                       </div>
                     </div>
@@ -213,7 +214,7 @@ export function QuestionBankPage() {
         <Card className="flex flex-col items-center gap-2 p-10 text-center">
           <BookOpen size={26} className="text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            还没有生成题目。选好简历和岗位，点「生成我的面试准备」。
+            {t('还没有生成题目。选好简历和岗位，点「生成我的面试准备」。')}
           </p>
         </Card>
       )}

@@ -3,20 +3,21 @@
  */
 import { Button, Dialog, DialogTitle, Input } from '@/ui/primitives';
 import { setSetting, useSetting } from '@/lib/store';
+import { t } from '@/lib/i18n';
 
 export function LocalProfileDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [user, setUser] = useSetting('local.user', { name: '本地用户', email: '' });
+  const [user, setUser] = useSetting('local.user', { name: t('本地用户'), email: '' });
   if (!open) return null;
   return (
     <Dialog open onClose={onClose} className="max-w-sm">
-      <DialogTitle>本地身份</DialogTitle>
+      <DialogTitle>{t('本地身份')}</DialogTitle>
       <div className="mb-3 flex flex-col gap-3">
         <label className="text-xs font-medium text-muted-foreground">
-          显示名称
+          {t('显示名称')}
           <Input className="mt-1" value={user.name} onChange={(e) => setUser({ ...user, name: e.target.value })} />
         </label>
         <label className="text-xs font-medium text-muted-foreground">
-          邮箱（选填）
+          {t('邮箱（选填）')}
           <Input
             className="mt-1"
             placeholder="you@example.com"
@@ -25,12 +26,12 @@ export function LocalProfileDialog({ open, onClose }: { open: boolean; onClose: 
           />
         </label>
         <p className="text-xs text-muted-foreground">
-          本复刻版不连接云端账号；所有数据保存在本机 store.json / data.json。
+          {t('本复刻版不连接云端账号；所有数据保存在本机 store.json / data.json。')}
         </p>
       </div>
       <div className="flex justify-end">
         <Button size="sm" onClick={() => void setSetting('local.user', user)}>
-          保存
+          {t('保存')}
         </Button>
       </div>
     </Dialog>

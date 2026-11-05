@@ -31,6 +31,7 @@ import type { ExamSessionRecord } from './backend';
 import { getSolverState,prepareExamRun,finishInterviewExam } from './examEngine';
 import { getSetting, setSetting } from './store';
 import { bus } from './events';
+import { t } from './i18n';
 import { openMicrophone, type MicrophoneCapture } from './microphone';
 import { joinTranscript } from './speechProtocol';
 import { buildKnowledgeContext,captureKnowledge,authorizedKnowledge,type KnowledgeSnapshot,type ContextSource } from './knowledgeContext';
@@ -52,7 +53,7 @@ async function deliverPhoneSpeech(text:string,pcm:Int16Array|null,generation:num
  if(signal?.aborted)return;
  const id=crypto.randomUUID(),owner=speakerOwner;
  let decision:SpeakerDecision={role:'unknown',score:0,revision:1,source:'local-match'};
- if(localSpeaker()&&owner){try{decision=await identifySpeaker(owner,id,pcm);}catch(error){if(generation===captureGeneration&&!signal?.aborted)setState({errorMessage:`身份暂未确认：${String((error as Error).message||error)}`});}}
+ if(localSpeaker()&&owner){try{decision=await identifySpeaker(owner,id,pcm);}catch(error){if(generation===captureGeneration&&!signal?.aborted)setState({errorMessage:t('身份暂未确认：{msg}',{msg:String((error as Error).message||error)})});}}
  if(generation!==captureGeneration||state.status==='ended'||signal?.aborted)return;
  await deliverUtterance(text,decision,id,signal);
 }
@@ -61,7 +62,7 @@ async function translateMessage(id:string){
  const source=state.messages.find(m=>m.id===id);if(!source)return;const sid=state.sessionId,controller=new AbortController();translations.add(controller);
  try{const text=await translateSpeechText(source.text,language,controller.signal);if(controller.signal.aborted||state.sessionId!==sid)return;
   setState({messages:state.messages.map(m=>m.id===id&&!m.metadata?.superseded?{...m,metadata:{...m.metadata,translation:{language,text,status:'ready'}}}:m)});await persistMessages(state.messages);
- }catch{if(!controller.signal.aborted&&state.sessionId===sid){setState({messages:state.messages.map(m=>m.id===id?{...m,metadata:{...m.metadata,translation:{language,text:'',status:'failed',error:'辅助翻译失败，可继续使用原文。'}}}:m)});}}finally{translations.delete(controller);}
+ }catch{if(!controller.signal.aborted&&state.sessionId===sid){setState({messages:state.messages.map(m=>m.id===id?{...m,metadata:{...m.metadata,translation:{language,text:'',status:'failed',error:t('辅助翻译失败，可继续使用原文。')}}}:m)});}}finally{translations.delete(controller);}
 }
 
 export interface LiveTranscript { id: number; text: string; phase: 'preview' | 'finalizing' | 'failed' }
@@ -281,7 +282,7 @@ async function previewUtterance(utterance: LiveUtterance) {
     if (generation !== captureGeneration || controller.signal.aborted) return;
     utterance.nextPreview = audioBuf.length + PREVIEW_SAMPLES;
     updateLive(utterance.id, { phase: 'failed' });
-    setState({ errorMessage: `字幕预览失败，停顿后将重试整句识别：${(error as Error).message}` });
+    setState({ errorMessage: t('字幕预览失败，停顿后将重试整句识别：{msg}', { msg: (error as Error).message }) });
   } finally {
     transcriptionControllers.delete(controller);
     if (utterance.controller === controller) utterance.controller = undefined;
@@ -306,7 +307,7 @@ export function flushUtterance() {
   if (state.audio.recognitionMode === 'realtime') return;
   if (state.status !== 'listening' && state.status !== 'answering') return;
   if (audioBuf.length < 1600) {
-    setState({ errorMessage: '还没有收到足够的语音，请先说一句话，并查看上方音量条是否跳动。' });
+    setState({ errorMessage: t('还没有收到足够的语音，请先说一句话，并查看上方音量条是否跳动。') });
     return;
   }
   finalizeUtterance();
@@ -341,7 +342,7 @@ function finalizeUtterance() {
   }
   if (state.audio.pending >= 3) {
     if (live) removeLive(live.id);
-    setState({ errorMessage: '语音转写服务处理较慢，本段未发送。请暂停说话，等待转写完成后重试。' });
+    setState({ errorMessage: t('语音转写服务处理较慢，本段未发送。请暂停说话，等待转写完成后重试。') });
     return;
   }
   const generation = captureGeneration;
@@ -358,7 +359,7 @@ function finalizeUtterance() {
     try {
       if (performance.now() - queuedAt > 10000) {
         if (live) removeLive(live.id);
-        setState({errorMessage:'语音识别积压，本段已过期，请重说当前问题。'});
+        setState({errorMessage:t('语音识别积压，本段已过期，请重说当前问题。')});
         return;
       }
       await Promise.race([
@@ -370,7 +371,7 @@ function finalizeUtterance() {
             controller.abort();
             if (generation === captureGeneration) {
               if (live) removeLive(live.id);
-              setState({errorMessage:'语音识别等待过长，已取消本段，请重说当前问题。'});
+              setState({errorMessage:t('语音识别等待过长，已取消本段，请重说当前问题。')});
             }
             resolve();
           }, 20000);
@@ -399,7 +400,7 @@ async function recognizeUtterance(wavBlob: Blob, controller: AbortController, ge
     if (generation !== captureGeneration || controller.signal.aborted) return;
     const msg = String((e as Error)?.message ?? e);
     if (liveId !== undefined) updateLive(liveId, { phase: 'failed' });
-    setState({ errorMessage: `语音识别失败：${msg}` });
+    setState({ errorMessage: t('语音识别失败：{msg}', { msg }) });
     return;
   }
   if (generation !== captureGeneration || controller.signal.aborted) return;
@@ -407,7 +408,7 @@ async function recognizeUtterance(wavBlob: Blob, controller: AbortController, ge
   setState({ errorMessage: null, audio: { ...state.audio, lastTranscriptAt: Date.now() } });
   text = cleanTranscript(text);
   if (!text || isFillerSentence(text)) {
-    setState({ partial: '', errorMessage: '本段未识别到有效文字，请靠近麦克风说完整一句话后稍作停顿。' });
+    setState({ partial: '', errorMessage: t('本段未识别到有效文字，请靠近麦克风说完整一句话后稍作停顿。') });
     return;
   }
   if(state.audio.source!=='SPEAKER'){
@@ -451,7 +452,7 @@ async function deliverUtterance(text: string,speaker?:SpeakerDecision,observatio
   if (getSetting('interview.autoAnswer', true)) {
     if (state.sessionId) {
       if (answerQueue.length >= 8) {
-        setState({ errorMessage: '待回答的问题较多，已保留转写文字；请等当前回答结束后手动选择问题。' });
+        setState({ errorMessage: t('待回答的问题较多，已保留转写文字；请等当前回答结束后手动选择问题。') });
       } else {
         answerQueue.push({ question: text, sessionId: state.sessionId,messageId:msg.id });
         void drainAnswers();
@@ -487,12 +488,12 @@ export async function markTranscriptSpeaker(id:string,role:'candidate'|'intervie
  const message=state.messages.find(m=>m.id===id);if(!message||!message.metadata?.speaker||message.metadata.superseded)return;
  if(message.metadata.speaker.role===role)return;
  const revision=(roleChanges.get(id)||0)+1;roleChanges.set(id,revision);
- if(localSpeaker()&&speakerOwner&&message.metadata.observationId){try{await cmd('cmd_speaker_bind',{owner:speakerOwner,segmentId:message.metadata.observationId,role});}catch{setState({errorMessage:'这条文字的身份将更正；语音过短或已过期，未用它学习对方声纹。可在下一段较长的单人语音上再标记一次。'});}}
+ if(localSpeaker()&&speakerOwner&&message.metadata.observationId){try{await cmd('cmd_speaker_bind',{owner:speakerOwner,segmentId:message.metadata.observationId,role});}catch{setState({errorMessage:t('这条文字的身份将更正；语音过短或已过期，未用它学习对方声纹。可在下一段较长的单人语音上再标记一次。')});}}
  if(state.sessionId!==sessionId||captureGeneration!==generation||roleChanges.get(id)!==revision)return;
  answerQueue.splice(0,answerQueue.length,...answerQueue.filter(item=>item.messageId!==id));
  const existing=state.turns.filter(turn=>turn.questionId===id);for(const turn of existing)turn.abort?.abort();
  const corrected={...message,role:role==='candidate'?'ASSISTANT' as const:'INTERVIEWER' as const,metadata:{...message.metadata,origin:role==='candidate'?'candidate_response' as const:'audio_transcript' as const,speaker:{...message.metadata.speaker,role,source:'manual' as const,revision:message.metadata.speaker.revision+1}}};
- setState({turns:state.turns.map(t=>t.questionId===id?{...t,answerPending:false}:t),messages:state.messages.map(m=>m.id===id?corrected:m.metadata?.questionId===id&&m.metadata.origin==='model_generated'?{...m,pending:false,metadata:{...m.metadata,superseded:true}}:m)});
+ setState({turns:state.turns.map(x=>x.questionId===id?{...x,answerPending:false}:x),messages:state.messages.map(m=>m.id===id?corrected:m.metadata?.questionId===id&&m.metadata.origin==='model_generated'?{...m,pending:false,metadata:{...m.metadata,superseded:true}}:m)});
  await persistMessages(state.messages);if(role==='interviewer'&&state.sessionId===sessionId&&roleChanges.get(id)===revision)await answerQuestion(message.text,{questionMessageId:id});
 }
 
@@ -509,8 +510,8 @@ export async function recordCandidateResponse(text:string):Promise<void> {
 
 export async function answerQuestion(question: string, opts?: { correction?: boolean; voiceAsk?: boolean;questionMessageId?:string }) {
   question=question.trim();if(!question)return;
-  if (state.turns.some((t) => t.answerPending) && !opts?.correction) {
-    bus.emit('toast', { type: 'info', title: 'AI 正在回答，请等回答结束后再发送' });
+  if (state.turns.some((turn) => turn.answerPending) && !opts?.correction) {
+    bus.emit('toast', { type: 'info', title: t('AI 正在回答，请等回答结束后再发送') });
     return;
   }
   const sessionId = state.sessionId;
@@ -574,7 +575,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
       },
       onDelta: (delta) => {
         if (turn.abort?.signal.aborted || state.sessionId !== sessionId || current!==answerGeneration) return;
-        const t = state.turns.find((x) => x.id === turn.id);
+        const turnState = state.turns.find((x) => x.id === turn.id);
         const m = state.messages.find((x) => x.id === assistantMsg.id);
         if (m) {
           setState({
@@ -583,7 +584,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
             ),
           });
         }
-        if (t) {
+        if (turnState) {
           setState({
             turns: state.turns.map((x) =>
               x.id === turn.id ? { ...x, answer: x.answer + delta } : x,
@@ -594,7 +595,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
           checkpointTimer=null;
           if (state.sessionId !== sessionId || turn.abort?.signal.aborted) return;
           void persistMessages(state.messages).catch(error => {
-            if(state.sessionId===sessionId)setState({errorMessage:`回答暂未保存：${String((error as Error).message||error)}`});
+            if(state.sessionId===sessionId)setState({errorMessage:t('回答暂未保存：{msg}',{msg:String((error as Error).message||error)})});
           });
         },2000);
       },
@@ -618,10 +619,10 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
       setState({
         status: state.status === 'answering' ? 'listening' : state.status,
         aiDown: true,
-        errorMessage: `AI 作答失败：${err.message || '请检查对话服务配置后重试'}`,
+        errorMessage: t('AI 作答失败：{msg}', { msg: err.message || t('请检查对话服务配置后重试') }),
       });
       const finalMessages = state.messages.map((x) =>
-        x.id === assistantMsg.id ? { ...x, pending: false, text: x.text || (err as {partialText?:string}).partialText || '（生成失败）',metadata:{...x.metadata,completionStatus:(err as {completionStatus?:string}).completionStatus || 'failed'} } : x,
+        x.id === assistantMsg.id ? { ...x, pending: false, text: x.text || (err as {partialText?:string}).partialText || t('（生成失败）'),metadata:{...x.metadata,completionStatus:(err as {completionStatus?:string}).completionStatus || 'failed'} } : x,
       );
       setState({ messages: finalMessages });
       await persistMessages(finalMessages);
@@ -630,7 +631,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
     }
   } finally {
     if(checkpointTimer !== null)window.clearTimeout(checkpointTimer);
-    if (state.sessionId === sessionId) setState({ turns: state.turns.map(t => t.id === turn.id ? { ...t, answerPending: false } : t) });
+    if (state.sessionId === sessionId) setState({ turns: state.turns.map(x => x.id === turn.id ? { ...x, answerPending: false } : x) });
     void drainAnswers();
   }
 }
@@ -831,13 +832,13 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
             const text = cleanTranscript(result.text);
             setState({ partial: '', audio: { ...state.audio, lastTranscriptAt: Date.now() } });
             if (text && !isFillerSentence(text)) void (audioSource==='SPEAKER'?deliverUtterance(text):deliverPhoneSpeech(text,result.beginMs!==undefined&&result.endMs!==undefined?audioTimeline.range(realtimeOriginMs+result.beginMs,realtimeOriginMs+result.endMs):null,generation)).catch(error => {
-              if (generation === captureGeneration) setState({ errorMessage: `转写文字已显示，但记录保存失败：${String(error.message || error)}` });
+              if (generation === captureGeneration) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String(error.message || error) }) });
             });
           },
           onState: realtimeState => {
             if (generation !== captureGeneration) return;
             if(realtimeState==='ready')realtimeOriginMs=audioTimeline.samples/16;
-            setState({ ...(realtimeState === 'reconnecting' ? { partial: '', errorMessage: '实时语音连接中断，正在重新连接；中断期间的语音请稍后重说。' } : realtimeState === 'ready' ? { errorMessage: null } : {}),
+            setState({ ...(realtimeState === 'reconnecting' ? { partial: '', errorMessage: t('实时语音连接中断，正在重新连接；中断期间的语音请稍后重说。') } : realtimeState === 'ready' ? { errorMessage: null } : {}),
               audio: { ...state.audio, realtimeState } });
           },
           onError: error => { if (generation === captureGeneration) { reportInterviewError(error); void stopCapture(); } },
@@ -862,14 +863,14 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         const consume = (input: NativeInput) => {
           if (generation !== captureGeneration) return;
           if (!captureReady) {
-            if (pending.length >= 20) { failCapture('系统收音启动数据积压，请暂停后重试。'); return; }
+            if (pending.length >= 20) { failCapture(t('系统收音启动数据积压，请暂停后重试。')); return; }
             pending.push(input);
             return;
           }
           // A queued OS/IPC event can reach a new listener after pause/resume.
           // Tag comparison supplements the frontend listener generation check.
           if (input.value.captureId !== captureId) return;
-          if (input.kind === 'error') { failCapture(input.value.error || '系统收音已中断，请暂停后继续以重新连接播放设备。'); return; }
+          if (input.kind === 'error') { failCapture(input.value.error || t('系统收音已中断，请暂停后继续以重新连接播放设备。')); return; }
           const p = input.value;
           try {
             const bin = atob(p.pcmBase64);
@@ -884,7 +885,7 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
             }
             pushPcm(pcm, amplitude / pcm.length * 800);
           } catch {
-            failCapture('系统收音数据格式异常，请重启应用后重试。');
+            failCapture(t('系统收音数据格式异常，请重启应用后重试。'));
           }
         };
         const offError = await listenEvent<NativeFailure>('system-audio-error', p => consume({ kind: 'error', value: p }));
@@ -898,14 +899,14 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         const info = await startSystemAudioCapture();
         if (generation !== captureGeneration) return;
         if (!info || info.sampleRate !== 16000 || info.channels !== 1) {
-          throw new Error('系统收音组件版本不匹配，请完整重启更新后的桌面应用。');
+          throw new Error(t('系统收音组件版本不匹配，请完整重启更新后的桌面应用。'));
         }
         captureId = info.captureId || undefined;
         captureReady = true;
         setState({ status: 'listening' });
         for (const input of pending.splice(0)) consume(input);
         if (generation !== captureGeneration) return;
-        setState({ audio: { ...state.audio, deviceLabel: info.devices.map(device => device.name).join(' / ') || '系统播放声音' } });
+        setState({ audio: { ...state.audio, deviceLabel: info.devices.map(device => device.name).join(' / ') || t('系统播放声音') } });
       } else {
         const capture = await openMicrophone({
           deviceId: getSetting('interview.microphoneId', ''),
@@ -945,7 +946,7 @@ export async function pauseListening() {
   await previousRealtime?.close();
   if (state.audio.source === 'SPEAKER') await stopCapture(false);
   await microphone?.setPaused(true);
-  setState({ status: 'paused', partial: '', ...(discarded ? {errorMessage:'暂停时未完成的语音识别已取消；继续收音后请重说该段。'} : {}), audio: { ...state.audio, level: 0, speaking: false, bufferedMs: 0, pending: 0 } });
+  setState({ status: 'paused', partial: '', ...(discarded ? {errorMessage:t('暂停时未完成的语音识别已取消；继续收音后请重说该段。')} : {}), audio: { ...state.audio, level: 0, speaking: false, bufferedMs: 0, pending: 0 } });
 }
 
 export async function resumeListening() {
@@ -954,7 +955,7 @@ export async function resumeListening() {
 }
 
 export async function interruptAnswer() {
-  const pending = state.turns.find((t) => t.answerPending);
+  const pending = state.turns.find((x) => x.answerPending);
   pending?.abort?.abort();
   setState({
     messages: state.messages.map((m) => (m.pending ? { ...m, pending: false } : m)),
@@ -968,7 +969,7 @@ export async function endInterview(complete = true) {
   sessionGeneration++;
   const sessionId = state.sessionId;
   setState({ status: 'ended' });
-  state.turns.forEach(t => t.abort?.abort());
+  state.turns.forEach(x => x.abort?.abort());
   try {
     await Promise.all([stopCapture(),sessionId?finishInterviewExam(sessionId,complete):Promise.resolve()]);
     if (state.sessionId !== sessionId) return;
@@ -1027,10 +1028,10 @@ const FILLER_SENTENCES =
   /^(好|好的|行|对|是的|明白|ok|okay|thanks|thank you|嗯嗯|好的好的|对的|没问题|可以)[。..！!？?\s]*$/i;
 
 export function cleanTranscript(text: string): string {
-  let t = text.trim();
+  let trimmed = text.trim();
   // 语气词剔除
   let cleaned = '';
-  for (const ch of t) {
+  for (const ch of trimmed) {
     if (FILLER_WORDS.includes(ch)) continue;
     cleaned += ch;
   }
@@ -1040,10 +1041,10 @@ export function cleanTranscript(text: string): string {
 }
 
 export function isFillerSentence(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  if (!t) return true;
-  if (FILLER_SENTENCES.test(t)) return true;
-  if (/^\d+[。..？?]?$/.test(t)) return true;
+  const s = text.trim().toLowerCase();
+  if (!s) return true;
+  if (FILLER_SENTENCES.test(s)) return true;
+  if (/^\d+[。..？?]?$/.test(s)) return true;
   return false;
 }
 

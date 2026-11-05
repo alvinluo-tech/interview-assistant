@@ -20,6 +20,7 @@ import {
 } from '@/ui/primitives';
 import { useData, saveGoal, readData, updateExamSession, type Goal, type ExamSessionRecord } from '@/lib/backend';
 import { useSetting, setSetting } from '@/lib/store';
+import { t } from '@/lib/i18n';
 
 import {
   EXAM_MODES,
@@ -74,10 +75,10 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
       if (resume) { await updateExamSession(resume.id, {status:'ACTIVE',endedAt:null,interrupted:false}); reactivated = true; }
       await setSetting('exam.pendingConfig', {runId:crypto.randomUUID(),goalId:selectedGoal,...(resume ? {resumeSessionId:resume.id} : {})});
       await startOverlayFlow('exam', selectedGoal);
-      showToast({ type: 'success', title: '笔试浮窗已启动', description: '把题目放到屏幕上，悬停「解题」即可。' });
+      showToast({ type: 'success', title: t('笔试浮窗已启动'), description: t('把题目放到屏幕上，悬停「解题」即可。') });
     } catch (e) {
       if (resume && reactivated) await updateExamSession(resume.id, {status:'COMPLETED',endedAt:Date.now(),interrupted:true}).catch(() => {});
-      showToast({ type: 'error', title: '启动失败', description: String((e as Error).message ?? e) });
+      showToast({ type: 'error', title: t('启动失败'), description: t(String((e as Error).message ?? e)) });
     } finally {
       setStarting(false);
     }
@@ -95,19 +96,19 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
     <div className="flex flex-col gap-4">
       <Card className="p-5">
         <SectionHeader
-          title="开始一场笔试"
-          desc="先选答题模式，进入浮窗后也可以随时切换；浮窗无边框置顶，不抢焦点。"
+          title={t('开始一场笔试')}
+          desc={t('先选答题模式，进入浮窗后也可以随时切换；浮窗无边框置顶，不抢焦点。')}
           right={
             <Button onClick={() => void start()} disabled={starting}>
               <Play size={14} />
-              {starting ? '启动中…' : '开始笔试'}
+              {starting ? t('启动中…') : t('开始笔试')}
             </Button>
           }
         />
 
         {interrupted && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border p-3 text-xs">
-          <span className="flex-1">上次笔试尚未完成：{interrupted.title}。恢复后可继续作答或重试保存；如提示有未保存内容，请勿退出应用。</span>
-          <Button size="sm" variant="outline" disabled={starting} onClick={() => void start(interrupted)}>恢复上次笔试</Button>
+          <span className="flex-1">{t('上次笔试尚未完成：{title}。恢复后可继续作答或重试保存；如提示有未保存内容，请勿退出应用。', { title: interrupted.title })}</span>
+          <Button size="sm" variant="outline" disabled={starting} onClick={() => void start(interrupted)}>{t('恢复上次笔试')}</Button>
         </div>}
 
         {/* 模式三选卡 */}
@@ -126,12 +127,12 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
               >
                 <div className="flex items-center gap-1.5 text-sm font-medium">
                   <span className={mode === key ? 'text-primary' : 'text-muted-foreground'}>{icons[key]}</span>
-                  {m.label}
+                  {t(m.label)}
                 </div>
-                <div className="mt-1 text-[11px] leading-snug text-muted-foreground">{m.description}</div>
+                <div className="mt-1 text-[11px] leading-snug text-muted-foreground">{t(m.description)}</div>
                 <div className="mt-1.5">
                   <Badge variant={mode === key ? 'default' : 'outline'}>
-                    最多 {m.maxScreenshotPages} 页 · 使用你的视觉模型
+                    {t('最多 {n} 页 · 使用你的视觉模型', { n: m.maxScreenshotPages })}
                   </Badge>
                 </div>
               </button>
@@ -142,9 +143,9 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
         {/* 岗位 */}
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs font-medium text-muted-foreground">
-            目标岗位
+            {t('目标岗位')}
             <Select className="mt-1" value={goalId ?? ''} onChange={(e) => setGoalId(e.target.value || null)}>
-              {goals.length === 0 && <option value="">不关联岗位</option>}
+              {goals.length === 0 && <option value="">{t('不关联岗位')}</option>}
               {goals.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.companyName ? `${g.companyName} · ${g.name}` : g.name}
@@ -154,18 +155,18 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
           </label>
           <div className="flex items-end gap-1.5">
             <div className="flex flex-1 flex-col gap-1.5">
-              <Input className="h-8 text-xs" placeholder="岗位名称" value={newGoal} onChange={(e) => setNewGoal(e.target.value)} />
-              <Input className="h-8 text-xs" placeholder="公司（选填）" value={newCompany} onChange={(e) => setNewCompany(e.target.value)} />
+              <Input className="h-8 text-xs" placeholder={t('岗位名称')} value={newGoal} onChange={(e) => setNewGoal(e.target.value)} />
+              <Input className="h-8 text-xs" placeholder={t('公司（选填）')} value={newCompany} onChange={(e) => setNewCompany(e.target.value)} />
             </div>
             <Button size="sm" variant="outline" onClick={() => void addGoal()} disabled={!newGoal.trim()}>
-              新建岗位
+              {t('新建岗位')}
             </Button>
           </div>
         </div>
 
         {!aiReady && (
           <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            请到「设置 → AI 服务」选择截图识别模型，或使用支持图片输入的对话模型。
+            {t('请到「设置 → AI 服务」选择截图识别模型，或使用支持图片输入的对话模型。')}
           </div>
         )}
       </Card>
@@ -178,7 +179,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
           onClick={() => setPrefsOpen((v) => !v)}
         >
           <div className="text-left">
-            <div className="text-sm font-semibold">答题偏好</div>
+            <div className="text-sm font-semibold">{t('答题偏好')}</div>
             <div className="mt-0.5 text-xs text-muted-foreground">{customizationSummary()}</div>
           </div>
           {prefsOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -188,7 +189,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
           <div className="mt-3 flex flex-col gap-3 border-t pt-3">
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs font-medium text-muted-foreground">
-                编程题语言
+                {t('编程题语言')}
                 <Select
                   className="mt-1"
                   value={String(customization.programmingLanguage ?? 'auto')}
@@ -197,45 +198,45 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
                   {['auto', 'Python 3', 'Java', 'C++', 'C', 'Go', 'JavaScript', 'TypeScript', 'C#', 'Rust', 'SQL'].map(
                     (l) => (
                       <option key={l} value={l}>
-                        {l === 'auto' ? '跟随题目' : l}
+                        {l === 'auto' ? t('跟随题目') : l}
                       </option>
                     ),
                   )}
                 </Select>
               </label>
               <label className="text-xs font-medium text-muted-foreground">
-                代码模式
+                {t('代码模式')}
                 <Select
                   className="mt-1"
                   value={String(customization.codeMode ?? 'auto')}
                   onChange={(e) => setCustomization({ ...customization, codeMode: e.target.value })}
                 >
-                  <option value="auto">跟随题目</option>
-                  <option value="acm">ACM 模式（完整程序）</option>
-                  <option value="core">核心代码模式（只写函数）</option>
+                  <option value="auto">{t('跟随题目')}</option>
+                  <option value="acm">{t('ACM 模式（完整程序）')}</option>
+                  <option value="core">{t('核心代码模式（只写函数）')}</option>
                 </Select>
               </label>
               <label className="text-xs font-medium text-muted-foreground">
-                编程题取向
+                {t('编程题取向')}
                 <Select
                   className="mt-1"
                   value={String(customization.codeQuality ?? 'standard')}
                   onChange={(e) => setCustomization({ ...customization, codeQuality: e.target.value })}
                 >
-                  <option value="standard">标准可提交</option>
-                  <option value="readable">清晰易读</option>
-                  <option value="concise">简洁直接</option>
-                  <option value="performance">优先性能</option>
+                  <option value="standard">{t('标准可提交')}</option>
+                  <option value="readable">{t('清晰易读')}</option>
+                  <option value="concise">{t('简洁直接')}</option>
+                  <option value="performance">{t('优先性能')}</option>
                 </Select>
               </label>
               <label className="text-xs font-medium text-muted-foreground">
-                回答语言
+                {t('回答语言')}
                 <Select
                   className="mt-1"
                   value={String(customization.answerLanguage ?? 'auto')}
                   onChange={(e) => setCustomization({ ...customization, answerLanguage: e.target.value })}
                 >
-                  <option value="auto">跟随界面语言</option>
+                  <option value="auto">{t('跟随界面语言')}</option>
                   {['zh-CN', 'en-US', 'ja-JP', 'ko-KR'].map((l) => (
                     <option key={l} value={l}>
                       {l}
@@ -245,11 +246,11 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
               </label>
             </div>
             <div>
-              <div className="mb-1 text-xs font-medium text-muted-foreground">补充要求</div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">{t('补充要求')}</div>
               <Textarea
                 rows={3}
                 maxLength={2000}
-                placeholder="补充要求：希望答案更短 / 多给步骤 / 按考试格式输出…"
+                placeholder={t('补充要求：希望答案更短 / 多给步骤 / 按考试格式输出…')}
                 value={String(customization.customRequirements ?? '')}
                 onChange={(e) => setCustomization({ ...customization, customRequirements: e.target.value })}
               />
@@ -259,22 +260,22 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
       </Card>
 
       <Card className="px-5 py-1">
-        <SettingRow title="显示复制按钮" desc="答案里有代码就复制代码，没有就复制文字。部分考试平台会记录粘贴内容，也有平台禁止粘贴。">
+        <SettingRow title={t('显示复制按钮')} desc={t('答案里有代码就复制代码，没有就复制文字。部分考试平台会记录粘贴内容，也有平台禁止粘贴。')}>
           <Switch checked={showCopyCode} onCheckedChange={setShowCopyCode} />
         </SettingRow>
-        <SettingRow title="快捷键提示" desc="在浮窗按钮上显示对应键位。">
+        <SettingRow title={t('快捷键提示')} desc={t('在浮窗按钮上显示对应键位。')}>
           <Switch checked={showHints} onCheckedChange={setShowHints} />
         </SettingRow>
         <SettingRow
-          title="双机位笔试"
-          desc="有第二个摄像头拍你和屏幕时打开。笔试浮窗会换成几乎全透明、只留一圈淡边框，镜头里基本看不出来。"
+          title={t('双机位笔试')}
+          desc={t('有第二个摄像头拍你和屏幕时打开。笔试浮窗会换成几乎全透明、只留一圈淡边框，镜头里基本看不出来。')}
         >
           <DualCameraSwitch scope="exam" />
         </SettingRow>
-        <SettingRow title="截图范围" desc={platform?.platform === 'macos' ? '屏幕模式截取鼠标所在显示器，并排除本应用窗口；前台窗口模式只截取最靠前的其他应用窗口。' : '默认截取屏幕；前台窗口模式只捕获当前题目窗口。空白图片会阻止发送。'}>
-          <Select value={captureMode} disabled={platform?.screenCapture === false} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">屏幕</option><option value="window">前台窗口</option></Select>
+        <SettingRow title={t('截图范围')} desc={platform?.platform === 'macos' ? t('屏幕模式截取鼠标所在显示器，并排除本应用窗口；前台窗口模式只截取最靠前的其他应用窗口。') : t('默认截取屏幕；前台窗口模式只捕获当前题目窗口。空白图片会阻止发送。')}>
+          <Select value={captureMode} disabled={platform?.screenCapture === false} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">{t('屏幕')}</option><option value="window">{t('前台窗口')}</option></Select>
         </SettingRow>
-        <SettingRow title="截图兼容模式（Windows）" desc="优先读取前台窗口，失败后回退屏幕截图。默认模式会在屏幕黑屏时尝试窗口读取。">
+        <SettingRow title={t('截图兼容模式（Windows）')} desc={t('优先读取前台窗口，失败后回退屏幕截图。默认模式会在屏幕黑屏时尝试窗口读取。')}>
           <Switch checked={platform?.platform === 'windows' && compatibility} disabled={platform?.platform !== 'windows'} onCheckedChange={setCompatibility} />
         </SettingRow>
       </Card>
@@ -285,9 +286,9 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { title: '智能答题', desc: 'AI 识别题型自动解答' },
-          { title: '多页题目', desc: '一屏放不下可分页截取' },
-          { title: '不抢焦点', desc: '鼠标键盘穿透到底层' },
+          { title: t('智能答题'), desc: t('AI 识别题型自动解答') },
+          { title: t('多页题目'), desc: t('一屏放不下可分页截取') },
+          { title: t('不抢焦点'), desc: t('鼠标键盘穿透到底层') },
         ].map((s) => (
           <Card key={s.title} className="p-3">
             <div className="flex items-center gap-1.5 text-sm font-medium">

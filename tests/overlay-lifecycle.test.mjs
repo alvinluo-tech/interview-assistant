@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateFixture} from './compile-fixture.mjs';
+import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
 const deferred=()=>{let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});return {promise,resolve,reject};};
-function fixture(file,modules,extra={}){return evaluateFixture(file,{exports:{},console,AbortController,DOMException,Date,performance,Int16Array,Float32Array,Uint8Array,ArrayBuffer,DataView,Blob,require:name=>{if(!(name in modules))throw Error(`Unmocked ${name}`);return modules[name];},...extra});}
+function fixture(file,modules,extra={}){return evaluateFixture(file,{exports:{},console,AbortController,DOMException,Date,performance,Int16Array,Float32Array,Uint8Array,ArrayBuffer,DataView,Blob,require:name=>{if(name==='./i18n'||name==='@/lib/i18n')return evaluateModuleFixture('src/lib/i18n.ts');if(!(name in modules))throw Error(`Unmocked ${name}`);return modules[name];},...extra});}
 
 function visibility({deferRegistration=false}={}){
   const pending=deferred(),effects=[],events={},state=[],registrations=[];let index=0,queries=0;

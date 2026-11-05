@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { CalendarCheck, MessageCircleQuestion } from 'lucide-react';
 import { useData, type ExamSessionRecord, type Goal, type InterviewSession } from '@/lib/backend';
+import { t } from '@/lib/i18n';
 
 export interface JobProgressState {
   lastCheckinCount: number;
@@ -24,7 +25,7 @@ const EMPTY_PROGRESS: JobProgressState = {
 const CHECKIN_EVERY = 5;
 
 function roundLabel(index: number): string {
-  return ['一面', '二面', '三面', 'HR 面'][index] ?? '那一轮面试';
+  return [t('一面'), t('二面'), t('三面'), t('HR 面')][index] ?? t('那一轮面试');
 }
 
 function goalLine(goals: Goal[], goalId?: string | null): string {
@@ -66,10 +67,10 @@ export function JobProgressCards() {
     const prior = sessions
       .filter((s) => s.type === 'INTERVIEW' && s.status === 'COMPLETED' && s.goalId === pending.goalId)
       .sort((a, b) => a.createdAt - b.createdAt);
-    const line = goalLine(goals, pending.goalId) || '那场面试';
-    interviewTitle = `${line} ${roundLabel(prior.findIndex((s) => s.id === pending.id))}之后怎么样了？`;
+    const line = goalLine(goals, pending.goalId) || t('那场面试');
+    interviewTitle = t('{line} {round}之后怎么样了？', { line, round: roundLabel(prior.findIndex((s) => s.id === pending.id)) });
   }
-  const examTitle = pending?.kind === 'exam' ? `${goalLine(goals, pending.goalId) || '那场'} 的笔试过了吗？` : '';
+  const examTitle = pending?.kind === 'exam' ? t('{line} 的笔试过了吗？', { line: goalLine(goals, pending.goalId) || t('那场') }) : '';
 
   const completedCount =
     sessions.filter((s) => s.type === 'INTERVIEW' && s.status === 'COMPLETED').length +
@@ -125,7 +126,7 @@ export function JobProgressCards() {
                 {pending.kind === 'exam' ? examTitle : interviewTitle}
               </h2>
               <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-                标一下，同岗位下一轮面试时 AI 会结合前几轮的表现来作答。
+                {t('标一下，同岗位下一轮面试时 AI 会结合前几轮的表现来作答。')}
               </p>
             </div>
           </div>
@@ -155,7 +156,7 @@ export function JobProgressCards() {
                     : 'inline-flex h-8 items-center rounded-md border px-2.5 text-xs hover:bg-accent disabled:opacity-50'
                 }
               >
-                {b.label}
+                {t(b.label)}
               </button>
             ))}
           </div>
@@ -168,10 +169,10 @@ export function JobProgressCards() {
             <CalendarCheck className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
               <h2 className="text-[14px] font-semibold leading-snug text-foreground">
-                已经完成 {completedCount} 场笔试和面试了，目前拿到几个 offer / OC？
+                {t('已经完成 {count} 场笔试和面试了，目前拿到几个 offer / OC？', { count: completedCount })}
               </h2>
               <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-                只记个数，用来把面试和笔试的回答做得更好。不想填可以跳过。
+                {t('只记个数，用来把面试和笔试的回答做得更好。不想填可以跳过。')}
               </p>
             </div>
           </div>
@@ -207,7 +208,7 @@ export function JobProgressCards() {
                 disabled={marking || (clampCount(offerInput) === undefined && clampCount(ocInput) === undefined)}
                 onClick={() => submitCheckin(false)}
               >
-                记下
+                {t('记下')}
               </button>
               <button
                 type="button"
@@ -215,7 +216,7 @@ export function JobProgressCards() {
                 disabled={marking}
                 onClick={() => submitCheckin(true)}
               >
-                跳过
+                {t('跳过')}
               </button>
             </div>
           </div>

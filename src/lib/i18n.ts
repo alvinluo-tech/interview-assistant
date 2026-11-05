@@ -1,8 +1,17 @@
 /*
- * i18n：与原应用相同的 9 语言基础设施（zh-cn 为源语言、key 即中文原文；
- * 目标语缺失时回退英语；切换语言广播事件并整窗刷新）。
- * 翻译资源采用按需补充策略：en 提供主要 chrome 文案，其余语言回退 en。
+ * i18n：9 语言基础设施（zh-cn 为源语言、key 即中文原文；切换语言广播事件
+ * 并整窗刷新，因此 t() 无需订阅即可保持一致）。
+ * 词典按 locale 拆分在 ./i18n/locales/；zh-tw 由简繁转换实时生成，
+ * 其余语言缺失词条时回退 en（tests/i18n.test.mjs 校验各语言 key 对齐，
+ * 防止切换语言后混入其他语言文案）。
  */
+import { en } from './i18n/locales/en';
+import { ptBr } from './i18n/locales/pt-br';
+import { es419 } from './i18n/locales/es-419';
+import { vi } from './i18n/locales/vi';
+import { tr } from './i18n/locales/tr';
+import { ko } from './i18n/locales/ko';
+import { ja } from './i18n/locales/ja';
 export const LOCALES = [
   'zh-cn',
   'en',
@@ -103,117 +112,6 @@ export function applyDocumentLang() {
   document.documentElement.lang = htmlLangOf(currentLocale());
 }
 
-// ---- 英语字典（key = 中文原文）----
-const en: Record<string, string> = {
-  "MianXu": "MianXu",
-  "AI 面试助手": "AI Interview Assistant",
-  "面试助手": "Interview",
-  "实时听译 · 自动答题": "Live transcription · Auto answers",
-  "笔试助手": "Exam Copilot",
-  "真实笔试 · 截屏解题": "Real exams · Screenshot solving",
-  "模拟面试": "Mock Interview",
-  "面试前练手 · 复盘报告": "Practice before · Debrief report",
-  "面试题库": "Question Bank",
-  "资料管理": "Resources",
-  "历史记录": "History",
-  "设置": "Settings",
-  "反馈": "Feedback",
-  "剩余额度": "Remaining Credit",
-  "去充值": "Top up",
-  "退出登录": "Sign out",
-  "重新加载": "Reload",
-  "出了点问题": "Something went wrong",
-  "点击下方按钮重新加载即可继续使用，你的登录状态会保留。": "Click reload below to continue. Your login state is kept.",
-  "启动中": "Starting",
-  "使用须知": "Terms of Use",
-  "我已阅读并同意": "I have read and agree",
-  "知道了": "Got it",
-  "稍后": "Later",
-  "今天不再提示": "Don't show today",
-  "查看完整更新日志": "View full changelog",
-  "已更新到新版本": "Updated to a new version",
-  "暂无更新记录": "No changelog yet.",
-  "语言与外观，应用到所有窗口。": "Language & appearance, applied to all windows.",
-  "界面语言": "Interface language",
-  "切换语言会刷新窗口让翻译生效。": "Switching language reloads the window.",
-  "跟随系统": "Follow system",
-  "随操作系统外观切换": "Follows your OS appearance",
-  "始终浅色": "Always light",
-  "始终深色": "Always dark",
-  "外观主题": "Appearance",
-  "只影响主窗口；浮窗的明暗在「浮窗样式」里单独选。": "Main window only; overlay has its own theme in \"Overlay Style\".",
-  "浅色": "Light",
-  "深色": "Dark",
-  "界面大小": "UI scale",
-  "展开全部语言": "Show all languages",
-  "收起": "Collapse",
-  "快捷键": "Shortcuts",
-  "浮窗样式": "Overlay Style",
-  "通用": "General",
-  "隐蔽": "Stealth",
-  "更新日志": "Changelog",
-  "关于": "About",
-  "决定客户端在任务管理器和录屏画面里是什么样子。": "Controls how the app appears in Task Manager and recordings.",
-  "面试和笔试浮窗共用这几组热键，全局生效。": "Shared by interview & exam overlays, works globally.",
-  "应急隐藏快捷键": "Panic hotkey",
-  "客户端版本": "Client version",
-  "界面版本": "UI version",
-  "系统版本": "System version",
-  "检查更新": "Check for updates",
-  "已经是最新版本。": "Already up to date.",
-  "正在检查更新…": "Checking for updates…",
-  "版本信息。联系我们反馈问题时，把这里的内容一并带上。": "Version info. Include this when contacting support.",
-  "这个客户端版本里的全部改动。": "All changes in this client version.",
-  "正在聆听面试官": "Listening to the interviewer",
-  "点下方「开始」进入聆听": "Hover \"Start\" below to begin listening",
-  "正在连接面试会话…": "Connecting to interview session…",
-  "面试官的问题和 AI 答案会出现在这里": "Interviewer's questions and AI answers appear here",
-  "聆听中": "Listening",
-  "已暂停": "Paused",
-  "待开始": "Ready",
-  "连接中": "Connecting",
-  "生成回答": "Answering",
-  "接语音": "Voice",
-  "只读": "Read-only",
-  "连接已断开": "Disconnected",
-  "会话已结束": "Session ended",
-  "时长已用尽": "Time used up",
-  "开始": "Start",
-  "暂停": "Pause",
-  "继续": "Resume",
-  "立即回答": "Answer now",
-  "笔试答题": "Exam solve",
-  "语音提问": "Voice ask",
-  "结束并提问": "End & ask",
-  "回到答题": "Back to solving",
-  "结束面试": "End interview",
-  "识别有误？一键让 AI 按正确题意重答": "Misheard? One click to re-answer",
-  "已连接": "Connected",
-  "重试中": "Retrying",
-  "解题": "Solve",
-  "直接答": "Answer now",
-  "加页": "Add page",
-  "重置": "Reset",
-  "退出": "Exit",
-  "发送": "Send",
-  "取消": "Cancel",
-  "秒答": "Instant",
-  "快速": "Quick",
-  "编程": "Programming",
-  "已复制代码": "Code copied",
-  "已复制答案文字": "Answer text copied",
-  "上一题": "Previous",
-  "下一题": "Next",
-  "悬停回看": "Hover to go back",
-  "悬停看新": "Hover for latest",
-  "悬停看上一题": "Hover for previous card",
-  "悬停看下一题": "Hover for next card",
-  "窗口模式": "Window mode",
-  "一键配色": "Auto palette",
-  "换配色": "Apply palette",
-};
-
-
 // ---- 简体 → 繁体（zh-tw 用；词组优先、单字兜底，translate 时实时转换） ----
 
 const ZH_TW_PHRASES: [RegExp, string][] = [
@@ -257,6 +155,8 @@ const ZH_TW_PHRASES: [RegExp, string][] = [
   [/录屏/g, '錄屏'],
   [/截图/g, '截圖'],
   [/充值/g, '儲值'],
+  [/注册/g, '註冊'],
+  [/游戏/g, '遊戲'],
 ];
 
 const ZH_TW_CHARS: Record<string, string> = {
@@ -287,9 +187,30 @@ const ZH_TW_CHARS: Record<string, string> = {
   询: '詢', 声: '聲', 称: '稱', 权: '權', 钥: '鑰', 顺: '順', 择: '擇', 冲: '衝',
   覆: '覆', 盖: '蓋', 统: '統', 计: '計', 处: '處', 亿: '億', 征: '徵', 属: '屬',
   区: '區', 围: '圍', 梦: '夢', 镇: '鎮', 队: '隊', 访: '訪', 码: '碼',
+  // —— 全量文案审校补充（对照 OpenCC STCharacters 逐字核对，2026-11）——
+  // 语义排除（简繁同形或台湾用法保留原字）：面(面試) 制(限制) 系(系統) 台(平台)
+  // 只(只朗讀) 板 布(發布/佈局兩可) 注(注入；註冊走詞組) 干(干擾) 占 游(遊戲走詞組)
+  万: '萬', 与: '與', 严: '嚴', 产: '產', 亲: '親', 仅: '僅', 从: '從', 们: '們',
+  传: '傳', 内: '內', 决: '決', 况: '況', 准: '準', 减: '減', 划: '劃', 刚: '剛',
+  创: '創', 够: '夠', 头: '頭', 学: '學', 将: '將', 岗: '崗', 帮: '幫', 广: '廣',
+  庆: '慶', 强: '強', 径: '徑', 惯: '慣', 扫: '掃', 拟: '擬',
+  拦: '攔', 挂: '掛', 据: '據', 摆: '擺', 数: '數', 约: '約', 纹: '紋',
+  组: '組', 织: '織', 绍: '紹', 经: '經', 给: '給', 绝: '絕', 绪: '緒', 辑: '輯',
+  缓: '緩', 编: '編', 举: '舉', 补: '補', 费: '費', 较: '較', 觉: '覺', 邮: '郵',
+  温: '溫', 见: '見', 规: '規', 评: '評', 轨: '軌', 马: '馬', 骤: '驟', 浏: '瀏',
+  东: '東', 志: '誌', 乱: '亂', 洁: '潔', 综: '綜', 栈: '棧', 说: '說', 麦: '麥',
+  过: '過', 并: '並', 参: '參', 许: '許', 项: '項', 顿: '頓', 轮: '輪', 云: '雲',
+  炼: '煉', 装: '裝', 采: '採', 着: '著', 粘: '黏', 范: '範', 独: '獨', 悬: '懸',
+  弃: '棄', 达: '達', 钮: '鈕', 运: '運', 销: '銷', 专: '專', 伪: '偽', 离: '離',
+  积: '積', 摄: '攝', 镜: '鏡', 须: '須', 储: '儲', 训: '訓', 热: '熱', 馈: '饋',
+  状: '狀', 两: '兩', 异: '異', 画: '畫', 夹: '夾', 迁: '遷', 尽: '盡', 杂: '雜',
+  双: '雙', 吗: '嗎', 后: '後', 响: '響', 唤: '喚', 筛: '篩', 条: '條',
+  类: '類', 紧: '緊', 纠: '糾', 难: '難', 余: '餘', 础: '礎', 辅: '輔',
+  获: '獲', 协: '協', 带: '帶', 来: '來', 电: '電',
 };
 
-function toTraditional(text: string): string {
+/** 简体 → 繁体转换（zh-tw 字典由它实时生成；导出供测试校验转换完整性） */
+export function toTraditional(text: string): string {
   let out = text;
   for (const [pattern, replacement] of ZH_TW_PHRASES) out = out.replace(pattern, replacement);
   let result = '';
@@ -299,6 +220,12 @@ function toTraditional(text: string): string {
 
 const dictionaries: Partial<Record<Locale, Record<string, string>>> = {
   en,
+  'pt-br': ptBr,
+  'es-419': es419,
+  vi,
+  tr,
+  ko,
+  ja,
 };
 
 export function translate(key: string, params?: Record<string, string | number>): string {

@@ -1,5 +1,6 @@
 import type {AiProvider} from './aiConfig.js';
 import type {SpeechAccent,SpeechLanguage,SpeechRenderSpec} from './speechProfile.js';
+import {t} from './i18n';
 import {bailianRegion} from './realtimeAsrProtocol.js';
 export interface SpeechVoice {id:string;name:string;languages:SpeechLanguage[];accents:SpeechAccent[];regions?:string[];instruction?:boolean}
 const zh:SpeechLanguage[]=['zh-CN'],en:SpeechLanguage[]=['en-US'],both:SpeechLanguage[]=['zh-CN','en-US'];
@@ -32,7 +33,7 @@ export function resolveSpeechVoice(provider:Pick<AiProvider,'baseUrl'>,model:str
   const selected=matching.find(item=>item.id===(spec.voiceId || preferredVoice)) || matching[0];
   if(!selected){
     if(!voicesForModel(model).length && accent==='standard')return {voice:spec.voiceId || preferredVoice || 'alloy',support:'unknown' as const,languageHint:language==='en-US'?'English':'Chinese',instruction:''};
-    throw new Error(`当前模型/音色在${speechRegion(provider)==='singapore'?'新加坡':'所选地域'}不支持这个朗读口音。重庆/东北等可选择 qwen-audio-3.1-tts-flash；也可更换音色或使用标准发音。`);
+    throw new Error(t('当前模型/音色在{region}不支持这个朗读口音。重庆/东北等可选择 qwen-audio-3.1-tts-flash；也可更换音色或使用标准发音。', { region: speechRegion(provider)==='singapore'?'新加坡':'所选地域' }));
   }
   const dialect=ACCENT_INSTRUCTIONS[accent];
   const instruction=language==='en-US'?'Speak in natural, professional English. Read only the given text.':accent==='standard'?'请用普通话，以自然、专业、友好的面试官语气朗读，只朗读给定文本。':model==='cosyvoice-v3-flash'?`请用${accent==='cantonese'?'广东话':dialect}表达。`:`请用${dialect}自然、专业地朗读，只朗读给定文本，不添加内容。`;

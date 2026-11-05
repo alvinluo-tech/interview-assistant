@@ -1,3 +1,4 @@
+import { t } from './i18n';
 export type AiTask = 'free-chat' | 'interview-answer' | 'exam-solve' | 'exam-followup' | 'mock-question' | 'mock-hint' | 'mock-report' | 'question-bank' | 'document-extract' | 'translation';
 export const PROMPT_VERSION = '2026-10-30.1';
 export const TASK_OUTPUT_LIMIT: Record<AiTask, number> = {
@@ -54,7 +55,7 @@ export function checkInputBudget(messages: {
     if (!capabilities?.contextWindow)
         return;
     if (estimateInputTokens(messages) + outputTokens + 256 > capabilities.contextWindow)
-        throw new Error('本次资料、问答与输出预算可能超过所选模型的上下文窗口。请使用更大窗口的模型，或减少本轮参考资料；完整历史仍保留。');
+        throw new Error(t('本次资料、问答与输出预算可能超过所选模型的上下文窗口。请使用更大窗口的模型，或减少本轮参考资料；完整历史仍保留。'));
 }
 /** Only retry pre-output, transient failures. Invalid configuration and malformed content require intervention. */
 export function retryDelay(error: unknown, attempts: number): number | null {

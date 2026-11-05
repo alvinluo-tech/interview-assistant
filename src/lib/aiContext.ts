@@ -1,4 +1,5 @@
 /** Task-scoped context. Archive history is never trimmed or rewritten by these selectors. */
+import { t } from './i18n';
 interface HistoryMessage {
     id: string;
     role: string;
@@ -39,7 +40,7 @@ export function assembleInterviewHistory(messages: HistoryMessage[], question: s
         const size = groups[i].reduce((sum, message) => sum + message.content.length, 0);
         if (size > remaining) {
             if (i === groups.length - 1)
-                throw new Error('上一轮完整问答超过当前上下文预算，请减少本轮资料或使用更大窗口的模型；历史记录仍完整保留。');
+                throw new Error(t('上一轮完整问答超过当前上下文预算，请减少本轮资料或使用更大窗口的模型；历史记录仍完整保留。'));
             break;
         }
         selected.unshift(...groups[i]);
@@ -56,7 +57,7 @@ interface ExamContextTurn {
 export function assembleExamContext(turns: ExamContextTurn[], targetTurnId: string, maxChars = 28000): string {
     const target = turns.find(turn => turn.id === targetTurnId);
     if (!target)
-        throw new Error('没有找到这道题，请重新选择问题。');
+        throw new Error(t('没有找到这道题，请重新选择问题。'));
     const rootId = target.parentTurnId || target.id;
     const root = turns.find(turn => turn.id === rootId) || target;
     const chain = turns.filter(turn => turn.id === root.id || turn.parentTurnId === root.id);
@@ -65,7 +66,7 @@ export function assembleExamContext(turns: ExamContextTurn[], targetTurnId: stri
     const source = `【原题与约束】\n${root.questionText || '题干未单独提取，请结合原图。'}`;
     const latest = `【当前解答 / 代码】\n${target.body}`;
     if (source.length + latest.length > maxChars)
-        throw new Error('当前题干和完整代码超过上下文预算，请选择需要检查的代码范围；原记录完整保留。');
+        throw new Error(t('当前题干和完整代码超过上下文预算，请选择需要检查的代码范围；原记录完整保留。'));
     const blocks = [source];
     let used = source.length + latest.length;
     for (const turn of relevant.slice(0, -1).reverse()) {

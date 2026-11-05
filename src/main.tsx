@@ -4,7 +4,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import { applyDocumentLang, windowScene } from './lib/i18n';
+import { applyDocumentLang, windowScene, t } from './lib/i18n';
 import { hydrateStore, initStoreSync } from './lib/store';
 import { hydrateData, ensureDefaultData, initDataSync, getDataError } from './lib/backend';
 import { isTauri } from './lib/bridge';
@@ -25,7 +25,7 @@ let starting = false, aiInitialized = false, storeSynced = false, dataSynced = f
 async function start() {
   if (starting) return;
   starting = true;
-  root.render(<main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground" role="status">正在加载本机资料…</main>);
+  root.render(<main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground" role="status">{t('正在加载本机资料…')}</main>);
   try {
   if (isTauri()) {
     if (!aiInitialized) {await initializeAiSettings();aiInitialized = true;}
@@ -44,10 +44,10 @@ async function start() {
   );
   } catch (error) {
     root.render(<main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground">
-      <h1 className="text-lg font-semibold">暂时无法加载本机资料</h1>
-      <p className="max-w-lg text-sm text-muted-foreground">请检查磁盘空间、资料目录权限或文件占用，解决后重试。已有资料会保留。</p>
-      <p role="alert" className="max-w-lg break-words text-sm">{String((error as Error).message || error)}</p>
-      <button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={() => void start()}>重试启动</button>
+      <h1 className="text-lg font-semibold">{t('暂时无法加载本机资料')}</h1>
+      <p className="max-w-lg text-sm text-muted-foreground">{t('请检查磁盘空间、资料目录权限或文件占用，解决后重试。已有资料会保留。')}</p>
+      <p role="alert" className="max-w-lg break-words text-sm">{t(String((error as Error).message || error))}</p>
+      <button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={() => void start()}>{t('重试启动')}</button>
     </main>);
   } finally {starting = false;}
 }

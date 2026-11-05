@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateFixture} from './compile-fixture.mjs';
+import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 test('mock interviewer requests forward cancellation to the AI transport', async () => {
   const calls = [];
   const api = evaluateFixture('src/lib/mock.ts', {exports:{}, require: name => {
-    if(name==='./speechProfile')return evaluateFixture('src/lib/speechProfile.ts',{exports:{}});
+    if(name==='./i18n')return evaluateModuleFixture('src/lib/i18n.ts');
+    if(name==='./speechProfile')return evaluateModuleFixture('src/lib/speechProfile.ts');
     if(name==='./knowledgeContext') return {};
     assert.equal(name,'./ai'); return {chatStream: async options => {calls.push(options); return options.schema ? '{"question":"你好","kind":"NEW"}' : '你好';}};
   }});

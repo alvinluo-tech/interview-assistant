@@ -5,6 +5,7 @@ export interface QuestionSpeakerDrivers {
   system: (text: string, state: (speaking: boolean) => void, error: (error: unknown) => void, signal: AbortSignal) => Promise<() => void>;
   cloudStream?: (text: string, state: (speaking: boolean) => void, error: (error: unknown) => void, signal: AbortSignal) => Promise<() => void>;
 }
+import { t } from './i18n';
 export type SpeechPhase = 'idle' | 'preparing' | 'speaking';
 export function createQuestionSpeaker(drivers: QuestionSpeakerDrivers, state: (speaking: boolean) => void, error: (error: unknown) => void, phase?: (phase: SpeechPhase) => void) {
   let generation = 0, cancel: (() => void) | undefined, controller: AbortController | undefined;
@@ -25,7 +26,7 @@ export function createQuestionSpeaker(drivers: QuestionSpeakerDrivers, state: (s
         }
         const bytes = await drivers.cloud(text, controller.signal);
         if (current !== generation) return;
-        if (!bytes?.byteLength) throw new Error('语音服务未返回音频。');
+        if (!bytes?.byteLength) throw new Error(t('语音服务未返回音频。'));
         release = drivers.play(bytes, changed, failed);
       } else release = await drivers.system(text, changed, failed, controller.signal);
       if (current === generation) cancel = release; else release();

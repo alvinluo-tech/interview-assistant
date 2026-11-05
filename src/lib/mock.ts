@@ -3,6 +3,7 @@ import { chatStream } from './ai';
 import type { ChatMessage, InterviewSession } from './backend';
 import { buildKnowledgeContext, type KnowledgeSnapshot } from './knowledgeContext';
 import {normalizeSpeechProfile,languagePrompt,type SpeechProfile} from './speechProfile';
+import { t } from './i18n';
 export interface MockConfig {
     speechProfile?:SpeechProfile;
     knowledgeContext?: string;
@@ -79,7 +80,7 @@ export async function generateOpeningQuestion(config: MockConfig, signal?: Abort
             { role: 'user', content: '面试刚开始，以面试官身份简短问候后请候选人介绍自己，或围绕最核心的经历切入。候选人尚未回答，不能替他回答。返回约定 JSON，kind 为 NEW。' }], temperature: 0.7 });
     const parsed = parseQuestionReply(text);
     if (!parsed || parsed.turnKind !== 'NEW')
-        throw new Error('开场问题格式无效，请重试出题。');
+        throw new Error(t('开场问题格式无效，请重试出题。'));
     return parsed.question;
 }
 export function mockTurnPolicy(config: MockConfig, messages: ChatMessage[]) {
@@ -101,7 +102,7 @@ export async function generateNextQuestion(config: MockConfig, messages: ChatMes
 }> {
     const policy = mockTurnPolicy(config, messages);
     if (policy.asked >= config.turnBudget || messages.filter(message => message.role === 'INTERVIEWER').length >= policy.totalLimit)
-        throw new Error('本场计划问题已完成，请结束并查看复盘。');
+        throw new Error(t('本场计划问题已完成，请结束并查看复盘。'));
     const query = messages.slice(-2).map(message => message.text).join('\n');
     const {selected, omitted} = selectDialogue(messages, 22000);
     const text = await chatStream({ signal, task: 'mock-question', schema: questionSchema(policy.mustNew ? ['NEW'] : ['NEW', 'CONT']),
@@ -110,9 +111,9 @@ export async function generateNextQuestion(config: MockConfig, messages: ChatMes
             { role: 'user', content: `继续以面试官身份提问，不回答前面的面试问题。${omitted ? `有 ${omitted} 条早期发言未进入上下文，不推断其内容。` : ''}\n已问新题 ${policy.asked}/${config.turnBudget}，连续追问 ${policy.followups} 次。\n${policy.mustNew ? '本轮必须换全新话题，只允许 NEW，不得沿用同题追问。' : '根据刚才回答决定追问 CONT 或换题 NEW，避免重复。'}` }], temperature: 0.7 });
     const parsed = parseQuestionReply(text);
     if (!parsed)
-        throw new Error('问题响应格式无效，未将原始内容作为题目或语音播放，请重试。');
+        throw new Error(t('问题响应格式无效，未将原始内容作为题目或语音播放，请重试。'));
     if (policy.mustNew && parsed.turnKind !== 'NEW')
-        throw new Error('本轮需要换新题，模型返回了连续追问，请重试。');
+        throw new Error(t('本轮需要换新题，模型返回了连续追问，请重试。'));
     return parsed;
 }
 function parseQuestionReply(raw: string): {

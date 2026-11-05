@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateFixture} from './compile-fixture.mjs';
+import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 
 function harness({desktop=true,owner=true,current='session',fail=false,emitFails=false}={}) {
   const handlers=new Map(),calls=[],settings={'interview.sessionId':'session'};
@@ -11,6 +11,7 @@ function harness({desktop=true,owner=true,current='session',fail=false,emitFails
     }};
   const api=evaluateFixture('src/lib/interviewLifecycle.ts',{exports:{},console,crypto:{randomUUID:()=> 'request'},
     setTimeout:(fn)=>setTimeout(fn,30),clearTimeout,require:name=>{
+      if(name==='./i18n')return evaluateModuleFixture('src/lib/i18n.ts');
       if(name==='./bridge')return bridge;
       if(name==='./backend')return {completeSession:async()=>{calls.push('complete');}};
       if(name==='./store')return {getSetting:(key,fallback)=>settings[key]??fallback,setSetting:async(key,value)=>{settings[key]=value;}};
@@ -57,13 +58,14 @@ test('a result belonging to another stop request cannot complete this one',async
 });
 test('unmount before async registration completes still removes the listener',async()=>{
   let resolve,removed=0;
-  const api=evaluateFixture('src/lib/interviewLifecycle.ts',{exports:{},console,require:name=>name==='./bridge'?{listenEvent:()=>new Promise(done=>{resolve=done;})}: {}});
+  const api=evaluateFixture('src/lib/interviewLifecycle.ts',{exports:{},console,require:name=>name==='./i18n'?evaluateModuleFixture('src/lib/i18n.ts'):name==='./bridge'?{listenEvent:()=>new Promise(done=>{resolve=done;})}: {}});
   const off=api.listenForInterviewStop();off();resolve(()=>removed++);
   for(let i=0;i<5;i++)await Promise.resolve();assert.equal(removed,1);
 });
 test('a disposed owner ignores requests even before listener removal resolves',async()=>{
   let resolve,handler,stops=0;
   const api=evaluateFixture('src/lib/interviewLifecycle.ts',{exports:{},console,require:name=>{
+    if(name==='./i18n')return evaluateModuleFixture('src/lib/i18n.ts');
     if(name==='./bridge')return {listenEvent:(_event,callback)=>{handler=callback;return new Promise(done=>{resolve=done;});},emitTo:async()=>{}};
     if(name==='./interviewEngine')return {getInterviewEngineState:()=>({sessionId:'session'}),endInterview:async()=>{stops++;}};
     if(name==='./store')return {getSetting:()=>null};

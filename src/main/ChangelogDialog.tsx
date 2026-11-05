@@ -3,6 +3,7 @@ import { Button, Dialog, DialogTitle } from '@/ui/primitives';
 import { setSetting } from '@/lib/store';
 import { APP_VERSION } from '@/lib/env';
 import { CHANGELOG } from '@/lib/changelog';
+import { t } from '@/lib/i18n';
 
 export function ChangelogDialog({ onClose }: { onClose: () => void }) {
   return (
@@ -14,7 +15,7 @@ export function ChangelogDialog({ onClose }: { onClose: () => void }) {
       }}
       className="max-w-lg"
     >
-      <DialogTitle>已更新到新版本</DialogTitle>
+      <DialogTitle>{t('已更新到新版本')}</DialogTitle>
       <div className="mb-4 flex flex-col gap-4">
         {CHANGELOG.map((e) => (
           <div key={e.date}>
@@ -31,9 +32,9 @@ export function ChangelogDialog({ onClose }: { onClose: () => void }) {
                           : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                     }`}
                   >
-                    {it.tag === 'new' ? '新功能' : it.tag === 'improved' ? '体验优化' : '问题修复'}
+                    {it.tag === 'new' ? t('新功能') : it.tag === 'improved' ? t('体验优化') : t('问题修复')}
                   </span>
-                  <span>{it.text}</span>
+                  <span>{t(it.text)}</span>
                 </div>
               ))}
             </div>
@@ -49,7 +50,7 @@ export function ChangelogDialog({ onClose }: { onClose: () => void }) {
             onClose();
           }}
         >
-          今日不再提示
+          {t('今日不再提示')}
         </Button>
         <Button
           size="sm"
@@ -58,7 +59,7 @@ export function ChangelogDialog({ onClose }: { onClose: () => void }) {
             onClose();
           }}
         >
-          知道了
+          {t('知道了')}
         </Button>
       </div>
     </Dialog>

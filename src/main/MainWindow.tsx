@@ -22,6 +22,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import brandIcon from '../../src-tauri/icons/128x128@2x.png';
 import { Badge, Card, ToastViewport } from '@/ui/primitives';
 import { BRAND, isMac } from '@/lib/env';
+import { t } from '@/lib/i18n';
 import { getSetting, setSetting, useSetting } from '@/lib/store';
 import { readData, useDataError } from '@/lib/backend';
 import { setPanicHotkey, setActionHotkeys, onEvent, hideOverlay, showOverlay, setSessionActive } from '@/lib/bridge';
@@ -87,11 +88,11 @@ function initializeStartupHotkeys() {
   return startupHotkeys ??= (async () => {
     const {showToast}=await import('@/ui/primitives');
     try {await setPanicHotkey(getSetting('panic.hotkey',DEFAULT_PANIC_HOTKEY));}
-    catch(error){showToast({type:'error',title:'应急隐藏快捷键未生效',description:String((error as Error).message||error)});}
+    catch(error){showToast({type:'error',title:t('应急隐藏快捷键未生效'),description:t(String((error as Error).message||error))});}
     const scheme=getSetting<HotkeyScheme>('overlay.hotkeyScheme','simple');
     const effective=effectiveHotkeys(scheme,getSetting('overlay.actionHotkeys',{}) as Partial<Record<ActionKey,string>>);
     try {await setActionHotkeys(Object.entries(effective).map(([action,accelerator])=>({action,accelerator})));}
-    catch(error){showToast({type:'error',title:'部分浮窗快捷键未生效',description:String((error as Error).message||error)});}
+    catch(error){showToast({type:'error',title:t('部分浮窗快捷键未生效'),description:t(String((error as Error).message||error))});}
   })();
 }
 let staleCleanup: Promise<void> | undefined;
@@ -111,14 +112,14 @@ export function MainWindow() {
     void initializeStartupHotkeys();
     const offDead = onEvent('overlay-webview-dead', () => {
       import('@/ui/primitives').then(({ showToast }) =>
-        showToast({ type: 'error', title: '悬浮窗出现异常已自动收起，重新开始面试即可继续。' }),
+        showToast({ type: 'error', title: t('悬浮窗出现异常已自动收起，重新开始面试即可继续。') }),
       );
     });
     const offIdle = onEvent('panic-hotkey-idle', () => {
       import('@/ui/primitives').then(({ showToast }) =>
         showToast({
           type: 'info',
-          title: '已收到这个快捷键 —— 浮窗当前没有显示，所以不做任何动作。',
+          title: t('已收到这个快捷键 —— 浮窗当前没有显示，所以不做任何动作。'),
         }),
       );
     });
@@ -169,7 +170,7 @@ export function MainWindow() {
     <div className="flex h-full flex-col overflow-hidden">
       <TitleBar />
       <UpdateNotice />
-      {dataError&&<div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive">本地数据读取失败，已阻止覆盖。请在「设置 → 关于」恢复手动备份。{dataError}</div>}
+      {dataError&&<div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive">{t('本地数据读取失败，已阻止覆盖。请在「设置 → 关于」恢复手动备份。')}{dataError}</div>}
       <UsageNotice />
       {changelogOpen && <ChangelogDialog onClose={() => setChangelogOpen(false)} />}
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
@@ -190,14 +191,14 @@ export function MainWindow() {
                 <>
                   {section !== 'interview' && section !== 'settings' && section !== 'chat' && (
                     <header className="mb-5">
-                      <h1 className="text-lg font-semibold">{PAGE_TITLES[section].h1}</h1>
-                      <p className="mt-1 text-sm text-muted-foreground">{PAGE_TITLES[section].sub}</p>
+                      <h1 className="text-lg font-semibold">{t(PAGE_TITLES[section].h1)}</h1>
+                      <p className="mt-1 text-sm text-muted-foreground">{t(PAGE_TITLES[section].sub)}</p>
                     </header>
                   )}
                   {section === 'interview' && <InterviewWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'exam' && <ExamWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'mock' && <MockPage />}
-                  {section === 'chat' && <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">正在打开对话…</div>}><FreeChatPage /></Suspense>}
+                  {section === 'chat' && <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">{t('正在打开对话…')}</div>}><FreeChatPage /></Suspense>}
                   {section === 'question-bank' && <QuestionBankPage />}
                   {section === 'resource' && <ResourcePage />}
                   {section === 'records' && <RecordsPage />}
@@ -240,7 +241,7 @@ function TitleBar() {
       <button
         type="button"
         className={btn}
-        aria-label="最小化"
+        aria-label={t('最小化')}
         onClick={() => void getCurrentWindow().minimize()}
       >
         <Minus size={14} />
@@ -248,7 +249,7 @@ function TitleBar() {
       <button
         type="button"
         className={btn}
-        aria-label={maximized ? '还原' : '最大化'}
+        aria-label={maximized ? t('还原') : t('最大化')}
         onClick={() => void getCurrentWindow().toggleMaximize()}
       >
         {maximized ? <Copy size={12} /> : <Square size={11} />}
@@ -256,7 +257,7 @@ function TitleBar() {
       <button
         type="button"
         className={`${btn} hover:bg-red-500/90 hover:text-white`}
-        aria-label="关闭"
+        aria-label={t('关闭')}
         onClick={() => {
           // 关闭 = 退出进程（对齐原版）：销毁主窗口后应用退出
           void getCurrentWindow().destroy();
@@ -287,14 +288,14 @@ function Sidebar({
   onFeedback: () => void;
   onProfile: () => void;
 }) {
-  const [user] = useSetting('local.user', { name: '本地用户', email: '' });
+  const [user] = useSetting('local.user', { name: t('本地用户'), email: '' });
   return (
     <aside className="flex min-h-0 w-56 shrink-0 flex-col overflow-y-auto border-r bg-muted/35">
       <div className="flex items-center gap-2.5 px-4 pb-2 pt-4">
         <BrandMark />
         <div>
           <div className="text-sm font-semibold">{BRAND}</div>
-          <div className="text-[11px] text-muted-foreground">AI 面试助手</div>
+          <div className="text-[11px] text-muted-foreground">{t('AI 面试助手')}</div>
         </div>
       </div>
 
@@ -310,8 +311,8 @@ function Sidebar({
           >
             <span className={section === n.key ? 'text-primary' : 'text-muted-foreground'}>{n.icon}</span>
             <span>
-              <span className="block text-[13px] font-medium">{n.label}</span>
-              <span className="block text-[11px] text-muted-foreground">{n.desc}</span>
+              <span className="block text-[13px] font-medium">{t(n.label)}</span>
+              <span className="block text-[11px] text-muted-foreground">{t(n.desc)}</span>
             </span>
           </button>
         ))}
@@ -330,7 +331,7 @@ function Sidebar({
             }`}
           >
             <span className={section === n.key ? 'text-primary' : 'text-muted-foreground'}>{n.icon}</span>
-            {n.label}
+            {t(n.label)}
           </button>
         ))}
       </div>
@@ -340,11 +341,11 @@ function Sidebar({
       {/* 剩余额度卡（本地模式：不限制） */}
       <div className="mx-3 mb-2 rounded-lg border bg-card p-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">剩余额度</span>
-          <Badge variant="amber">本地版</Badge>
+          <span className="text-xs font-medium text-muted-foreground">{t('剩余额度')}</span>
+          <Badge variant="amber">{t('本地版')}</Badge>
         </div>
-        <div className="mt-1 text-lg font-semibold">无限</div>
-        <div className="text-[11px] text-muted-foreground">使用自己的 AI 接口 · 不限量</div>
+        <div className="mt-1 text-lg font-semibold">{t('无限')}</div>
+        <div className="text-[11px] text-muted-foreground">{t('使用自己的 AI 接口 · 不限量')}</div>
       </div>
 
       <div className="mx-3 mb-2 flex flex-col gap-0.5">
@@ -356,7 +357,7 @@ function Sidebar({
           }`}
         >
           <SettingsIcon size={15} className="text-muted-foreground" />
-          设置
+          {t('设置')}
         </button>
         <button
           type="button"
@@ -364,7 +365,7 @@ function Sidebar({
           className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] hover:bg-accent"
         >
           <MessageSquareText size={15} className="text-muted-foreground" />
-          反馈
+          {t('反馈')}
         </button>
       </div>
 

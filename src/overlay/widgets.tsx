@@ -3,6 +3,7 @@
  * 拖拽把手、滚动边缘 pill。悬停时长对齐原版各按钮的 hoverMs。
  */
 import { useEffect, useState, type ReactNode } from 'react';
+import { t } from '@/lib/i18n';
 import { useDwell, usePlatform } from './platform';
 import { hotkeyBadge } from '@/lib/hotkeys';
 import { isMac } from '@/lib/env';
@@ -150,7 +151,7 @@ export function DragHandle({ id = 'drag', hoverMs = 900 }: { id?: string; hoverM
       data-tauri-drag-region={interactive || undefined}
       onPointerDown={undefined}
       className="ov-chip relative flex size-6 cursor-grab items-center justify-center rounded-md border"
-      title={dragging ? '跟随中 · 静止 0.8s 释放' : `悬停 ${hoverMs / 1000}s 进入拖动`}
+      title={dragging ? t('跟随中 · 静止 0.8s 释放') : t('悬停 {s}s 进入拖动', { s: hoverMs / 1000 })}
     >
       <svg width="10" height="10" viewBox="0 0 10 10" className="ov-text-3 opacity-70">
         <circle cx="2" cy="2" r="0.9" fill="currentColor" />
@@ -239,7 +240,7 @@ export function ScrollEdgePill({
         ) : (
           <span>{label}</span>
         )}
-        <span className="ov-text-3">{direction === 'up' ? '回看' : '看新'}</span>
+        <span className="ov-text-3">{direction === 'up' ? t('回看') : t('看新')}</span>
       </span>
     </div>
   );
@@ -264,10 +265,10 @@ export function ConfirmPaletteButton({id, onApply}: {id:string; onApply:()=>Prom
     return () => window.clearTimeout(timer);
   }, [armed]);
   return <div className="relative flex items-center">
-    <DwellIconButton id={id} hoverMs={HOVER_MS.palette} label="一键配色" icon={<span aria-hidden="true">◐</span>}
+    <DwellIconButton id={id} hoverMs={HOVER_MS.palette} label={t('一键配色')} icon={<span aria-hidden="true">◐</span>}
       onTrigger={() => setArmed(true)} disabled={armed} />
     {armed && <div className="absolute right-0 top-full z-20 mt-1 w-28 rounded-md bg-background p-1 shadow-lg">
-      <DwellButton id={`${id}-confirm`} hoverMs={HOVER_MS.paletteConfirm} onTrigger={() => {setArmed(false);void onApply();}}>确认配色</DwellButton>
+      <DwellButton id={`${id}-confirm`} hoverMs={HOVER_MS.paletteConfirm} onTrigger={() => {setArmed(false);void onApply();}}>{t('确认配色')}</DwellButton>
     </div>}
   </div>;
 }

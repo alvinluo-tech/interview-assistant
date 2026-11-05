@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateFixture} from './compile-fixture.mjs';
+import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
+const i18nModule = () => evaluateModuleFixture('src/lib/i18n.ts');
 const keys = evaluateFixture('src/lib/hotkeys.ts',{exports:{}});
 
 test('recorder rejects modifier-only and unknown physical keys (B18)', () => {
@@ -39,6 +40,7 @@ function workbench(source) {
     '@/lib/examEngine':{EXAM_MODE_ORDER:[],EXAM_MODES:{},customizationSummary:()=>'',startExamSession:async()=>calls.push('create')},
     '@/lib/interviewLifecycle':{requestInterviewStop:async()=>calls.push('engine-stop')},
     '../MainWindow':{startOverlayFlow:async()=>calls.push('show'),recallWorkbench:async()=>calls.push('recall')},
+    '@/lib/i18n':i18nModule(),
   };
   const api=evaluateFixture(source,{exports:{},console,window:{},crypto:{randomUUID:()=> 'run'},require:name=>{
     if(!(name in modules))throw new Error('Unexpected dependency '+name);return modules[name];
@@ -84,6 +86,7 @@ function examOverlay(body, clipboardFails=false) {
     './platform':{usePlatform:()=>({bindHotkey:(name,fn)=>{bindings.set(name,fn);return()=>{};}})},
     '@tauri-apps/plugin-clipboard-manager':{writeText:async()=>{if(clipboardFails)throw new Error('clipboard unavailable');}},
     '@/lib/events':{bus:{emit:(_event,message)=>notifications.push(message)}},
+    '@/lib/i18n':i18nModule(),
   };
   const api=evaluateFixture('src/overlay/ExamOverlay.tsx',{exports:{},console,require:name=>{if(!(name in modules))throw new Error(name);return modules[name];}});
   const element=api.ExamOverlay({preview:false});
@@ -104,7 +107,7 @@ test('parsed suggestions have visible follow-up actions (B29)',()=>{
 test('global error diagnostics keep only the latest 400 entries (B35)',async()=>{
   const handlers=new Map(),win={addEventListener:(name,handler)=>handlers.set(name,handler)};
   const jsx=()=>({});
-  const modules={react:{default:{StrictMode:'StrictMode'}},'react/jsx-runtime':{jsx,jsxs:jsx},'react-dom/client':{createRoot:()=>({render(){}})},'./index.css':{},'./lib/i18n':{applyDocumentLang(){},windowScene:()=> 'main'},'./lib/bridge':{isTauri:()=>false},'./lib/store':{},'./lib/backend':{},'./lib/aiSettings':{},'./lib/desktopAppearance':{initDesktopAppearance(){},refreshDesktopAppearance(){}},'./App':{App(){}}};
+  const modules={react:{default:{StrictMode:'StrictMode'}},'react/jsx-runtime':{jsx,jsxs:jsx},'react-dom/client':{createRoot:()=>({render(){}})},'./index.css':{},'./lib/i18n':{applyDocumentLang(){},windowScene:()=> 'main',t:(s)=>s},'./lib/bridge':{isTauri:()=>false},'./lib/store':{},'./lib/backend':{},'./lib/aiSettings':{},'./lib/desktopAppearance':{initDesktopAppearance(){},refreshDesktopAppearance(){}},'./App':{App(){}}};
   evaluateFixture('src/main.tsx',{exports:{},window:win,document:{getElementById:()=>({}),documentElement:{classList:{toggle(){}}},body:{classList:{toggle(){}}}},console:{error(){}},require:name=>{if(!(name in modules))throw new Error(name);return modules[name];}});
   for(let i=0;i<1000;i++)handlers.get('error')({message:'error '+i});
   assert.equal(win.__errors.length,400);
@@ -117,6 +120,7 @@ test('stale-session cleanup clears recovery ids but preserves mock interviews (B
   const settings={'interview.sessionId':'old'};
   const store={get:async key=>data.get(key),set:async(key,value)=>data.set(key,value),save:async()=>{}};
   const api=evaluateFixture('src/lib/backend.ts',{exports:{},window:{},console,require:name=>{
+    if(name==='./i18n')return i18nModule();
     if(name==='react')return {};
     if(name==='@tauri-apps/plugin-store')return {load:async()=>store};
     if(name==='@tauri-apps/api/event')return {emit:async()=>{}};
@@ -133,6 +137,7 @@ test('engine toasts reach the mounted notification viewport',()=>{
   const bus=evaluateFixture('src/lib/events.ts',{exports:{},console}).bus;
   const jsx=(type,props)=>({type,props});
   const api=evaluateFixture('src/ui/primitives.tsx',{exports:{},window:{setTimeout(){}},require:name=>{
+    if(name==='@/lib/i18n')return i18nModule();
     if(name==='react')return {createContext:()=>({}),useEffect:fn=>fn(),useState:initial=>[initial,value=>updates.push(value)]};
     if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};
     if(['lucide-react','react-dom','./useModalFocus'].includes(name))return {};

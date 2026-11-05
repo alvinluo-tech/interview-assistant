@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateFixture} from './compile-fixture.mjs';
-const {createVoiceCall}=evaluateFixture('src/lib/voiceCall.ts',{exports:{},Int16Array,AbortController});
+import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
+const {createVoiceCall}=evaluateFixture('src/lib/voiceCall.ts',{exports:{},Int16Array,AbortController,require:name=>{if(name==='./i18n')return evaluateModuleFixture('src/lib/i18n.ts');throw new Error(name);}});
 const flush=async()=>{for(let i=0;i<15;i++)await Promise.resolve();};
 function harness() {
   let pcm,finished,failSpeech,resolveTranscription,opened=0,closed=0,aborted=0;const phases=[],sent=[],errors=[];

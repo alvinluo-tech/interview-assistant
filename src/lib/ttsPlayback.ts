@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { SpeechAudioChunk } from './ttsProtocol.js';
 
 export interface SpeechOutput {
@@ -22,7 +23,7 @@ export function createSpeechOutput(state: (speaking: boolean) => void, error: (r
       }
       if (context.state !== 'running' || Date.now() - lastProgress > 5000) {
         stop();
-        throw new Error('音频播放已暂停或设备没有响应，请恢复音频设备后重试。');
+        throw new Error(t('音频播放已暂停或设备没有响应，请恢复音频设备后重试。'));
       }
       await new Promise<void>(resolve => {
         const release = () => { clearTimeout(timer); waiting.delete(release); resolve(); };
@@ -47,12 +48,12 @@ export function createSpeechOutput(state: (speaking: boolean) => void, error: (r
   void ready.catch(() => {});
   return {stop, finish: () => {
     if (closed) return;
-    if (lastByte !== undefined) throw new Error('语音音频数据不完整，请重新朗读。');
+    if (lastByte !== undefined) throw new Error(t('语音音频数据不完整，请重新朗读。'));
     finished = true; if (!sources.size) stop();
   }, write: async chunk => {
     if (closed) return;
     await ready; if (closed) return;
-    if (context.state !== 'running') throw new Error('音频播放尚未获准，请点击问题旁的朗读按钮重试。');
+    if (context.state !== 'running') throw new Error(t('音频播放尚未获准，请点击问题旁的朗读按钮重试。'));
     let buffer: AudioBuffer;
     if (chunk.format === 'encoded') {
       buffer = await context.decodeAudioData(new Uint8Array(chunk.bytes).buffer);
@@ -65,7 +66,7 @@ export function createSpeechOutput(state: (speaking: boolean) => void, error: (r
       lastByte = bytes.length % 2 ? bytes[bytes.length - 1] : undefined;
       const length = Math.floor(bytes.length / 2); if (!length) return;
       const sampleRate = chunk.sampleRate || 24000;
-      if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 48000) throw new Error('语音采样率无效。');
+      if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 48000) throw new Error(t('语音采样率无效。'));
       buffer = context.createBuffer(1,length,sampleRate);
       const samples = buffer.getChannelData(0), view = new DataView(bytes.buffer);
       for (let i = 0; i < length; i++) samples[i] = view.getInt16(i * 2,true) / 32768;

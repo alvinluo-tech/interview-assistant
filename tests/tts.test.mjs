@@ -9,7 +9,7 @@ function load(source) {
   if (cache.has(source)) return cache.get(source);
   const api = evaluateFixture(source, {exports:{}, Error, AbortController, DOMException, setTimeout, clearTimeout,
     URL, URLSearchParams, performance, Response, ReadableStream, TextDecoder, TextEncoder, Uint8Array, Float32Array, ArrayBuffer, DataView, atob,
-    require: name => load(path.resolve(path.dirname(source), name.replace(/\.js$/, '.ts')))});
+    require: name => load(path.resolve(path.dirname(source), name.endsWith('.js') ? name.replace(/\.js$/, '.ts') : name + '.ts'))});
   cache.set(source, api); return api;
 }
 const provider = (baseUrl = 'https://api.xiaomimimo.com/v1') => ({id:'test',name:'测试',baseUrl,authMode:'bearer',apiKey:'fake-secret',models:[],lastFetchedAt:null});

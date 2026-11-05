@@ -1,3 +1,4 @@
+import { t } from './i18n';
 export type VoiceCallPhase = 'idle'|'connecting'|'listening'|'transcribing'|'thinking'|'speaking';
 export interface VoiceCallDrivers {
   open(onPcm:(pcm:Int16Array,volume:number)=>void,onError:(message:string)=>void):Promise<{close():Promise<void>}>;
@@ -65,7 +66,7 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
     start(){if(phase!=='idle')return;const current=++generation;void listen(current);},
     stop,
     interrupt(){if(phase!=='speaking'&&phase!=='thinking')return;generation++;drivers.stopSpeech();drivers.cancelAnswer();void listen(generation);},
-    answer(text:string){if(phase!=='thinking')return;const current=generation;if(!text.trim()){fail('未收到可播放的回答，请检查对话服务。');return;}
+    answer(text:string){if(phase!=='thinking')return;const current=generation;if(!text.trim()){fail(t('未收到可播放的回答，请检查对话服务。'));return;}
       change('speaking');drivers.speak(text,()=>{if(current===generation&&phase==='speaking')void listen(current);},error=>{if(current===generation)fail(error);});},
     answerFailed(error:unknown){if(phase==='thinking')fail(error);},
     getPhase(){return phase;},

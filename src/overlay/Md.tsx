@@ -1,12 +1,13 @@
 /* 浮窗 markdown 渲染器：代码块逐行渲染、折行不横滚、答案标签、表格/引用/列表。 */
 import { Fragment, type ReactNode } from 'react';
+import { t } from '@/lib/i18n';
 
 export function Md({ text }: { text: string }) {
   return <div className="overlay-md">{renderBlocks(text)}</div>;
 }
 
 function renderBlocks(src: string, depth=0, budget={remaining:6000}): ReactNode[] {
-  const plain=()=>[<pre key="plain" className="whitespace-pre-wrap break-words font-sans" style={{overflowWrap:'anywhere'}} aria-label="复杂内容按纯文本显示">{src}</pre>];
+  const plain=()=>[<pre key="plain" className="whitespace-pre-wrap break-words font-sans" style={{overflowWrap:'anywhere'}} aria-label={t('复杂内容按纯文本显示')}>{src}</pre>];
   if(depth>=12||src.length>100000||budget.remaining<=0)return plain();
   const nodes: ReactNode[] = [];
   const lines = src.replace(/\r\n/g, '\n').split('\n');

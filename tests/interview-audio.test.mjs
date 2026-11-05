@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
-import {evaluateFixture} from './compile-fixture.mjs';
+import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 import {randomUUID} from 'node:crypto';
 
 function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand, deadlineTimers } = {}) {
@@ -28,7 +28,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   };
   const track = { label: 'Test microphone', enabled: true, getSettings: () => ({ deviceId: 'test' }), stop: () => stopped++ };
   const settings = { 'interview.autoAnswer': autoAnswer, 'interview.silenceGateMs': 300,'interview.speakerMode':speakerMode };
-  const profile=evaluateFixture('src/lib/speechProfile.ts',{exports:{}});
+  const profile=evaluateModuleFixture('src/lib/speechProfile.ts');
   const mocks = {
     './speechPreferences':{getSpeechProfile:()=>profile.normalizeSpeechProfile(settings['interview.speechProfile'])},
     './speechProfile':profile,
@@ -47,6 +47,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     './examEngine': { getSolverState: () => ({ turns: [] }), prepareExamRun: () => {}, finishInterviewExam: async () => {} },
     './store': { getSetting: (key, fallback) => settings[key] ?? fallback, setSetting: async (key,value) => { settings[key] = value; } },
     './events': { bus: { emit() {} } },
+    './i18n': evaluateModuleFixture('src/lib/i18n.ts'),
   };
   const sandbox = {
     exports: {}, require: name => { if (!(name in mocks)) throw new Error(`Unmocked dependency: ${name}`); return mocks[name]; },

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Dialog, DialogTitle } from '@/ui/primitives';
 import { setSetting, useSetting } from '@/lib/store';
+import { t } from '@/lib/i18n';
 
 const BANNED = [
   '国家教育考试：高考、研究生招生考试（含复试）、自学考试、成人高考等',
@@ -31,22 +32,21 @@ export function UsageNotice() {
 
   return (
     <Dialog open onClose={() => {}} dismissable={false} className="max-w-xl">
-      <DialogTitle>使用须知</DialogTitle>
+      <DialogTitle>{t('使用须知')}</DialogTitle>
       <div className="mb-3 text-sm leading-relaxed">
-        <p className="font-medium">以下考试（含笔试、面试、复试等全部环节）禁止使用本软件：</p>
+        <p className="font-medium">{t('以下考试（含笔试、面试、复试等全部环节）禁止使用本软件：')}</p>
         <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[13px] text-muted-foreground">
           {BANNED.map((b) => (
-            <li key={b}>{b}</li>
+            <li key={b}>{t(b)}</li>
           ))}
         </ul>
       </div>
       <p className="mb-2 text-[13px] leading-relaxed text-muted-foreground">
-        所有回答均由 AI 生成、仅供参考，请结合自身情况独立判断。应用使用你自行配置的
-        AI 接口，音频、截图与文本会发送到你所配置的服务商处理。
+        {t('所有回答均由 AI 生成、仅供参考，请结合自身情况独立判断。应用使用你自行配置的 AI 接口，音频、截图与文本会发送到你所配置的服务商处理。')}
       </p>
       <div className="flex justify-end">
         <Button disabled={countdown > 0} onClick={() => void setSetting('notice.usageAcknowledged.v2', true)}>
-          {countdown > 0 ? `我已阅读并同意（${countdown} 秒）` : '我已阅读并同意'}
+          {countdown > 0 ? t('我已阅读并同意（{n} 秒）', { n: countdown }) : t('我已阅读并同意')}
         </Button>
       </div>
     </Dialog>

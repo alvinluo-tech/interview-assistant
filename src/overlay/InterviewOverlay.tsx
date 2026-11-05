@@ -46,6 +46,7 @@ import { encodeWav, transcribeAudio } from '@/lib/ai';
 import { openMicrophone, type MicrophoneCapture } from '@/lib/microphone';
 import { setOverlaySize } from '@/lib/bridge';
 import { effectiveHotkeys, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
+import { t } from '@/lib/i18n';
 import { showToast } from '@/ui/primitives';
 import { Md, mdToPlain } from './Md';
 import {
@@ -143,7 +144,7 @@ function InterviewShell({
   preview?: boolean;
 }) {
   const [speechProfile,saveSpeechProfile]=useSpeechProfile('interview');
-  const switchLanguage=()=>{const next=speechProfile.answerLanguage==='en-US'?'zh-CN':'en-US';void saveSpeechProfile({...speechProfile,answerLanguage:next}).catch(error=>showToast({type:'error',title:'语言切换未保存',description:String(error)}));};
+  const switchLanguage=()=>{const next=speechProfile.answerLanguage==='en-US'?'zh-CN':'en-US';void saveSpeechProfile({...speechProfile,answerLanguage:next}).catch(error=>showToast({type:'error',title:t('语言切换未保存'),description:String(error)}));};
   const engine = useEngineState();
   const solver = useSolverState();
   const [tab, setTab] = useState<'chat' | 'solver'>('chat');
@@ -197,7 +198,7 @@ function InterviewShell({
         <div className="flex-1" />
         {/* 穿透/窗口切换 */}
         <DwellIconButton id="iv-mode" hoverMs={HOVER_MS.switchInteractive}
-          label={interactive ? '切回穿透模式' : '悬停切到窗口模式'}
+          label={interactive ? t('切回穿透模式') : t('悬停切到窗口模式')}
           icon={interactive ? <MousePointerClick size={13} /> : <Columns2 size={13} />}
           onTrigger={toggleInteractive} />
         {/* 一键配色 */}
@@ -207,7 +208,7 @@ function InterviewShell({
           onEnd={async () => {
             const { setSessionActive, hideOverlay, showMain } = await import('@/lib/bridge');
             try {await endInterview(true);}
-            catch(error){showToast({type:'error',title:'面试已停止，但结束状态尚未保存',description:String((error as Error).message||error)});}
+            catch(error){showToast({type:'error',title:t('面试已停止，但结束状态尚未保存'),description:String((error as Error).message||error)});}
             finally {
               try {await setSessionActive(false);}
               finally {try {await hideOverlay();} finally {await showMain();}}
@@ -218,7 +219,7 @@ function InterviewShell({
 
       <AudioInputFeedback engine={engine} />
       {engine.contextSources.length > 0 && <details className="ov-panel rounded-md px-2 py-1 text-[10px]">
-        <summary className="cursor-pointer">本次回答参考 {engine.contextSources.length} 段简历 / JD / 资料</summary>
+        <summary className="cursor-pointer">{t('本次回答参考 {n} 段简历 / JD / 资料', { n: engine.contextSources.length })}</summary>
         <div className="mt-1 max-h-32 overflow-y-auto space-y-2">{engine.contextSources.map(source => <div key={source.id}>
           <div className="font-medium">{source.title} · {source.location}</div><p className="whitespace-pre-wrap opacity-75">{source.excerpt}</p>
         </div>)}</div>
@@ -244,7 +245,7 @@ function InterviewShell({
         {tab === 'chat' ? (
           <>
             <div className="flex gap-1.5">
-              <DwellButton id="chat-language" variant="muted" hoverMs={HOVER_MS.action} onTrigger={switchLanguage}>答案 · {speechProfile.answerLanguage==='en-US'?'English':speechProfile.answerLanguage==='follow'?'跟随':speechProfile.answerLanguage==='yue-HK'?'粤语':'中文'}</DwellButton>
+              <DwellButton id="chat-language" variant="muted" hoverMs={HOVER_MS.action} onTrigger={switchLanguage}>{t('答案 · {lang}', { lang: speechProfile.answerLanguage==='en-US'?'English':speechProfile.answerLanguage==='follow'?t('跟随'):speechProfile.answerLanguage==='yue-HK'?t('粤语'):t('中文') })}</DwellButton>
               <DwellButton
                 id="chat-toggle"
                 variant={started && engine.status !== 'paused' ? 'muted' : 'primary'}
@@ -259,10 +260,10 @@ function InterviewShell({
                   }
                 }}
               >
-                {engine.status === 'error' ? '重试收音' : !started ? '开始' : engine.status === 'paused' ? '继续' : '暂停'}
+                {engine.status === 'error' ? t('重试收音') : !started ? t('开始') : engine.status === 'paused' ? t('继续') : t('暂停')}
               </DwellButton>
               <DwellButton id="chat-transcribe" variant="muted" hoverMs={HOVER_MS.action} onTrigger={() => flushUtterance()} disabled={engine.audio.recognitionMode === 'realtime'}>
-                {engine.audio.recognitionMode === 'realtime' ? '自动断句' : '立即转写'}
+                {engine.audio.recognitionMode === 'realtime' ? t('自动断句') : t('立即转写')}
               </DwellButton>
               <DwellButton
                 id="chat-answer"
@@ -274,7 +275,7 @@ function InterviewShell({
                   if (lastQ) void answerQuestion(lastQ);
                 }}
               >
-                立即回答
+                {t('立即回答')}
               </DwellButton>
               <DwellButton
                 id="chat-solver"
@@ -286,7 +287,7 @@ function InterviewShell({
                   if (solver.turns.length === 0) void solve();
                 }}
               >
-                笔试答题
+                {t('笔试答题')}
               </DwellButton>
             </div>
             <VoiceAskRow kind="chat" hotkey={hotkeys['voice-ask']} />
@@ -307,23 +308,23 @@ function AudioInputFeedback({ engine }: { engine: EngineState }) {
   const audio = engine.audio;
   const active = engine.status === 'listening' || engine.status === 'answering';
   const noInput = active && now - (audio.lastInputAt || startedAt.current) > 6000;
-  const label = engine.status === 'connecting' ? '正在连接音频设备…'
-    : engine.status === 'paused' ? '收音已暂停'
-      : engine.status === 'error' ? '收音不可用'
-        : !active ? '收音未启动'
-          : audio.realtimeState === 'reconnecting' ? '语音重连中…'
-          : audio.speaking ? audio.recognitionMode === 'realtime' ? '正在实时识别' : `正在收音 · ${(audio.bufferedMs / 1000).toFixed(1)} 秒`
-            : audio.pending ? `正在转写${audio.pending > 1 ? `（${audio.pending} 段）` : ''}…`
-              : audio.bufferedMs ? '已收音，等待停顿后转写'
-                : audio.lastTranscriptAt ? '转写已完成，等待继续说话' : '等待说话';
+  const label = engine.status === 'connecting' ? t('正在连接音频设备…')
+    : engine.status === 'paused' ? t('收音已暂停')
+      : engine.status === 'error' ? t('收音不可用')
+        : !active ? t('收音未启动')
+          : audio.realtimeState === 'reconnecting' ? t('语音重连中…')
+          : audio.speaking ? audio.recognitionMode === 'realtime' ? t('正在实时识别') : t('正在收音 · {s} 秒', { s: (audio.bufferedMs / 1000).toFixed(1) })
+            : audio.pending ? (audio.pending > 1 ? t('正在转写（{n} 段）…', { n: audio.pending }) : t('正在转写…'))
+              : audio.bufferedMs ? t('已收音，等待停顿后转写')
+                : audio.lastTranscriptAt ? t('转写已完成，等待继续说话') : t('等待说话');
   return (
     <div className="ov-panel rounded-md px-2 py-1.5 text-[10px]" data-testid="audio-input-feedback">
-      <div className="ov-text-2 flex items-center gap-1.5"><Mic size={12} /><span className="min-w-0 flex-1 truncate" title={audio.deviceLabel}>{audio.source === 'SPEAKER' ? `系统声音${audio.deviceLabel ? ` · ${audio.deviceLabel}` : ''}` : audio.deviceLabel || '麦克风'}</span><span role="status" className="shrink-0">{label}</span></div>
-      <div role="meter" aria-label="收音音量" aria-valuemin={0} aria-valuemax={100} aria-valuenow={active ? audio.level : 0} className="mt-1.5 h-1 overflow-hidden rounded-full bg-current/10">
+      <div className="ov-text-2 flex items-center gap-1.5"><Mic size={12} /><span className="min-w-0 flex-1 truncate" title={audio.deviceLabel}>{audio.source === 'SPEAKER' ? (audio.deviceLabel ? t('系统声音 · {label}', { label: audio.deviceLabel }) : t('系统声音')) : audio.deviceLabel || t('麦克风')}</span><span role="status" className="shrink-0">{label}</span></div>
+      <div role="meter" aria-label={t('收音音量')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={active ? audio.level : 0} className="mt-1.5 h-1 overflow-hidden rounded-full bg-current/10">
         <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-100" style={{ width: `${active ? audio.level : 0}%` }} />
       </div>
-      {noInput && <div className="ov-text-2 mt-1">尚未收到音频数据，请暂停后继续，或返回工作台检查输入设备。</div>}
-      {active && !noInput && <div className="ov-text-3 mt-1">{audio.recognitionMode === 'realtime' ? '持续音频流 · 边说边更新字幕，句子定稿后回答' : audio.recognitionMode === 'segmented' ? '分段实时 · 约每 2.5 秒更新字幕，停顿后校正并回答' : '说完停顿后自动转写，也可点「立即转写」'}</div>}
+      {noInput && <div className="ov-text-2 mt-1">{t('尚未收到音频数据，请暂停后继续，或返回工作台检查输入设备。')}</div>}
+      {active && !noInput && <div className="ov-text-3 mt-1">{audio.recognitionMode === 'realtime' ? t('持续音频流 · 边说边更新字幕，句子定稿后回答') : audio.recognitionMode === 'segmented' ? t('分段实时 · 约每 2.5 秒更新字幕，停顿后校正并回答') : t('说完停顿后自动转写，也可点「立即转写」')}</div>}
     </div>
   );
 }
@@ -339,19 +340,19 @@ function lastInterviewer(messages: EngineState['messages']): string | null {
 function statusOf(engine: EngineState): { text: string; live: boolean } {
   switch (engine.status) {
     case 'connecting':
-      return { text: '连接中', live: false };
+      return { text: t('连接中'), live: false };
     case 'listening':
-      return { text: '聆听中', live: true };
+      return { text: t('聆听中'), live: true };
     case 'answering':
-      return { text: '生成回答', live: true };
+      return { text: t('生成回答'), live: true };
     case 'paused':
-      return { text: '已暂停', live: false };
+      return { text: t('已暂停'), live: false };
     case 'error':
-      return { text: engine.errorMessage ? '出错' : '连接已断开', live: false };
+      return { text: engine.errorMessage ? t('出错') : t('连接已断开'), live: false };
     case 'ended':
-      return { text: '会话已结束', live: false };
+      return { text: t('会话已结束'), live: false };
     default:
-      return { text: '待开始', live: false };
+      return { text: t('待开始'), live: false };
   }
 }
 
@@ -405,7 +406,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
 
   return (
     <>
-      <ScrollEdgePillProxy id="scroll-up" direction="up" label="悬停回看" hotkey={hotkeys['scroll-up']} />
+      <ScrollEdgePillProxy id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
       <div ref={listRef} onScroll={() => {
         const el = listRef.current;
         if (el) following.current = newestFirst ? el.scrollTop < 160 : el.scrollHeight - el.scrollTop - el.clientHeight < 160;
@@ -414,15 +415,15 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
           <div className="ov-text-2 flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
             <div className="ov-text text-[13px] font-medium">
               {engine.status === 'connecting'
-                ? '正在连接面试会话…'
+                ? t('正在连接面试会话…')
                 : engine.status === 'idle'
-                  ? '点下方「开始」进入聆听'
-                  : engine.status === 'paused' ? '收音已暂停'
-                    : engine.status === 'error' ? '收音遇到问题，请查看上方提示'
-                      : engine.audio.source === 'SPEAKER' ? '正在聆听面试官' : '请对着麦克风说话'}
+                  ? t('点下方「开始」进入聆听')
+                  : engine.status === 'paused' ? t('收音已暂停')
+                    : engine.status === 'error' ? t('收音遇到问题，请查看上方提示')
+                      : engine.audio.source === 'SPEAKER' ? t('正在聆听面试官') : t('请对着麦克风说话')}
             </div>
             <div className="ov-text-2 text-[11px] opacity-80">
-              {engine.audio.recognitionMode === 'segmented' ? '说话过程中更新字幕，定稿后生成参考答案' : '停顿后显示识别文字，开启自动回答后生成参考答案'}
+              {engine.audio.recognitionMode === 'segmented' ? t('说话过程中更新字幕，定稿后生成参考答案') : t('停顿后显示识别文字，开启自动回答后生成参考答案')}
             </div>
           </div>
         ) : (
@@ -441,18 +442,18 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         <div className="min-w-0 flex-1">{m.text}
                           {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
                           {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
-                          {m.metadata?.superseded ? <span className="ov-text-3 ml-2 text-[10px]">已更正</span> : (!m.metadata?.speaker||m.metadata.speaker.role==='interviewer')&&<DwellButton id={`correct-${m.id}`} compact hoverMs={1200} onTrigger={()=>{if(!interactive)toggleInteractive();setEditingQuestion({id:m.id,text:m.text});}}>更正并重答</DwellButton>}
+                          {m.metadata?.superseded ? <span className="ov-text-3 ml-2 text-[10px]">{t('已更正')}</span> : (!m.metadata?.speaker||m.metadata.speaker.role==='interviewer')&&<DwellButton id={`correct-${m.id}`} compact hoverMs={1200} onTrigger={()=>{if(!interactive)toggleInteractive();setEditingQuestion({id:m.id,text:m.text});}}>{t('更正并重答')}</DwellButton>}
                         </div>
                       </div>
                     ) : (
                       <div key={m.id} className="ov-text ov-body relative">
-                        {m.metadata?.superseded && <div className="ov-text-3 mb-1 text-[10px]">更正前的参考答案</div>}
-                        {m.metadata?.origin==='candidate_response' && <div className="ov-text-3 text-[10px]">我的实际回答</div>}
+                        {m.metadata?.superseded && <div className="ov-text-3 mb-1 text-[10px]">{t('更正前的参考答案')}</div>}
+                        {m.metadata?.origin==='candidate_response' && <div className="ov-text-3 text-[10px]">{t('我的实际回答')}</div>}
                         <Md text={m.text} />
                         {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
                         {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
                         {!m.pending && <GenerationDetails status={m.metadata?.completionStatus} request={m.metadata?.request}/>}
-                        {!!m.metadata?.sources?.length && <details className="ov-text-3 mt-1 text-[10px]"><summary className="cursor-pointer">本轮参考资料</summary>{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</details>}
+                        {!!m.metadata?.sources?.length && <details className="ov-text-3 mt-1 text-[10px]"><summary className="cursor-pointer">{t('本轮参考资料')}</summary>{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</details>}
                         {m.pending && (
                           <span className="ov-text-3 mt-0.5 inline-block size-3 animate-spin rounded-full border border-current border-t-transparent" />
                         )}
@@ -466,29 +467,29 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
               <div className="ov-line ov-text-2 ov-body-sm border-l-2 border-dashed pl-1.5 opacity-80">
                 {engine.partial}
                 <div className="ov-text-3 mt-0.5 text-[10px] opacity-70">
-                  短句确认中，稍后自动入列；也可点击「立即回答」
+                  {t('短句确认中，稍后自动入列；也可点击「立即回答」')}
                 </div>
               </div>
             )}
             {engine.liveTranscripts.map(draft => (
               <div key={draft.id} data-testid="live-transcript" data-phase={draft.phase} className="ov-line ov-text-2 ov-body-sm whitespace-pre-wrap border-l-2 border-dashed pl-1.5" aria-live="polite">
-                {draft.text || (draft.phase === 'finalizing' ? '正在校正整句…' : '正在识别语音…')}
-                <div className="ov-text-3 mt-0.5 text-[10px]">{draft.phase === 'preview' ? '实时字幕 · 尚未定稿，不触发回答' : draft.phase === 'finalizing' ? '正在定稿…' : '本段识别失败，请查看提示后重试'}</div>
+                {draft.text || (draft.phase === 'finalizing' ? t('正在校正整句…') : t('正在识别语音…'))}
+                <div className="ov-text-3 mt-0.5 text-[10px]">{draft.phase === 'preview' ? t('实时字幕 · 尚未定稿，不触发回答') : draft.phase === 'finalizing' ? t('正在定稿…') : t('本段识别失败，请查看提示后重试')}</div>
               </div>
             ))}
           </div>
         )}
       </div>
-      {engine.sessionId && <DwellButton id="record-actual-answer" compact hoverMs={1500} onTrigger={()=>{if(!interactive)toggleInteractive();setActualAnswer(actualAnswer===null?'':null);}}>补充我的实际回答</DwellButton>}
-      {actualAnswer!==null && <form className="ov-chip mx-1 mt-2 rounded-md border p-2" onSubmit={event=>{event.preventDefault();if(!actualAnswer.trim())return;void recordCandidateResponse(actualAnswer).then(()=>setActualAnswer(null)).catch(error=>showToast({type:'error',title:'实际回答未保存',description:String(error)}));}}>
-        <label className="ov-text-2 text-[11px]">实际说法与参考答案不同时，可在这里补充<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={actualAnswer} onChange={event=>setActualAnswer(event.target.value)}/></label>
-        <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!actualAnswer.trim()}>保存补充</button><button type="button" onClick={()=>setActualAnswer(null)}>取消</button></div>
+      {engine.sessionId && <DwellButton id="record-actual-answer" compact hoverMs={1500} onTrigger={()=>{if(!interactive)toggleInteractive();setActualAnswer(actualAnswer===null?'':null);}}>{t('补充我的实际回答')}</DwellButton>}
+      {actualAnswer!==null && <form className="ov-chip mx-1 mt-2 rounded-md border p-2" onSubmit={event=>{event.preventDefault();if(!actualAnswer.trim())return;void recordCandidateResponse(actualAnswer).then(()=>setActualAnswer(null)).catch(error=>showToast({type:'error',title:t('实际回答未保存'),description:String(error)}));}}>
+        <label className="ov-text-2 text-[11px]">{t('实际说法与参考答案不同时，可在这里补充')}<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={actualAnswer} onChange={event=>setActualAnswer(event.target.value)}/></label>
+        <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!actualAnswer.trim()}>{t('保存补充')}</button><button type="button" onClick={()=>setActualAnswer(null)}>{t('取消')}</button></div>
       </form>}
       {editingQuestion && <form className="ov-chip mx-1 mt-2 rounded-md border p-2" onSubmit={event=>{event.preventDefault();const target=editingQuestion;if(!target.text.trim())return;setEditingQuestion(null);void answerQuestion(target.text,{correction:true,questionMessageId:target.id});}}>
-        <label className="ov-text-2 text-[11px]">更正识别内容<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={editingQuestion.text} onChange={event=>setEditingQuestion({...editingQuestion,text:event.target.value})}/></label>
-        <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!editingQuestion.text.trim()}>更正并重新回答</button><button type="button" onClick={()=>setEditingQuestion(null)}>取消</button></div>
+        <label className="ov-text-2 text-[11px]">{t('更正识别内容')}<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={editingQuestion.text} onChange={event=>setEditingQuestion({...editingQuestion,text:event.target.value})}/></label>
+        <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!editingQuestion.text.trim()}>{t('更正并重新回答')}</button><button type="button" onClick={()=>setEditingQuestion(null)}>{t('取消')}</button></div>
       </form>}
-      <ScrollEdgePillProxy id="scroll-down" direction="down" label="悬停看新" hotkey={hotkeys['scroll-down']} />
+      <ScrollEdgePillProxy id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
     </>
   );
 }
@@ -513,14 +514,14 @@ function SolverView({
     <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1">
       {solver.turns.length === 0 ? (
         <div className="ov-text-2 flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-          <div className="ov-text text-[13px] font-medium">面试里的笔试助手</div>
+          <div className="ov-text text-[13px] font-medium">{t('面试里的笔试助手')}</div>
           <div className="ov-text-2 text-[11px] opacity-80">
-            把题目摆到屏幕上，按「重新截屏」直接答；一屏放不下按「加页」一页页截完再一起发
+            {t('把题目摆到屏幕上，按「重新截屏」直接答；一屏放不下按「加页」一页页截完再一起发')}
           </div>
         </div>
       ) : (
         <div className="ov-text ov-body">
-          <div className="mb-2 flex flex-wrap gap-1">{solver.turns.map((turn,index)=><DwellButton key={turn.id} id={`select-${turn.id}`} compact hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)}>{index+1}{turn.parentTurnId?' · 追问':' · 原题'}{turn.id===last?.id?' ✓':''}</DwellButton>)}</div>
+          <div className="mb-2 flex flex-wrap gap-1">{solver.turns.map((turn,index)=><DwellButton key={turn.id} id={`select-${turn.id}`} compact hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)}>{index+1}{turn.parentTurnId?t(' · 追问'):t(' · 原题')}{turn.id===last?.id?' ✓':''}</DwellButton>)}</div>
           <Md text={last?.body ?? ''} />
           <GenerationDetails status={last?.completionStatus} request={last?.request}/>
         </div>
@@ -542,7 +543,7 @@ function SolverView({
           className="ov-chip ov-text-2 flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px]"
         >
           <ArrowLeft size={11} />
-          返回对话
+          {t('返回对话')}
         </button>
       </div>
     </div>
@@ -580,7 +581,7 @@ function SolverActions({
           hotkey={hotkeys.answer}
           onTrigger={() => void solve()}
         >
-          重新截屏
+          {t('重新截屏')}
         </DwellButton>
         {multiPage ? (
           <DwellButton
@@ -589,7 +590,7 @@ function SolverActions({
             hoverMs={HOVER_MS.sendPages}
             onTrigger={() => void solve()}
           >
-            发送 {solver.pendingScreenshots.length} 页
+            {t('发送 {n} 页', { n: solver.pendingScreenshots.length })}
           </DwellButton>
         ) : (
           <DwellButton
@@ -599,7 +600,7 @@ function SolverActions({
             hotkey={hotkeys.capture}
             onTrigger={() => void capturePage()}
           >
-            加页
+            {t('加页')}
           </DwellButton>
         )}
         <DwellButton
@@ -612,7 +613,7 @@ function SolverActions({
             void followUp({ message: `请结合面试官的最新问题继续作答：${q ?? ''}\n\n之前的答案：${mdToPlain(lastBody).slice(-1500)}` });
           }}
         >
-          接住追问
+          {t('接住追问')}
         </DwellButton>
       </div>
       <div className="flex gap-1.5">
@@ -632,7 +633,7 @@ function SolverActions({
           hoverMs={HOVER_MS.followUp}
           onTrigger={() => void followUp({ message: '请更详细地解释这个解法的核心思路，以及为什么这样是最优的' })}
         >
-          详解
+          {t('详解')}
         </DwellButton>
         <DwellButton
           id="sv-fu2"
@@ -641,7 +642,7 @@ function SolverActions({
           hoverMs={HOVER_MS.followUp}
           onTrigger={() => void followUp({ message: '请给出另一种解法，要求同样是面试常见的经典写法' })}
         >
-          换解法
+          {t('换解法')}
         </DwellButton>
         <DwellButton
           id="sv-fu3"
@@ -650,7 +651,7 @@ function SolverActions({
           hoverMs={HOVER_MS.followUp}
           onTrigger={() => void followUp({ intent: 'simplify' })}
         >
-          优化
+          {t('优化')}
         </DwellButton>
       </div>
       <VoiceAskRow kind="solver" hotkey={hotkeys['voice-ask']} />
@@ -705,7 +706,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
       const capture = await openMicrophone({ deviceId, onPcm: (pcm, volume) => {
         if (!alive.current) return;
         if (countRef.current + pcm.length <= 16000 * 60) { chunksRef.current.push(pcm); countRef.current += pcm.length; }
-        else setError('录音已满 60 秒，请点击「结束并提问」。');
+        else setError(t('录音已满 60 秒，请点击「结束并提问」。'));
         if (performance.now() - lastMeter > 100) { lastMeter = performance.now(); setLevel(Math.min(100, Math.round(volume / 80 * 100))); }
       }, onError: message => {
         if (!alive.current) return;
@@ -729,7 +730,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
     await capture.close();
     setRecording(false); setLevel(0); restore();
     const total = countRef.current;
-    if (total < 8000) { setError('录音太短，请至少说半秒后再结束。'); busy.current = false; return; }
+    if (total < 8000) { setError(t('录音太短，请至少说半秒后再结束。')); busy.current = false; return; }
     const pcm = new Int16Array(total);
     let offset = 0;
     for (const chunk of chunksRef.current) { pcm.set(chunk, offset); offset += chunk.length; }
@@ -739,10 +740,10 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
     try {
       const text = await transcribeAudio(encodeWav(pcm), { signal: controller.signal,...(kind==='chat'?{lang:getSpeechProfile('interview').inputLanguage}:{}) });
       if (!alive.current || controller.signal.aborted) return;
-      if (!text) { setError('没有识别到文字，请检查音量条后重试。'); return; }
+      if (!text) { setError(t('没有识别到文字，请检查音量条后重试。')); return; }
       if (kind === 'chat') await answerQuestion(text, { voiceAsk: true });
       else await followUp({ message: text });
-    } catch (e) { if (alive.current && !controller.signal.aborted) setError(`语音识别失败：${(e as Error).message}`); }
+    } catch (e) { if (alive.current && !controller.signal.aborted) setError(t('语音识别失败：{msg}', { msg: (e as Error).message })); }
     finally { busy.current = false; request.current = null; if (alive.current) setTranscribing(false); }
   };
 
@@ -752,10 +753,10 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
         onTrigger={() => { if (busy.current) return; if (recording) void stop(); else void start(); }} disabled={opening || transcribing}>
         <span className="flex items-center gap-1">
           {recording ? <Square size={10} /> : <Mic size={11} />}
-          {opening ? '正在打开麦克风…' : transcribing ? '识别中…' : recording ? '结束并提问' : '语音提问'}
+          {opening ? t('正在打开麦克风…') : transcribing ? t('识别中…') : recording ? t('结束并提问') : t('语音提问')}
         </span>
       </DwellButton>
-      {recording && <div role="meter" aria-label="语音提问音量" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level} className="h-1 overflow-hidden rounded-full bg-current/10"><div className="h-full bg-emerald-500" style={{ width: `${level}%` }} /></div>}
+      {recording && <div role="meter" aria-label={t('语音提问音量')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={level} className="h-1 overflow-hidden rounded-full bg-current/10"><div className="h-full bg-emerald-500" style={{ width: `${level}%` }} /></div>}
       {error && <div role="alert" className="ov-text-2 px-1 text-[11px]">{error}</div>}
     </div>
   );
@@ -815,8 +816,8 @@ async function applyIvPalette() {
 
 function SpeakerIdentity({message}:{message:EngineState['messages'][number]}){
  const decision=message.metadata?.speaker;
- const update=(role:'candidate'|'interviewer')=>void markTranscriptSpeaker(message.id,role).catch(error=>showToast({type:'error',title:'身份更正未完成',description:String((error as Error).message||error)}));
- return <div className="ov-text-3 mt-1 flex flex-wrap items-center gap-2 text-[10px]"><span>{decision?.role==='candidate'?'我':decision?.role==='interviewer'?'面试官':'身份待确认 · 不自动作答'}</span>{decision?.role!=='candidate'&&<DwellButton id={`speaker-me-${message.id}`} compact hoverMs={1000} onTrigger={()=>update('candidate')}>这是我</DwellButton>}{decision?.role!=='interviewer'&&<DwellButton id={`speaker-peer-${message.id}`} compact hoverMs={1000} onTrigger={()=>update('interviewer')}>面试官 · 作答</DwellButton>}</div>;
+ const update=(role:'candidate'|'interviewer')=>void markTranscriptSpeaker(message.id,role).catch(error=>showToast({type:'error',title:t('身份更正未完成'),description:String((error as Error).message||error)}));
+ return <div className="ov-text-3 mt-1 flex flex-wrap items-center gap-2 text-[10px]"><span>{decision?.role==='candidate'?t('我'):decision?.role==='interviewer'?t('面试官'):t('身份待确认 · 不自动作答')}</span>{decision?.role!=='candidate'&&<DwellButton id={`speaker-me-${message.id}`} compact hoverMs={1000} onTrigger={()=>update('candidate')}>{t('这是我')}</DwellButton>}{decision?.role!=='interviewer'&&<DwellButton id={`speaker-peer-${message.id}`} compact hoverMs={1000} onTrigger={()=>update('interviewer')}>{t('面试官 · 作答')}</DwellButton>}</div>;
 }
 
 function EndButton({ onEnd }: { onEnd: () => void }) {
@@ -831,7 +832,7 @@ function EndButton({ onEnd }: { onEnd: () => void }) {
     <button
       ref={setRefEl as (el: HTMLButtonElement | null) => void}
       type="button"
-      title="结束面试"
+      title={t('结束面试')}
       onClick={interactive ? onEnd : undefined}
       className="ov-text-2 relative flex h-6 w-6 items-center justify-center rounded-md border border-dashed"
     >

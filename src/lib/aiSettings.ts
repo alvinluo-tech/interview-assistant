@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { defaultAiSettings, isRoleConfigured, validateAiSettings, type AiRole, type AiSettings } from './aiConfig';
+import { t } from './i18n';
 
 let settings = defaultAiSettings();
 let loadError = '';
@@ -32,7 +33,7 @@ export async function initializeAiSettings() {
   await reloadAiSettings();
 }
 export async function saveAiSettings(value: AiSettings) {
-  if (loadError) throw new Error(`请先解决配置读取问题：${loadError}`);
+  if (loadError) throw new Error(t('请先解决配置读取问题：{error}', { error: loadError }));
   const normalized = validateAiSettings(value);
   const current = ++revision; // Invalidate reads already in flight before the save.
   if (desktop()) await invoke('cmd_ai_save_settings', { config: normalized });

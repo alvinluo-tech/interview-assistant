@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateFixture } from './compile-fixture.mjs';
+import { evaluateFixture, evaluateModuleFixture } from './compile-fixture.mjs';
 function harness(configured = false) {
   const calls = [], states = [], errors = [];
-  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController, require: () => ({})});
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController, require: name => name === './i18n' ? evaluateModuleFixture('src/lib/i18n.ts') : ({})});
   assert.equal(typeof api.createQuestionSpeaker, 'function', 'Question speech needs a cancellable system fallback');
   const speaker = api.createQuestionSpeaker({
     configured: () => configured,
@@ -24,7 +24,7 @@ test('configured TTS uses its cloud route and releases playback on stop', async 
 });
 
 test('muting while a cloud request is pending cannot play late audio', async () => {
-  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController});
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController, require: name => name === './i18n' ? evaluateModuleFixture('src/lib/i18n.ts') : ({})});
   let complete, signal; const calls = [];
   const speaker = api.createQuestionSpeaker({configured: () => true,
     cloud: (_text, pending) => {signal = pending; return new Promise(resolve => {complete = resolve;});},
@@ -36,7 +36,7 @@ test('muting while a cloud request is pending cannot play late audio', async () 
 });
 
 test('a late system registration is disposed and cannot change the muted state', async () => {
-  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController});
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController, require: name => name === './i18n' ? evaluateModuleFixture('src/lib/i18n.ts') : ({})});
   let complete, onState, releases = 0; const states = [];
   const speaker = api.createQuestionSpeaker({configured: () => false, cloud: async () => null, play: () => () => {},
     system: (_text, changed) => {onState = changed; return new Promise(resolve => {complete = resolve;});},
@@ -47,7 +47,7 @@ test('a late system registration is disposed and cannot change the muted state',
 });
 
 test('blank text does not request audio and configured service failures are visible', async () => {
-  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController});
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController, require: name => name === './i18n' ? evaluateModuleFixture('src/lib/i18n.ts') : ({})});
   const errors = []; let requests = 0;
   const speaker = api.createQuestionSpeaker({configured: () => true,
     cloud: async () => {requests++; return null;}, play: () => () => {}, system: async () => () => {},
@@ -57,7 +57,7 @@ test('blank text does not request audio and configured service failures are visi
 });
 
 test('streaming cloud speech shows preparation, starts before synthesis completes and aborts immediately', async () => {
-  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController});
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports: {}, AbortController, require: name => name === './i18n' ? evaluateModuleFixture('src/lib/i18n.ts') : ({})});
   const phases = [], errors = []; let complete, signal, changed, released = 0;
   const speaker = api.createQuestionSpeaker({configured: () => true,
     cloud: async () => {throw new Error('must use streaming driver');}, play: () => () => {}, system: async () => () => {},
@@ -75,7 +75,7 @@ test('streaming cloud speech shows preparation, starts before synthesis complete
 });
 
 test('a playback failure is reported once and all later state callbacks are ignored', async () => {
-  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports:{},AbortController});
+  const api = evaluateFixture('src/lib/questionSpeaker.ts', {exports:{},AbortController,require:name=>name==='./i18n'?evaluateModuleFixture('src/lib/i18n.ts'):({})});
   const errors=[],states=[];let signal;
   const speaker=api.createQuestionSpeaker({configured:()=>true,cloud:async()=>null,play:()=>()=>{},system:async()=>()=>{},
     cloudStream:async(_text,changed,failed,pending)=>{signal=pending;failed(new Error('speaker disconnected'));changed(true);throw new Error('same failure');},

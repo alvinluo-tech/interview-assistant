@@ -3,6 +3,7 @@
  * 浮窗崩溃保持透明、主窗口给出重载按钮。
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { t } from '@/lib/i18n';
 
 interface Props {
   scene: 'overlay' | 'mock' | 'main';
@@ -33,25 +34,25 @@ export class ErrorBoundary extends Component<Props, State> {
       // 浮窗崩溃：保持透明，只留一行提示（不抢面试画面）
       return (
         <div className="ov-text flex h-screen w-full items-center justify-center px-4 text-center text-[12px] leading-6">
-          界面出了点问题。关掉助手再打开即可继续这场面试。
+          {t('界面出了点问题。关掉助手再打开即可继续这场面试。')}
         </div>
       );
     }
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground">
-        <p className="text-base font-medium">出了点问题</p>
+        <p className="text-base font-medium">{t('出了点问题')}</p>
         <p className="max-w-sm text-sm text-muted-foreground">
-          点击下方按钮重新加载即可继续使用，你的登录状态会保留。
+          {t('点击下方按钮重新加载即可继续使用，你的登录状态会保留。')}
         </p>
         <button
           type="button"
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           onClick={() => window.location.reload()}
         >
-          重新加载
+          {t('重新加载')}
         </button>
         <pre className="max-w-full overflow-auto rounded bg-muted p-2 text-left text-[11px] text-muted-foreground">
-          {error.message}
+          {t(error.message)}
         </pre>
       </main>
     );

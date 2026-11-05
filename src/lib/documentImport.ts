@@ -1,5 +1,6 @@
 import { parseDocument, type DocumentFile, type ImportOptions } from './documentIngest';
 import { chatWithImages } from './aiRequests';
+import { t } from './i18n';
 
 async function imageData(file: DocumentFile, signal?: AbortSignal): Promise<string> {
   signal?.throwIfAborted();
@@ -7,12 +8,12 @@ async function imageData(file: DocumentFile, signal?: AbortSignal): Promise<stri
   const bitmap = await createImageBitmap(blob);
   try {
     signal?.throwIfAborted();
-    if (bitmap.width * bitmap.height > 32_000_000) throw new Error('图片分辨率过大，请缩小后重试。');
+    if (bitmap.width * bitmap.height > 32_000_000) throw new Error(t('图片分辨率过大，请缩小后重试。'));
     const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('无法读取图片，请粘贴正文或更换文件。');
+    if (!context) throw new Error(t('无法读取图片，请粘贴正文或更换文件。'));
     context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL('image/jpeg', 0.88);

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateFixture } from './compile-fixture.mjs';
+import { evaluateFixture, evaluateModuleFixture } from './compile-fixture.mjs';
 
 function client({ busy = false, phase = 'available' } = {}) {
   const calls = [], saved = new Map();
   let native = { phase, currentVersion: '0.1.1', version: '0.1.2', notes: 'Fixes', busy, canInstall: true, downloaded: 0 };
   let notify;
-  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, URL, AbortSignal, console });
+  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, URL, AbortSignal, console, require: name => { if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts'); throw new Error(name); } });
   assert.equal(typeof api.createUpdateClient, 'function', 'A shared native-backed updater client must exist');
   const updater = api.createUpdateClient({
     invoke: async (name, args) => {
@@ -74,7 +74,7 @@ test('subscribers receive shared snapshots and unsubscribe cleanly', async () =>
 });
 
 test('duplicate commands coalesce and native failures remain retryable', async () => {
-  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, console });
+  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, console, require: name => { if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts'); throw new Error(name); } });
   let reject, calls = 0;
   const updater = api.createUpdateClient({
     invoke: () => { calls++; return new Promise((_, no) => { reject = no; }); },
@@ -92,7 +92,7 @@ test('duplicate commands coalesce and native failures remain retryable', async (
 });
 
 test('installation clicked as download finishes is not swallowed by the download request', async () => {
-  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, console });
+  const api = evaluateFixture('src/lib/updateCheck.ts', { exports: {}, console, require: name => { if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts'); throw new Error(name); } });
   const calls = [];
   let notify, finishDownload;
   const ready = { phase: 'ready', version: '0.1.2', downloaded: 100, busy: false, canInstall: true };

@@ -34,6 +34,7 @@ import {
 import { setOverlaySize, setSessionActive, captureScreen, isTauri } from '@/lib/bridge';
 import { effectiveHotkeys, hotkeyBadge, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
 import { isMac, BRAND } from '@/lib/env';
+import { t } from '@/lib/i18n';
 import { getSetting } from '@/lib/store';
 import { Md } from './Md';
 import {
@@ -59,7 +60,7 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
       try {
         if(config.resumeSessionId && isTauri()) await (await import('@/lib/backend')).refreshData();
         if(active) prepareExamRun(config.runId,config.goalId,undefined,config.resumeSessionId);
-      } catch (error) { if(active) showToast({type:'error',title:'恢复笔试失败',description:String((error as Error).message || error)}); }
+      } catch (error) { if(active) showToast({type:'error',title:t('恢复笔试失败'),description:t(String((error as Error).message || error))}); }
     })();
     return () => { active = false; };
   }, [preview]);
@@ -97,13 +98,13 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
 async function copyAnswerToClipboard(body?:string) {
   const s = getSolverState();
   const lastBody = body ?? (s.turns.find(turn=>turn.id===s.selectedTurnId) || s.turns[s.turns.length - 1])?.body ?? '';
-  if (!lastBody.trim()) {showToast({type:'info',title:'答案还没写完，写完再复制'});return;}
+  if (!lastBody.trim()) {showToast({type:'info',title:t('答案还没写完，写完再复制')});return;}
   const code = extractLastCodeBlock(lastBody);
   try {
     await writeText(code ?? stripMarkdown(lastBody));
-    showToast({type:'success',title:code?`已复制代码（${code.trimEnd().split('\n').length} 行）`:`已复制答案文字（${stripMarkdown(lastBody).length} 字）`});
+    showToast({type:'success',title:code?t('已复制代码（{n} 行）', { n: code.trimEnd().split('\n').length }):t('已复制答案文字（{n} 字）', { n: stripMarkdown(lastBody).length })});
   } catch {
-    showToast({type:'error',title:'复制失败，请再按一次'});
+    showToast({type:'error',title:t('复制失败，请再按一次')});
   }
 }
 
@@ -185,23 +186,23 @@ function ExamShell({
         <PaletteButton />
       </div>
 
-      <ScrollEdgePillProxy id="scroll-up" direction="up" label="悬停回看" hotkey={hotkeys['scroll-up']} />
+      <ScrollEdgePillProxy id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
 
       {/* 消息区 */}
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-3">
         {empty ? (
           <div className="ov-text-2 flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-            <div className="ov-text text-[13px] font-medium">把鼠标悬停到下方「解题」按钮 1.2 秒</div>
-            <div className="ov-text-2 text-[11px] opacity-80">AI 会自动截屏并解答</div>
+            <div className="ov-text text-[13px] font-medium">{t('把鼠标悬停到下方「解题」按钮 1.2 秒')}</div>
+            <div className="ov-text-2 text-[11px] opacity-80">{t('AI 会自动截屏并解答')}</div>
             <div className="ov-text-3 text-[10.5px] opacity-60">
-              也可以直接按 {hotkeyBadge(hotkeys.answer, isMac())}，手不用离开键盘
+              {t('也可以直接按 {keys}，手不用离开键盘', { keys: hotkeyBadge(hotkeys.answer, isMac()) })}
             </div>
           </div>
         ) : (
           <>
             {multiPage && (
               <div className="ov-chip mb-2 rounded-md border px-2 py-1 text-[11px]">
-                已截 {solver.pendingScreenshots.length} 页，按「发送」开始解答
+                {t('已截 {n} 页，按「发送」开始解答', { n: solver.pendingScreenshots.length })}
               </div>
             )}
             {solver.statusText && (
@@ -212,7 +213,7 @@ function ExamShell({
             )}
             {solver.turns.map((turn, i) => (
               <div key={turn.id} className="mb-3">
-                <DwellChip id={`select-${turn.id}`} hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)} label={`${i+1} · ${turn.parentTurnId?'追问':'原题'}${selected?.id===turn.id?' · 当前追问对象':' · 选择此题追问'}`} />
+                <DwellChip id={`select-${turn.id}`} hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)} label={t('{index} · {kind}{state}', { index: i+1, kind: turn.parentTurnId?t('追问'):t('原题'), state: selected?.id===turn.id?t(' · 当前追问对象'):t(' · 选择此题追问') })} />
                 {turn.body.startsWith('> ') && (
                   <div className="ov-text-3 mb-1 text-[11px] italic opacity-80">
                     {turn.body.split('\n')[0].slice(2)}
@@ -221,7 +222,7 @@ function ExamShell({
                 <div data-overlay-scroll-anchor={i === solver.turns.length - 1 || undefined}>
                   <Md text={turn.body.replace(/^> .*\n\n/, '')} />
                   <GenerationDetails status={turn.completionStatus} request={turn.request}/>
-                  {turn.imageSaveError && <div role="alert" className="ov-text-2">原题截图未保存，请保留题目并在需要时重新截图。</div>}
+                  {turn.imageSaveError && <div role="alert" className="ov-text-2">{t('原题截图未保存，请保留题目并在需要时重新截图。')}</div>}
                 </div>
               </div>
             ))}
@@ -234,7 +235,7 @@ function ExamShell({
         )}
       </div>
 
-      <ScrollEdgePillProxy id="scroll-down" direction="down" label="悬停看新" hotkey={hotkeys['scroll-down']} />
+      <ScrollEdgePillProxy id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
 
       {/* 追问 chips */}
       {solver.turns.length > 0 && !multiPage && !solving && (
@@ -250,8 +251,8 @@ function ExamShell({
               icon={<Copy size={11} />}
               label={
                 extractLastCodeBlock(solver.turns[solver.turns.length - 1]?.body ?? '')
-                  ? '复制代码'
-                  : '复制文字'
+                  ? t('复制代码')
+                  : t('复制文字')
               }
             />
           )}
@@ -259,19 +260,19 @@ function ExamShell({
             id="fu-simplify"
             hoverMs={HOVER_MS.followUp}
             onTrigger={() => void followUp({ intent: 'simplify' })}
-            label="继续简化"
+            label={t('继续简化')}
           />
           <DwellChip
             id="fu-brute"
             hoverMs={HOVER_MS.followUp}
             onTrigger={() => void followUp({ intent: 'brute-force' })}
-            label="换暴力解法"
+            label={t('换暴力解法')}
           />
           <DwellChip
             id="fu-review"
             hoverMs={HOVER_MS.followUp}
             onTrigger={() => void followUp({ intent: 'code-review' })}
-            label="截图检查当前代码"
+            label={t('截图检查当前代码')}
           />
         </div>
       )}
@@ -286,10 +287,10 @@ function ExamShell({
             id="mode"
             variant="muted"
             hoverMs={HOVER_MS.mode}
-            subLabel={`最多 ${modeInfo.maxScreenshotPages} 页`}
+            subLabel={t('最多 {n} 页', { n: modeInfo.maxScreenshotPages })}
             onTrigger={() => setSolverMode(nextOf(solver.mode))}
           >
-            {modeInfo.shortLabel}
+            {t(modeInfo.shortLabel)}
           </DwellButton>
           {multiPage ? (
             <>
@@ -300,17 +301,17 @@ function ExamShell({
                 hotkey={hotkeys.answer}
                 onTrigger={() => void doSolve()}
               >
-                发送 {solver.pendingScreenshots.length} 页
+                {t('发送 {n} 页', { n: solver.pendingScreenshots.length })}
               </DwellButton>
               <DwellButton
                 id="add-page"
                 variant="muted"
                 hoverMs={HOVER_MS.addPage}
                 hotkey={hotkeys.capture}
-                subLabel={`已 ${solver.pendingScreenshots.length}/${modeInfo.maxScreenshotPages}`}
+                subLabel={t('已 {done}/{max}', { done: solver.pendingScreenshots.length, max: modeInfo.maxScreenshotPages })}
                 onTrigger={() => void capturePage()}
               >
-                加页
+                {t('加页')}
               </DwellButton>
               <DwellButton
                 id="cancel-pages"
@@ -318,7 +319,7 @@ function ExamShell({
                 hoverMs={HOVER_MS.cancelPages}
                 onTrigger={() => clearPendingScreenshots()}
               >
-                取消
+                {t('取消')}
               </DwellButton>
             </>
           ) : (
@@ -328,12 +329,12 @@ function ExamShell({
                 variant="primary"
                 hoverMs={HOVER_MS.answer}
                 hotkey={hotkeys.answer}
-                subLabel={solving ? '处理中' : undefined}
+                subLabel={solving ? t('处理中') : undefined}
                 onTrigger={() => void doSolve()}
               >
                 <span className="flex items-center gap-1">
                   <Puzzle size={12} />
-                  解题
+                  {t('解题')}
                 </span>
               </DwellButton>
               {!solving && (
@@ -342,10 +343,10 @@ function ExamShell({
                   variant="muted"
                   hoverMs={HOVER_MS.answer}
                   hotkey={hotkeys.capture}
-                  subLabel="先截第1页"
+                  subLabel={t('先截第1页')}
                   onTrigger={() => void capturePage()}
                 >
-                  加页
+                  {t('加页')}
                 </DwellButton>
               )}
               <DwellButton
@@ -354,7 +355,7 @@ function ExamShell({
                 hoverMs={HOVER_MS.reset}
                 onTrigger={() => void abortSolve()}
               >
-                重置
+                {t('重置')}
               </DwellButton>
             </>
           )}
@@ -364,7 +365,7 @@ function ExamShell({
             hoverMs={HOVER_MS.exit}
             onTrigger={() => void endExamSession(false)}
           >
-            退出
+            {t('退出')}
           </DwellButton>
         </div>
       </div>
@@ -379,12 +380,12 @@ function nextOf(mode: SolverState['mode']): SolverState['mode'] {
 }
 
 function statusText(s: SolverState): string {
-  if (s.phase === 'error') return '出错，可重试';
-  if (s.phase === 'capturing') return '截屏中…';
-  if (s.phase === 'uploading') return '上传截图…';
-  if (s.phase === 'thinking') return 'AI 思考中…';
-  if (s.phase === 'streaming') return 'AI 输出中…';
-  return '已连接';
+  if (s.phase === 'error') return t('出错，可重试');
+  if (s.phase === 'capturing') return t('截屏中…');
+  if (s.phase === 'uploading') return t('上传截图…');
+  if (s.phase === 'thinking') return t('AI 思考中…');
+  if (s.phase === 'streaming') return t('AI 输出中…');
+  return t('已连接');
 }
 
 /** 追问 chip（小号驻留按钮） */

@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateFixture } from './compile-fixture.mjs';
+import { evaluateFixture, evaluateModuleFixture } from './compile-fixture.mjs';
 
 function bridge({ granted = false, allowOnRequest = false, requestReportsSuccess = false, desktop = true } = {}) {
   const calls = [];
   const api = evaluateFixture('src/lib/bridge.ts', {
     exports: {}, window: desktop ? { __TAURI_INTERNALS__: {} } : {},
     require: name => {
+      if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts');
       if (name === '@tauri-apps/api/event') return {};
       if (name === '@tauri-apps/api/core') return { invoke: async (command, args) => {
         calls.push({ command, args });

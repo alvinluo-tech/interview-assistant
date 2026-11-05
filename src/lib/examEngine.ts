@@ -6,6 +6,7 @@ import { captureScreen, cmd } from './bridge';
 import { buildExamUserPrompt, chatWithImages, EXAM_SYSTEM_PROMPT } from './ai';
 import { type ExamQuestion, createExamSession, readData, updateExamSession, completeExamSession } from './backend';
 import { getSetting, ExamCustomization, DEFAULT_EXAM_CUSTOMIZATION } from './store';
+import { t } from './i18n';
 import {assembleExamContext} from './aiContext';
 import type {AiRequestTrace} from './aiTaskPolicy';
 
@@ -152,15 +153,15 @@ function customization(): ExamCustomization {
 export function customizationSummary(): string {
   const c = customization();
   const mode = examModeInfo(state.mode);
-  const parts: string[] = [`${mode.shortLabel} · 最多 ${mode.maxScreenshotPages} 页`];
-  parts.push(c.answerLanguage === 'auto' ? '答案自动' : `答案用${c.answerLanguage}`);
-  if (c.programmingLanguage !== 'auto') parts.push(`编程题 ${c.programmingLanguage}`);
-  if (c.codeMode !== 'auto') parts.push(c.codeMode === 'acm' ? 'ACM 模式' : '核心代码模式');
+  const parts: string[] = [t('{label} · 最多 {n} 页', { label: t(mode.shortLabel), n: mode.maxScreenshotPages })];
+  parts.push(c.answerLanguage === 'auto' ? t('答案自动') : t('答案用{lang}', { lang: c.answerLanguage }));
+  if (c.programmingLanguage !== 'auto') parts.push(t('编程题 {lang}', { lang: c.programmingLanguage }));
+  if (c.codeMode !== 'auto') parts.push(c.codeMode === 'acm' ? t('ACM 模式') : t('核心代码模式'));
   if (c.codeQuality !== 'standard') {
     const map = { readable: '清晰易读', concise: '简洁直接', performance: '优先性能' } as const;
-    parts.push(map[c.codeQuality]);
+    parts.push(t(map[c.codeQuality]));
   }
-  if (c.customRequirements) parts.push('有补充要求');
+  if (c.customRequirements) parts.push(t('有补充要求'));
   return parts.join(' · ');
 }
 
@@ -175,8 +176,8 @@ export function prepareExamRun(runId:string, goalId:string|null,interviewSession
     phase:'idle',turns:[],pendingScreenshots:[],activeTurnId:null,elapsedSec:0,statusText:'',errorMessage:null});
   const saved=readData<import('./backend').ExamSessionRecord[]>('examSessions',[]).find(session=>session.status==='ACTIVE' && (interviewSessionId ? session.interviewSessionId===interviewSessionId : !!resumeSessionId && session.id===resumeSessionId && !session.interviewSessionId));
   if(saved){const pending=unsavedTurns.get(saved.id);const turns=pending||saved.questions.map(question=>({...question,body:question.answer,reasoning:'',reasoningDone:true,reasoningDurationMs:0,followUpOptions:[]}));
-    setState({sessionId:saved.id,turns,selectedTurnId:turns[turns.length-1]?.id,...(pending?{phase:'error' as const,errorMessage:'上次未保存内容已恢复，请重试保存后再关闭。'}:{})});}
-  else if(resumeSessionId) setState({phase:'error',errorMessage:'未找到可恢复的笔试记录，请返回工作台重新尝试。'});
+    setState({sessionId:saved.id,turns,selectedTurnId:turns[turns.length-1]?.id,...(pending?{phase:'error' as const,errorMessage:t('上次未保存内容已恢复，请重试保存后再关闭。')}:{})});}
+  else if(resumeSessionId) setState({phase:'error',errorMessage:t('未找到可恢复的笔试记录，请返回工作台重新尝试。')});
 }
 
 export async function finishInterviewExam(interviewSessionId:string,complete=true):Promise<void> {
@@ -200,7 +201,7 @@ async function createSessionForGeneration(goalId: string | null, current: number
   const goals = readData<{ id: string; name: string; companyName?: string }[]>('goals', []);
   const goal = goals.find((g) => g.id === goalId);
   const session = await createExamSession({
-    title: `笔试 ${new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+    title: t('笔试 {time}', { time: new Date().toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }),
     goalId,
     mode,
     interviewSessionId:state.interviewSessionId,
@@ -246,7 +247,7 @@ function scheduleTurnCheckpoint(current: number) {
     checkpointTimer = null;
     if (current !== generation) return;
     void persistTurns().catch(error => {
-      if (current === generation) setState({errorMessage:`答案暂未保存：${String((error as Error).message || error)}`});
+      if (current === generation) setState({errorMessage:t('答案暂未保存：{msg}', { msg: String((error as Error).message || error) })});
     });
   }, 2000);
 }
@@ -257,13 +258,13 @@ function captureOptions(){return {protectedOnTop:true,compatibilityMode:getSetti
 export async function capturePage(): Promise<string> {
   const max = examModeInfo(state.mode).maxScreenshotPages;
   if (state.pendingScreenshots.length >= max) {
-    const message = `最多收集 ${max} 页，请先发送或清空已收集截图。`;
+    const message = t('最多收集 {max} 页，请先发送或清空已收集截图。', { max });
     setState({ errorMessage: message });
     throw new Error(message);
   }
-  if (['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) throw new Error('当前操作尚未完成，请稍候。');
+  if (['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) throw new Error(t('当前操作尚未完成，请稍候。'));
   const current = generation;
-  setState({ phase: 'capturing', statusText: '截屏中…' });
+  setState({ phase: 'capturing', statusText: t('截屏中…') });
   try {
     const dataUrl = await captureScreen(captureOptions());
     if (current !== generation) return dataUrl;
@@ -277,7 +278,7 @@ export async function capturePage(): Promise<string> {
     if (current !== generation) throw e;
     setState({
       phase: 'error',
-      errorMessage: `截屏失败：${String((e as Error).message ?? e)}`,
+      errorMessage: t('截屏失败：{msg}', { msg: String((e as Error).message ?? e) }),
     });
     throw e;
   }
@@ -298,7 +299,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     catch (error) {
       if (current !== generation) return;
       startingSolve = false; requestController = null;
-      setState({phase:'error',statusText:'',errorMessage:`创建笔试记录失败：${String((error as Error).message || error)}`});
+      setState({phase:'error',statusText:'',errorMessage:t('创建笔试记录失败：{msg}', { msg: String((error as Error).message || error) })});
       return;
     }
   }
@@ -315,19 +316,19 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     } catch(error) {
       if (current !== generation) return;
       requestController = null;
-      setState({phase:'error',statusText:'',errorMessage:`截图失败：${String((error as Error).message||error)}`});
+      setState({phase:'error',statusText:'',errorMessage:t('截图失败：{msg}', { msg: String((error as Error).message||error) })});
       return;
     }
   }
   if (shots.length > maxPages) {
     requestController = null;
-    setState({phase:'error', errorMessage:`最多发送 ${maxPages} 页，请调整截图数量后重试。`});
+    setState({phase:'error', errorMessage:t('最多发送 {max} 页，请调整截图数量后重试。', { max: maxPages })});
     return;
   }
   setState({
     pendingScreenshots: [],
     phase: 'thinking',
-    statusText: shots.length > 1 ? `发送 ${shots.length} 页给 AI…` : '上传截图…',
+    statusText: shots.length > 1 ? t('发送 {n} 页给 AI…', { n: shots.length }) : t('上传截图…'),
     elapsedSec: 0,
     errorMessage: null,
   });
@@ -353,7 +354,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     } catch (error) {
       if (current !== generation) return;
       setState({turns: state.turns.map(t => t.id === turn.id ? {...t, imageSaveError: String((error as Error).message || error)} : t)});
-      setState({errorMessage:'原题截图未能保存，仍将尝试解答；请保留题目以备重新截图。'});
+      setState({errorMessage:t('原题截图未能保存，仍将尝试解答；请保留题目以备重新截图。')});
     }
     await persistTurns();
     if (current !== generation) return;
@@ -369,14 +370,14 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
         const parsed = splitExamResponse(raw);
         setState({
           phase: 'streaming',
-          statusText: 'AI 输出中…',
+          statusText: t('AI 输出中…'),
           turns: state.turns.map((t) => (t.id === turn.id ? { ...t, body: parsed.answer, questionText: parsed.questionText } : t)),
         });
         scheduleTurnCheckpoint(current);
       },
     });
     if (current !== generation) return;
-    if(raw.includes('<exam-question>')&&!/<exam-answer>[\s\S]+<\/exam-answer>/.test(answer || raw))throw new Error('模型未完整返回答案区块，已保存原题和已有内容，可继续追问。');
+    if(raw.includes('<exam-question>')&&!/<exam-answer>[\s\S]+<\/exam-answer>/.test(answer || raw))throw new Error(t('模型未完整返回答案区块，已保存原题和已有内容，可继续追问。'));
     const doneTurns = state.turns.map((t) =>
       t.id === turn.id
         ? {
@@ -456,21 +457,21 @@ export async function followUp(opts: {
     reasoningDone: false,
     reasoningDurationMs: 0,
     body: prefix,
-    questionText: `追问：${opts.message ?? labelOfIntent(opts.intent)}`,
+    questionText: t('追问：{topic}', { topic: opts.message ?? labelOfIntent(opts.intent) }),
     screenshotRefs: last.screenshotRefs,
     parentTurnId: last.parentTurnId || last.id,
     followUpOptions: [],
     createdAt: Date.now(),
   };
   function labelOfIntent(intent?: string): string {
-    return { 'partial-pass': '基础解法', 'brute-force': '换暴力解法', simplify: '继续简化', 'code-review': '检查代码' }[intent ?? ''] ?? '追问';
+    return { 'partial-pass': t('基础解法'), 'brute-force': t('换暴力解法'), simplify: t('继续简化'), 'code-review': t('检查代码') }[intent ?? ''] ?? t('追问');
   }
   const turns = [...state.turns, turn];
   setState({
     turns,
     activeTurnId: turn.id,
     phase: 'streaming',
-    statusText: opts.intent === 'code-review' ? 'AI 检查中…' : 'AI 输出中…',
+    statusText: opts.intent === 'code-review' ? t('AI 检查中…') : t('AI 输出中…'),
   });
   ensureTicker();
   const startedAt = Date.now();
@@ -478,10 +479,10 @@ export async function followUp(opts: {
     const context=assembleExamContext(state.turns,last.id);
     let images=opts.screenshots || [];
     if (opts.intent === 'code-review' && images.length === 0) {
-      setState({statusText:'正在截取当前代码…'});
+      setState({statusText:t('正在截取当前代码…')});
       images = [await captureScreen(captureOptions())];
       if (current !== generation) return;
-      setState({statusText:'AI 检查中…'});
+      setState({statusText:t('AI 检查中…')});
     }
     const root=state.turns.find(t=>t.id===(last.parentTurnId || last.id)) || last;
     if(!images.length&&(!root.questionText||/模型未单独|请查看原题/.test(root.questionText))){
@@ -541,7 +542,7 @@ export function selectSolverTurn(id:string){if(state.turns.some(turn=>turn.id===
 export function setSolverMode(mode: ExamModeKey) {
   const max = EXAM_MODES[mode].maxScreenshotPages;
   if (state.pendingScreenshots.length > max) {
-    setState({errorMessage:`已收集 ${state.pendingScreenshots.length} 页，超过此档位 ${max} 页上限，请先发送或清空。`});
+    setState({errorMessage:t('已收集 {n} 页，超过此档位 {max} 页上限，请先发送或清空。', { n: state.pendingScreenshots.length, max })});
     return;
   }
   setState({
@@ -571,7 +572,7 @@ export async function endExamSession(relaunch: boolean): Promise<void> {
     if (sessionId) { await persistTurns(); await completeExamSession(sessionId); }
     saved = true;
   } catch (error) {
-    if(current===generation)setState({phase:'error',statusText:'',activeTurnId:null,errorMessage:`结束前保存失败，未保存内容已保留。请勿退出应用；恢复上次笔试后重试保存或复制答案：${String((error as Error).message || error)}`});
+    if(current===generation)setState({phase:'error',statusText:'',activeTurnId:null,errorMessage:t('结束前保存失败，未保存内容已保留。请勿退出应用；恢复上次笔试后重试保存或复制答案：{msg}', { msg: String((error as Error).message || error) })});
     throw error;
   } finally {
     if(current===generation){

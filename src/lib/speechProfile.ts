@@ -6,6 +6,7 @@ export interface SpeechProfile {
   translationLanguage:SpeechLanguage|'none'; reportLanguage:SpeechLanguage;
   accent:SpeechAccent; rate:number;
 }
+import { t } from './i18n';
 export interface SpeechRenderSpec {language:SpeechLanguage;accent:SpeechAccent;rate:number;voiceId?:string}
 export const SPEECH_LANGUAGES = [{id:'zh-CN',name:'中文'},{id:'en-US',name:'英语'},{id:'yue-HK',name:'粤语'}] as const;
 export const SPEECH_ACCENTS = [{id:'standard',name:'标准发音'},{id:'cantonese',name:'粤语'},{id:'sichuan',name:'四川话'},
@@ -18,7 +19,7 @@ export function normalizeSpeechProfile(value?:Partial<SpeechProfile>,legacyLang?
   if(!['auto','zh','en'].includes(profile.inputLanguage)||!['zh-CN','en-US','yue-HK','follow'].includes(profile.answerLanguage)
     ||!['none','zh-CN','en-US','yue-HK'].includes(profile.translationLanguage)||!['zh-CN','en-US','yue-HK'].includes(profile.reportLanguage)
     ||!SPEECH_ACCENTS.some(item=>item.id===profile.accent)||!Number.isFinite(profile.rate)||profile.rate<0.7||profile.rate>1.4)
-    throw new Error('语言或声音设置无效，请重新选择。');
+    throw new Error(t('语言或声音设置无效，请重新选择。'));
   return profile;
 }
 export function recognitionLanguage(profile:SpeechProfile){return profile.inputLanguage;}

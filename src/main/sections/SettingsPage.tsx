@@ -36,7 +36,7 @@ import { AiServicesTab } from './AiServicesTab';
 import {PromptWorkbench} from './PromptWorkbench';
 import { onEvent, panicHotkeyStatus, setActionHotkeys, setPanicHotkey } from '@/lib/bridge';
 import { APP_VERSION } from '@/lib/env';
-import { LOCALE_NAMES, LOCALES, currentLocale, switchLocale, systemLocale } from '@/lib/i18n';
+import { LOCALE_NAMES, LOCALES, currentLocale, switchLocale, systemLocale, t } from '@/lib/i18n';
 import { SimulatedPlatform } from '@/overlay/platform';
 import { ExamOverlay } from '@/overlay/ExamOverlay';
 import { InterviewOverlay } from '@/overlay/InterviewOverlay';
@@ -69,17 +69,17 @@ export function SettingsPage() {
   return (
     <div className="flex gap-6">
       <nav className="sticky top-0 flex h-fit w-[128px] shrink-0 flex-col gap-0.5 pt-1">
-        <div className="mb-2 px-2 text-[13px] font-semibold">设置</div>
-        {TABS.map((t) => (
+        <div className="mb-2 px-2 text-[13px] font-semibold">{t('设置')}</div>
+        {TABS.map((item) => (
           <button
-            key={t.key}
+            key={item.key}
             type="button"
-            onClick={() => { if ((tab === 'ai' || tab==='prompts') && aiDirty && t.key !== tab) setPendingTab(t.key); else setTab(t.key); }}
+            onClick={() => { if ((tab === 'ai' || tab==='prompts') && aiDirty && item.key !== tab) setPendingTab(item.key); else setTab(item.key); }}
             className={`rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
-              tab === t.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent'
+              tab === item.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent'
             }`}
           >
-            {t.label}
+            {t(item.label)}
           </button>
         ))}
       </nav>
@@ -94,7 +94,7 @@ export function SettingsPage() {
         {tab === 'about' && <AboutTab />}
       {tab === 'storage' && <StorageSettings />}
       </div>
-      <ConfirmDialog open={pendingTab !== null} title="放弃未保存的 AI 设置？" body="当前 AI 配置或表达偏好的更改还没有保存。" confirmText="放弃修改" onCancel={() => setPendingTab(null)} onConfirm={() => { if (pendingTab) setTab(pendingTab); setPendingTab(null); setAiDirty(false); }} />
+      <ConfirmDialog open={pendingTab !== null} title={t('放弃未保存的 AI 设置？')} body={t('当前 AI 配置或表达偏好的更改还没有保存。')} confirmText={t('放弃修改')} onCancel={() => setPendingTab(null)} onConfirm={() => { if (pendingTab) setTab(pendingTab); setPendingTab(null); setAiDirty(false); }} />
     </div>
   );
 }
@@ -115,18 +115,18 @@ function GeneralTab() {
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-5">
-        <SectionHeader title="通用" desc="语言与外观，应用到所有窗口。" />
+        <SectionHeader title={t('通用')} desc={t('语言与外观，应用到所有窗口。')} />
 
-        <div className="mb-2 text-xs font-medium text-muted-foreground">界面语言</div>
-        <p className="mb-2 text-xs text-muted-foreground">切换语言会刷新窗口让翻译生效。</p>
+        <div className="mb-2 text-xs font-medium text-muted-foreground">{t('界面语言')}</div>
+        <p className="mb-2 text-xs text-muted-foreground">{t('切换语言会刷新窗口让翻译生效。')}</p>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => void switchLocale(systemLocale())}
             className="rounded-md border p-2.5 text-left text-sm hover:bg-accent"
           >
-            跟随系统
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">当前：{LOCALE_NAMES[systemLocale()]}</span>
+            {t('跟随系统')}
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">{t('当前：{name}', { name: LOCALE_NAMES[systemLocale()] })}</span>
           </button>
           {langList.map((l) => (
             <button
@@ -151,38 +151,38 @@ function GeneralTab() {
             className="mt-2 text-xs text-primary hover:underline"
             onClick={() => setExpandLangs((v) => !v)}
           >
-            {expandLangs ? '收起' : '展开全部语言'}
+            {expandLangs ? t('收起') : t('展开全部语言')}
           </button>
         )}
 
-        <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">外观主题</div>
-        <p className="mb-2 text-xs text-muted-foreground">只影响主窗口；浮窗的明暗在「浮窗样式」里单独选。</p>
+        <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">{t('外观主题')}</div>
+        <p className="mb-2 text-xs text-muted-foreground">{t('只影响主窗口；浮窗的明暗在「浮窗样式」里单独选。')}</p>
         <div className="grid grid-cols-3 gap-2">
           {[
             { key: 'system', label: '跟随系统', desc: '随操作系统外观切换' },
             { key: 'light', label: '浅色', desc: '始终浅色' },
             { key: 'dark', label: '深色', desc: '始终深色' },
-          ].map((t) => (
+          ].map((item) => (
             <button
-              key={t.key}
+              key={item.key}
               type="button"
-              onClick={() => setTheme(t.key as DesktopTheme)}
+              onClick={() => setTheme(item.key as DesktopTheme)}
               className={`rounded-md border p-2.5 text-left transition-colors ${
-                theme === t.key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
+                theme === item.key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
               }`}
             >
-              <span className="text-[13px]">{t.label}</span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">{t.desc}</span>
+              <span className="text-[13px]">{t(item.label)}</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">{t(item.desc)}</span>
             </button>
           ))}
         </div>
 
         <div className="mt-6 mb-1 flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">界面大小</span>
+          <span className="text-xs font-medium text-muted-foreground">{t('界面大小')}</span>
           <span className="text-xs tabular-nums text-muted-foreground">{Math.round(uiScale * 100)}%</span>
         </div>
         <p className="mb-2 text-xs text-muted-foreground">
-          整个主窗口的字和按钮一起放大或缩小，小屏幕上看着吃力就调大。
+          {t('整个主窗口的字和按钮一起放大或缩小，小屏幕上看着吃力就调大。')}
         </p>
         <Slider min={0.3} max={4} step={0.05} value={uiScale} onChange={setUiScale} />
         <button
@@ -191,13 +191,13 @@ function GeneralTab() {
           disabled={uiScale === 1}
           onClick={() => setUiScale(1)}
         >
-          恢复默认 100%
+          {t('恢复默认 100%')}
         </button>
 
         <div className="mt-4 border-t pt-2">
           <SettingRow
-            title="自动打开设备调试页面"
-            desc="开始面试/笔试后自动打开演示页，用于提前检查摄像头/麦克风等设备。关闭后需自行打开。"
+            title={t('自动打开设备调试页面')}
+            desc={t('开始面试/笔试后自动打开演示页，用于提前检查摄像头/麦克风等设备。关闭后需自行打开。')}
           >
             <Switch checked={autoOpen} onCheckedChange={setAutoOpen} />
           </SettingRow>
@@ -268,7 +268,7 @@ function OverlayStyleTab() {
     const name = presetName.trim();
     if (!name) return;
     if (presets.length >= 30) {
-      showToast({ type: 'error', title: `预设最多存 30 个，删掉一个再存。` });
+      showToast({ type: 'error', title: t(`预设最多存 30 个，删掉一个再存。`) });
       return;
     }
     const existing = presets.find((p) => p.name === name);
@@ -287,24 +287,24 @@ function OverlayStyleTab() {
     <div className="flex flex-col gap-4">
       <Card className="p-5">
         <SectionHeader
-          title="浮窗样式定制"
-          desc="把这一整套样式（主题、配色、底色、文字、外框线、字号、宽高）存成预设，换场景时点一下就切过去。"
+          title={t('浮窗样式定制')}
+          desc={t('把这一整套样式（主题、配色、底色、文字、外框线、字号、宽高）存成预设，换场景时点一下就切过去。')}
           right={
             <div className="flex gap-1.5">
               <Button size="sm" variant="outline" onClick={() => setPreviewOpen('interview')}>
                 <Eye size={13} />
-                预览面试浮窗
+                {t('预览面试浮窗')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setPreviewOpen('exam')}>
                 <Eye size={13} />
-                预览笔试浮窗
+                {t('预览笔试浮窗')}
               </Button>
             </div>
           }
         />
 
         {/* 预设 */}
-        <div className="mb-1 text-xs font-medium text-muted-foreground">样式预设</div>
+        <div className="mb-1 text-xs font-medium text-muted-foreground">{t('样式预设')}</div>
         <div className="mb-2 flex flex-wrap gap-1.5">
           {BUILTIN_PRESETS.map((p) => (
             <button
@@ -313,7 +313,7 @@ function OverlayStyleTab() {
               onClick={() => applyPreset(p.id)}
               className="rounded-full border px-2.5 py-1 text-xs hover:border-primary/50 hover:bg-primary/5"
             >
-              {p.name}
+              {t(p.name)}
             </button>
           ))}
           {presets.map((p) => (
@@ -326,7 +326,7 @@ function OverlayStyleTab() {
               </button>
               <button
                 type="button"
-                aria-label={`删除预设「${p.name}」`}
+                aria-label={t('删除预设「{name}」', { name: p.name })}
                 onClick={() => setPresets(presets.filter((x) => x.id !== p.id))}
               >
                 <Trash2 size={10} />
@@ -337,7 +337,7 @@ function OverlayStyleTab() {
         <div className="mb-4 flex gap-1.5">
           <Input
             className="h-8 text-xs"
-            placeholder="给现在的样式起个名字，比如「白底网页」"
+            placeholder={t('给现在的样式起个名字，比如「白底网页」')}
             value={presetName}
             onChange={(e) => setPresetName(e.target.value)}
             onKeyDown={(e) => {
@@ -346,27 +346,27 @@ function OverlayStyleTab() {
           />
           <Button size="sm" variant="outline" onClick={savePreset} disabled={!presetName.trim()}>
             <Plus size={13} />
-            存为预设
+            {t('存为预设')}
           </Button>
         </div>
 
         {/* 主题 */}
-        <div className="mb-1 text-xs font-medium text-muted-foreground">浮窗主题</div>
+        <div className="mb-1 text-xs font-medium text-muted-foreground">{t('浮窗主题')}</div>
         <div className="mb-4 grid grid-cols-2 gap-2">
           {[
             { key: 'light', label: '浅色', desc: '浅色屏幕 · 白底黑字' },
             { key: 'dark', label: '深色', desc: '深色屏幕 · 黑底白字' },
-          ].map((t) => (
+          ].map((item) => (
             <button
-              key={t.key}
+              key={item.key}
               type="button"
-              onClick={() => patch({ theme: t.key as 'light' | 'dark', paletteBg: '', paletteFg: '' })}
+              onClick={() => patch({ theme: item.key as 'light' | 'dark', paletteBg: '', paletteFg: '' })}
               className={`rounded-md border p-2.5 text-left transition-colors ${
-                style.theme === t.key ? 'border-primary/50 bg-primary/10' : 'hover:bg-accent'
+                style.theme === item.key ? 'border-primary/50 bg-primary/10' : 'hover:bg-accent'
               }`}
             >
-              <span className="text-[13px] font-medium">{t.label}</span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">{t.desc}</span>
+              <span className="text-[13px] font-medium">{t(item.label)}</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">{t(item.desc)}</span>
             </button>
           ))}
         </div>
@@ -437,10 +437,10 @@ function OverlayStyleTab() {
         />
 
         <div className="mt-3 flex flex-col gap-1">
-          <SettingRow title="文字描边" desc="底色越透，文字描边越强，保证在任意画面上都看得清。">
+          <SettingRow title={t('文字描边')} desc={t('底色越透，文字描边越强，保证在任意画面上都看得清。')}>
             <Switch checked={style.textHalo} onCheckedChange={(v) => patch({ textHalo: v })} />
           </SettingRow>
-          <SettingRow title="文字加粗" desc="正文加粗，适合投影或小屏。">
+          <SettingRow title={t('文字加粗')} desc={t('正文加粗，适合投影或小屏。')}>
             <Switch checked={style.textBold} onCheckedChange={(v) => patch({ textBold: v })} />
           </SettingRow>
         </div>
@@ -470,7 +470,7 @@ function OverlayStyleTab() {
             onClick={() => setStyle(DEFAULT_OVERLAY_STYLE)}
           >
             <RotateCcw size={13} />
-            恢复默认
+            {t('恢复默认')}
           </Button>
         </div>
       </Card>
@@ -481,7 +481,7 @@ function OverlayStyleTab() {
           <div className="absolute inset-0" onClick={() => setPreviewOpen(null)} />
           <div className="relative z-10 flex max-h-full flex-col gap-2">
             <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-center text-xs text-white">
-              {previewOpen === 'interview' ? '面试浮窗预览' : '笔试浮窗预览'}（示例内容，非真实会话）
+              {previewOpen === 'interview' ? t('面试浮窗预览') : t('笔试浮窗预览')}{t('（示例内容，非真实会话）')}
             </div>
             <div
               className="overflow-hidden rounded-xl shadow-2xl"
@@ -498,7 +498,7 @@ function OverlayStyleTab() {
               </SimulatedPlatform>
             </div>
             <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(null)}>
-              关闭预览
+              {t('关闭预览')}
             </Button>
           </div>
         </div>
@@ -527,7 +527,7 @@ function SliderRow({
   return (
     <div className="mb-3">
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <span className="text-xs font-medium text-muted-foreground">{t(label)}</span>
         <span className="text-[11px] tabular-nums text-muted-foreground">{format(value)}</span>
       </div>
       <Slider min={min} max={max} step={step} value={value} onChange={onChange} />
@@ -550,8 +550,8 @@ function SizeRow({
 }) {
   return (
     <div>
-      <div className="text-xs font-medium">{title}</div>
-      <p className="mb-1.5 mt-0.5 text-[11px] leading-snug text-muted-foreground">{desc}</p>
+      <div className="text-xs font-medium">{t(title)}</div>
+      <p className="mb-1.5 mt-0.5 text-[11px] leading-snug text-muted-foreground">{t(desc)}</p>
       <div className="flex items-center gap-1.5">
         <Input
           type="number"
@@ -613,13 +613,13 @@ function HotkeysTab() {
           await setPanicHotkey(accelerator);
           setPanic(accelerator);
           setPanicCapturing(false);
-        } catch(error) {showToast({type:'error',title:'快捷键未保存',description:String((error as Error).message||error)});}
+        } catch(error) {showToast({type:'error',title:t('快捷键未保存'),description:String((error as Error).message||error)});}
       } else if (capturing) {
         const next = { ...custom, [capturing]: accelerator };
         setCustom(next);
         void setActionHotkeys(
           Object.entries(effectiveHotkeys(scheme, next)).map(([action, acc]) => ({ action, accelerator: acc })),
-        ).catch(error=>showToast({type:'error',title:'部分快捷键未生效',description:String((error as Error).message||error)}));
+        ).catch(error=>showToast({type:'error',title:t('部分快捷键未生效'),description:String((error as Error).message||error)}));
         setCapturing(null);
       }
     };
@@ -639,22 +639,22 @@ function HotkeysTab() {
     <div className="flex flex-col gap-4">
       <Card className="p-5">
         <SectionHeader
-          title="应急隐藏快捷键"
-          desc="面试和笔试浮窗都适用：浮窗显示时按一下瞬间隐藏，再按一次恢复，无任何提示。"
+          title={t('应急隐藏快捷键')}
+          desc={t('面试和笔试浮窗都适用：浮窗显示时按一下瞬间隐藏，再按一次恢复，无任何提示。')}
         />
         <div className="flex items-center justify-between rounded-md border p-3">
           <div>
-            <div className="text-sm font-medium">当前快捷键</div>
+            <div className="text-sm font-medium">{t('当前快捷键')}</div>
             <div className="text-xs text-muted-foreground">
-              任意键或组合都能设，包括单按一个键；客户端开着时，这个键在其他软件里按了不起作用。
+              {t('任意键或组合都能设，包括单按一个键；客户端开着时，这个键在其他软件里按了不起作用。')}
             </div>
           </div>
           <div className="flex items-center gap-1.5">
             <kbd className="rounded border px-2 py-1 text-xs">
-              {panicCapturing ? '请按下快捷键… (Esc 取消)' : panic}
+              {panicCapturing ? t('请按下快捷键… (Esc 取消)') : panic}
             </kbd>
             <Button size="sm" variant="outline" onClick={() => setPanicCapturing(true)}>
-              修改
+              {t('修改')}
             </Button>
             {panic !== DEFAULT_PANIC_HOTKEY && (
               <Button
@@ -665,22 +665,22 @@ function HotkeysTab() {
                   void setPanicHotkey(DEFAULT_PANIC_HOTKEY);
                 }}
               >
-                默认
+                {t('默认')}
               </Button>
             )}
           </div>
         </div>
         {!panicRegistered && (
           <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
-            当前快捷键未生效：已被系统或其他程序占用，按下不会有任何反应。正在后台自动重试，也可以直接换一个组合立即恢复。
+            {t('当前快捷键未生效：已被系统或其他程序占用，按下不会有任何反应。正在后台自动重试，也可以直接换一个组合立即恢复。')}
           </div>
         )}
       </Card>
 
       <Card className="p-5">
         <SectionHeader
-          title="浮窗快捷键"
-          desc="面试 / 笔试浮窗打开时生效：滚动、答题、截屏、挪动浮窗都能用键盘完成，不用碰鼠标。浮窗显示期间，设好的键在其他软件里按了不起作用。"
+          title={t('浮窗快捷键')}
+          desc={t('面试 / 笔试浮窗打开时生效：滚动、答题、截屏、挪动浮窗都能用键盘完成，不用碰鼠标。浮窗显示期间，设好的键在其他软件里按了不起作用。')}
           right={
             <Button
               size="sm"
@@ -696,7 +696,7 @@ function HotkeysTab() {
               }}
             >
               <RotateCcw size={13} />
-              全部恢复默认
+              {t('全部恢复默认')}
             </Button>
           }
         />
@@ -722,12 +722,12 @@ function HotkeysTab() {
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{s.label}</span>
+                <span className="text-sm font-medium">{t(s.label)}</span>
                 <kbd className="rounded border px-1.5 py-0.5 text-[10px]">
                   {SCHEME_DEFAULTS[s.key].answer}
                 </kbd>
               </div>
-              <div className="mt-1 text-[11px] leading-snug text-muted-foreground">{s.desc}</div>
+              <div className="mt-1 text-[11px] leading-snug text-muted-foreground">{t(s.desc)}</div>
             </button>
           ))}
         </div>
@@ -740,8 +740,8 @@ function HotkeysTab() {
             return (
               <div key={action} className="flex items-center justify-between gap-3 py-2">
                 <div className="min-w-0">
-                  <div className="text-sm">{info.label}</div>
-                  <div className="text-[11px] text-muted-foreground">{info.desc}</div>
+                  <div className="text-sm">{t(info.label)}</div>
+                  <div className="text-[11px] text-muted-foreground">{t(info.desc)}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <kbd
@@ -749,10 +749,10 @@ function HotkeysTab() {
                       isCapturing ? 'border-primary text-primary' : value ? '' : 'text-muted-foreground'
                     }`}
                   >
-                    {isCapturing ? '请按下快捷键… (Esc 取消)' : value || '已关闭'}
+                    {isCapturing ? t('请按下快捷键… (Esc 取消)') : value || t('已关闭')}
                   </kbd>
                   <Button size="sm" variant="outline" onClick={() => setCapturing(action)}>
-                    修改
+                    {t('修改')}
                   </Button>
                   <Button
                     size="sm"
@@ -767,7 +767,7 @@ function HotkeysTab() {
                       );
                     }}
                   >
-                    停用
+                    {t('停用')}
                   </Button>
                 </div>
               </div>
@@ -784,9 +784,9 @@ function HotkeysTab() {
 function ChangelogTab() {
   return (
     <Card className="p-5">
-      <SectionHeader title="更新日志" desc="查看客户端更新记录。" />
+      <SectionHeader title={t('更新日志')} desc={t('查看客户端更新记录。')} />
       {CHANGELOG.length === 0 ? (
-        <p className="text-sm text-muted-foreground">暂无更新记录。</p>
+        <p className="text-sm text-muted-foreground">{t('暂无更新记录。')}</p>
       ) : (
         <div className="flex flex-col gap-4">
           {CHANGELOG.map((e) => (
@@ -796,9 +796,9 @@ function ChangelogTab() {
                 {e.items.map((it, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
                     <Badge variant={it.tag === 'new' ? 'default' : it.tag === 'improved' ? 'secondary' : 'outline'}>
-                      {it.tag === 'new' ? '新功能' : it.tag === 'improved' ? '体验优化' : '问题修复'}
+                      {it.tag === 'new' ? t('新功能') : it.tag === 'improved' ? t('体验优化') : t('问题修复')}
                     </Badge>
-                    <span>{it.text}</span>
+                    <span>{t(it.text)}</span>
                   </div>
                 ))}
               </div>
@@ -822,8 +822,8 @@ function AboutTab() {
   const dataError=getDataError();
   async function dataAction(restore:boolean) {
     setConfirmRestore(false);setDataBusy(true);
-    try {await backupData(restore);showToast({type:'success',title:restore?'已恢复备份':'本地备份已保存',description:restore?'已同步到所有窗口。':'包含简历、资料、题库与记录，不包含 API Key。'});}
-    catch(error) {showToast({type:'error',title:'数据操作失败',description:String(error)});}
+    try {await backupData(restore);showToast({type:'success',title:restore?t('已恢复备份'):t('本地备份已保存'),description:restore?t('已同步到所有窗口。'):t('包含简历、资料、题库与记录，不包含 API Key。')});}
+    catch(error) {showToast({type:'error',title:t('数据操作失败'),description:String(error)});}
     finally {setDataBusy(false);}
   }
 
@@ -836,33 +836,33 @@ function AboutTab() {
 
   return (
     <Card className="p-5">
-      <SectionHeader title="关于" desc="版本信息。联系我们反馈问题时，把这里的内容一并带上。" />
+      <SectionHeader title={t('关于')} desc={t('版本信息。联系我们反馈问题时，把这里的内容一并带上。')} />
       <div className="divide-y">
-        <Row label="客户端版本" value={APP_VERSION} />
-        <Row label="界面版本" value="随客户端内置" />
-        <Row label={isWindows() ? 'Windows 版本' : '系统版本'} value={osVersion || '无法读取'} />
+        <Row label={t('客户端版本')} value={APP_VERSION} />
+        <Row label={t('界面版本')} value={t('随客户端内置')} />
+        <Row label={isWindows() ? t('Windows 版本') : t('系统版本')} value={osVersion || t('无法读取')} />
         <Row
-          label="客户端更新"
+          label={t('客户端更新')}
           value={
             <div className="flex items-center gap-2">
-              <span>自动检查官方更新，确认后下载与安装。</span>
+              <span>{t('自动检查官方更新，确认后下载与安装。')}</span>
               <UpdateStatusButton />
             </div>
           }
         />
-        <Row label="本地数据备份" value={<div className="space-y-2"><p className="text-xs text-muted-foreground">每次保存会保留上一份数据；手动备份可恢复。恢复前也会保留当前文件。</p>{dataError&&<p role="alert" className="text-xs text-destructive">{dataError}</p>}<Button size="sm" variant="outline" disabled={dataBusy} onClick={()=>void dataAction(false)}>创建手动备份</Button><Button size="sm" variant="ghost" disabled={dataBusy} onClick={()=>setConfirmRestore(true)}>恢复手动备份</Button></div>} />
+        <Row label={t('本地数据备份')} value={<div className="space-y-2"><p className="text-xs text-muted-foreground">{t('每次保存会保留上一份数据；手动备份可恢复。恢复前也会保留当前文件。')}</p>{dataError&&<p role="alert" className="text-xs text-destructive">{dataError}</p>}<Button size="sm" variant="outline" disabled={dataBusy} onClick={()=>void dataAction(false)}>{t('创建手动备份')}</Button><Button size="sm" variant="ghost" disabled={dataBusy} onClick={()=>setConfirmRestore(true)}>{t('恢复手动备份')}</Button></div>} />
         <Row
-          label="AI 接口"
+          label={t('AI 接口')}
           value={
             <span className="text-xs">
-              {activeProvider?.baseUrl || '未配置'}
-              {aiReady ? ' · 作答模型已配置' : ' · 尚未配置作答模型'}
+              {activeProvider?.baseUrl || t('未配置')}
+              {aiReady ? t(' · 作答模型已配置') : t(' · 尚未配置作答模型')}
             </span>
           }
         />
       </div>
       <DeveloperInfo />
-      <ConfirmDialog open={confirmRestore} title="恢复手动备份？" body="会用最近一次手动备份替换简历、资料、题库和会话记录。当前文件会另外保留；进行中的会话请先结束。" confirmText="恢复备份" onCancel={()=>setConfirmRestore(false)} onConfirm={()=>void dataAction(true)} />
+      <ConfirmDialog open={confirmRestore} title={t('恢复手动备份？')} body={t('会用最近一次手动备份替换简历、资料、题库和会话记录。当前文件会另外保留；进行中的会话请先结束。')} confirmText={t('恢复备份')} onCancel={()=>setConfirmRestore(false)} onConfirm={()=>void dataAction(true)} />
     </Card>
   );
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateFixture } from './compile-fixture.mjs';
+import { evaluateFixture, evaluateModuleFixture } from './compile-fixture.mjs';
 
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 function harness({ deferredListeners = false, deferredCount = false } = {}) {
@@ -41,6 +41,7 @@ function harness({ deferredListeners = false, deferredCount = false } = {}) {
       clearInterval: id => timers.delete(id), clearTimeout: id => timers.delete(id),
     },
     require: name => {
+      if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts');
       if (name === './bridge') return bridge;
       if (name === './examEngine') return engine;
       throw new Error(`Unexpected dependency ${name}`);

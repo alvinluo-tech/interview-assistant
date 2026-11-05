@@ -1,5 +1,6 @@
 import { bailianConnection, isSpeechRecognitionModel, normalizeProvider, validateModelId, type AiProvider } from './aiConfig.js';
 import { isSpeechSynthesisModel } from './ttsConfig.js';
+import { t } from './i18n';
 
 export type AiFetch = (url: string, init: RequestInit) => Promise<Response>;
 export type CompletionStatus = 'complete' | 'truncated' | 'refused' | 'unknown' | 'cancelled' | 'failed';
@@ -17,25 +18,25 @@ export function requestScope(timeoutMs: number, signal?: AbortSignal): RequestSc
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(() => controller.abort(new DOMException('请求超时，请检查接口或增加超时时间', 'TimeoutError')), timeoutMs);
+  const timer = setTimeout(() => controller.abort(new DOMException(t('请求超时，请检查接口或增加超时时间'), 'TimeoutError')), timeoutMs);
   return { signal: controller.signal, cleanup: () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); } };
 }
 export function aiHeaders(provider: AiProvider, json = false): Record<string, string> {
   const headers: Record<string, string> = json ? { 'Content-Type': 'application/json' } : {};
   if (provider.authMode === 'bearer') {
-    if (!provider.apiKey.trim()) throw new Error('请填写 API Key，或将本地服务设为「无需密钥」');
+    if (!provider.apiKey.trim()) throw new Error(t('请填写 API Key，或将本地服务设为「无需密钥」'));
     headers.Authorization = `Bearer ${provider.apiKey.trim()}`;
   }
   return headers;
 }
 export function redactError(message: string, key: string): string {
-  return (key ? message.split(key).join('[密钥已隐藏]') : message).slice(0, 500);
+  return (key ? message.split(key).join(t('[密钥已隐藏]')) : message).slice(0, 500);
 }
 export async function responseError(response: Response, key: string): Promise<Error> {
   const hints: Record<number, string> = {
-    401: '认证失败，请检查 API Key', 403: '当前密钥没有访问权限',
-    404: '接口路径或模型不存在；可手动添加模型', 408: '服务端请求超时',
-    429: '请求过于频繁或额度不足，请检查服务商账户',
+    401: t('认证失败，请检查 API Key'), 403: t('当前密钥没有访问权限'),
+    404: t('接口路径或模型不存在；可手动添加模型'), 408: t('服务端请求超时'),
+    429: t('请求过于频繁或额度不足，请检查服务商账户'),
   };
   let detail = '';
   try {
@@ -44,7 +45,7 @@ export async function responseError(response: Response, key: string): Promise<Er
     const value = json.error?.message ?? (typeof json.error === 'string' ? json.error : json.message);
     if (typeof value === 'string') detail = redactError(value, key);
   } catch { /* Do not display arbitrary HTML, request headers or opaque proxy dumps. */ }
-  return new Error(`HTTP ${response.status} · ${hints[response.status] ?? (response.status >= 500 ? '服务商暂时不可用' : '接口请求失败')}${detail ? `：${detail}` : ''}`);
+  return new Error(`HTTP ${response.status} · ${hints[response.status] ?? (response.status >= 500 ? t('服务商暂时不可用') : t('接口请求失败'))}${detail ? `：${detail}` : ''}`);
 }
 /** Apply timeout through body consumption too, not just response headers. */
 export async function withAiRequest<T>(
@@ -58,17 +59,17 @@ export async function withAiRequest<T>(
     const response = await fetcher(`${normalized.baseUrl}/${endpoint}`, { ...init, signal: scope.signal, redirect: 'error' });
     if (response.headers.get('x-mianshi-test-service')) {
       await response.body?.cancel().catch(() => {});
-      throw new Error('当前连接是本地测试服务，只会返回固定内容，无法用于真实问答或语音识别。请到「设置 → AI 服务」配置真实接口。');
+      throw new Error(t('当前连接是本地测试服务，只会返回固定内容，无法用于真实问答或语音识别。请到「设置 → AI 服务」配置真实接口。'));
     }
     if (!response.ok) throw await responseError(response, normalized.apiKey);
     return await consume(response, scope.signal);
   } catch (error) {
-    if (scope.signal.aborted) throw scope.signal.reason ?? new DOMException('已取消请求', 'AbortError');
+    if (scope.signal.aborted) throw scope.signal.reason ?? new DOMException(t('已取消请求'), 'AbortError');
     if (error instanceof AiCompletionError) throw new AiCompletionError(redactError(error.message,normalized.apiKey),
-      normalized.apiKey ? error.partialText.split(normalized.apiKey).join('[密钥已隐藏]') : error.partialText,error.completionStatus);
+      normalized.apiKey ? error.partialText.split(normalized.apiKey).join(t('[密钥已隐藏]')) : error.partialText,error.completionStatus);
     if (error instanceof Error) throw new Error(redactError(error.message, normalized.apiKey));
-    if (typeof error === 'string' && error.includes('url not allowed')) throw new Error('接口地址被桌面 HTTP 权限拦截，请使用已更新的客户端');
-    throw new Error('无法连接接口，请检查地址、网络、证书和服务状态');
+    if (typeof error === 'string' && error.includes('url not allowed')) throw new Error(t('接口地址被桌面 HTTP 权限拦截，请使用已更新的客户端'));
+    throw new Error(t('无法连接接口，请检查地址、网络、证书和服务状态'));
   } finally { scope.cleanup(); }
 }
 
@@ -87,22 +88,22 @@ export async function discoverModels(provider: AiProvider, fetcher: AiFetch, sig
   for (let page = 0; page < 10; page++) {
     const payload: unknown = await withAiRequest(provider, `models${cursor ? `?after=${encodeURIComponent(cursor)}` : ''}`, { headers: aiHeaders(provider) }, 15000, r => r.json(), fetcher, signal);
     if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { data?: unknown }).data)) {
-      throw new Error('模型列表格式不兼容：需要 data 数组；你仍可手动添加模型 ID');
+      throw new Error(t('模型列表格式不兼容：需要 data 数组；你仍可手动添加模型 ID'));
     }
     const json = payload as { data: unknown[]; has_more?: boolean; last_id?: string };
     for (const item of json.data) {
-      if (!item || typeof item !== 'object' || typeof (item as { id?: unknown }).id !== 'string') throw new Error('模型列表包含无效 ID');
+      if (!item || typeof item !== 'object' || typeof (item as { id?: unknown }).id !== 'string') throw new Error(t('模型列表包含无效 ID'));
       const model = item as { id: string; name?: unknown };
       const id = validateModelId(model.id);
       found.set(id, { id, name: typeof model.name === 'string' ? model.name.slice(0, 160) : id });
-      if (found.size > 2000) throw new Error('接口返回的模型超过 2000 个，请使用自定义模型');
+      if (found.size > 2000) throw new Error(t('接口返回的模型超过 2000 个，请使用自定义模型'));
     }
     if (!json.has_more) return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
-    if (typeof json.last_id !== 'string' || !json.last_id || cursors.has(json.last_id)) throw new Error('模型列表分页游标无效，请使用自定义模型');
+    if (typeof json.last_id !== 'string' || !json.last_id || cursors.has(json.last_id)) throw new Error(t('模型列表分页游标无效，请使用自定义模型'));
     cursor = json.last_id;
     cursors.add(cursor);
   }
-  throw new Error('模型列表分页超过 10 页，请使用自定义模型');
+  throw new Error(t('模型列表分页超过 10 页，请使用自定义模型'));
 }
 
 async function discoverBailianModels(provider: AiProvider, connection: NonNullable<ReturnType<typeof bailianConnection>>,
@@ -118,14 +119,14 @@ async function discoverBailianModels(provider: AiProvider, connection: NonNullab
       service_site: connection.region === 'singapore' ? 'international' : 'asia-pacific-china' });
     const models = await withAiRequest(catalog, `models?${query}`, { headers }, 15000, async response => {
       const json = await response.json();
-      if (json?.success === false || json?.code) throw new Error('百炼模型目录查询失败，请检查业务空间和权限。');
+      if (json?.success === false || json?.code) throw new Error(t('百炼模型目录查询失败，请检查业务空间和权限。'));
       const output = json?.output;
       if (!output || !Array.isArray(output.models) || !Number.isInteger(output.total) || output.total < 0 || output.total > 2000
         || (output.page_no !== undefined && output.page_no !== page) || output.models.length > 100
-        || (expectedTotal !== undefined && expectedTotal !== output.total)) throw new Error('百炼模型目录格式或分页无效，请重试或手动添加模型 ID。');
+        || (expectedTotal !== undefined && expectedTotal !== output.total)) throw new Error(t('百炼模型目录格式或分页无效，请重试或手动添加模型 ID。'));
       expectedTotal = output.total;
       return output.models.map((item: { model?: unknown; name?: unknown }) => {
-        if (!item || typeof item.model !== 'string') throw new Error('百炼模型目录包含无效模型 ID。');
+        if (!item || typeof item.model !== 'string') throw new Error(t('百炼模型目录包含无效模型 ID。'));
         const id = validateModelId(item.model);
         return { id, name: typeof item.name === 'string' ? item.name.slice(0, 160) : id };
       }) as { id: string; name: string }[];
@@ -134,10 +135,10 @@ async function discoverBailianModels(provider: AiProvider, connection: NonNullab
     const previousSize = found.size;
     for (const model of models) found.set(model.id, model);
     received += models.length;
-    if (received > expectedTotal! || found.size !== received || (received < expectedTotal! && found.size === previousSize)) throw new Error('百炼模型目录分页不完整或重复，请重试。');
+    if (received > expectedTotal! || found.size !== received || (received < expectedTotal! && found.size === previousSize)) throw new Error(t('百炼模型目录分页不完整或重复，请重试。'));
     if (received === expectedTotal) return [...found.values()].sort((a, b) => a.id.localeCompare(b.id));
   }
-  throw new Error('百炼模型目录分页超过 20 页，请手动添加模型 ID。');
+  throw new Error(t('百炼模型目录分页超过 20 页，请手动添加模型 ID。'));
 }
 
 function extractText(value: unknown): string {
@@ -147,17 +148,17 @@ function extractText(value: unknown): string {
 }
 /** One parser for both text and vision, including split UTF-8 and final unterminated lines. */
 export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal): Promise<ChatCompletion> {
-  if (!response.body) throw new Error('接口未返回响应内容');
+  if (!response.body) throw new Error(t('接口未返回响应内容'));
   const type = response.headers.get('content-type') ?? '';
   let full='',finishReason:string|undefined,ended=false,refused=false;
   let usage:ChatCompletion['usage'];
   const consume = (json: {error?:{message?:string};choices?:{finish_reason?:string;delta?:{content?:unknown;refusal?:unknown};message?:{content?:unknown;refusal?:unknown}}[];usage?:{prompt_tokens?:number;completion_tokens?:number;prompt_tokens_details?:{cached_tokens?:number}}}) => {
-    if(json.error)throw new Error(json.error.message || '模型请求失败');
+    if(json.error)throw new Error(json.error.message || t('模型请求失败'));
     const choice=json.choices?.[0];
     if(choice?.finish_reason)finishReason=choice.finish_reason;
     if(choice?.delta?.refusal || choice?.message?.refusal)refused=true;
     const text=extractText(choice?.delta?.content ?? choice?.message?.content);
-    if(text){full+=text;if(full.length>2_000_000)throw new Error('回答过长，请缩小任务范围。');onDelta?.(text);}
+    if(text){full+=text;if(full.length>2_000_000)throw new Error(t('回答过长，请缩小任务范围。'));onDelta?.(text);}
     if(json.usage)usage={inputTokens:json.usage.prompt_tokens,outputTokens:json.usage.completion_tokens,cachedTokens:json.usage.prompt_tokens_details?.cached_tokens};
   };
   if (type.includes('application/json')) {
@@ -174,7 +175,7 @@ export async function consumeChatResult(response: Response, onDelta?: (text: str
     if(!data)return;
     if (data === '[DONE]') { ended = true; return; }
     let json;
-    try { json = JSON.parse(data); } catch { throw new Error('接口返回了无效的流式数据'); }
+    try { json = JSON.parse(data); } catch { throw new Error(t('接口返回了无效的流式数据')); }
     consume(json);
   };
   const abort=()=>{void reader.cancel().catch(()=>{});};
@@ -185,24 +186,24 @@ export async function consumeChatResult(response: Response, onDelta?: (text: str
       const { value, done } = await reader.read();
       signal?.throwIfAborted();
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
-      if (buffer.length > 1_048_576) throw new Error('接口返回的单条流式消息过大');
+      if (buffer.length > 1_048_576) throw new Error(t('接口返回的单条流式消息过大'));
       let newline;
       while (!ended && (newline = buffer.indexOf('\n')) >= 0) {
         parseLine(buffer.slice(0, newline).replace(/\r$/, ''));
         buffer = buffer.slice(newline + 1);
       }
-      if(eventData.join('').length>1_048_576)throw new Error('接口返回的单条流式消息过大');
+      if(eventData.join('').length>1_048_576)throw new Error(t('接口返回的单条流式消息过大'));
       if (done) {if(buffer.trim())parseLine(buffer.replace(/\r$/,''));parseLine('');break;}
     }
   } catch(error) {
-    if(full && !signal?.aborted)throw new AiCompletionError(String((error as Error).message || '输出中断'),full,'failed');
+    if(full && !signal?.aborted)throw new AiCompletionError(String((error as Error).message || t('输出中断')),full,'failed');
     throw error;
   } finally {signal?.removeEventListener('abort',abort);await reader.cancel().catch(() => {}); reader.releaseLock();}
   }
   const completionStatus:CompletionStatus=finishReason==='length'?'truncated':refused||finishReason==='content_filter'?'refused':finishReason==='stop'?'complete':'unknown';
-  if(completionStatus==='truncated')throw new AiCompletionError('回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。',full,'truncated');
-  if(completionStatus==='refused')throw new AiCompletionError('模型未能完成此请求，已保留已有内容。',full,'refused');
-  if (!full) throw new Error('模型没有返回文本回答，请确认该模型支持此用途');
+  if(completionStatus==='truncated')throw new AiCompletionError(t('回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。'),full,'truncated');
+  if(completionStatus==='refused')throw new AiCompletionError(t('模型未能完成此请求，已保留已有内容。'),full,'refused');
+  if (!full) throw new Error(t('模型没有返回文本回答，请确认该模型支持此用途'));
   return {text:full,completionStatus,finishReason,usage};
 }
 /** Compatibility facade; task callers use consumeChatResult to retain completion metadata. */
@@ -211,8 +212,8 @@ export async function consumeChat(response:Response,onDelta?:(text:string)=>void
 }
 export async function testChatModel(provider: AiProvider, modelId: string, fetcher: AiFetch, signal?: AbortSignal): Promise<{ latencyMs: number; sample: string }> {
   const selectedModel = validateModelId(modelId);
-  if (isSpeechRecognitionModel(selectedModel)) throw new Error('该模型用于语音识别，不能执行文字对话测试。请在「语音转写」中配置，并使用实际音频验证。');
-  if (isSpeechSynthesisModel(selectedModel)) throw new Error('该模型用于语音合成，不能执行文字对话测试。请分配到「语音合成」后试听。');
+  if (isSpeechRecognitionModel(selectedModel)) throw new Error(t('该模型用于语音识别，不能执行文字对话测试。请在「语音转写」中配置，并使用实际音频验证。'));
+  if (isSpeechSynthesisModel(selectedModel)) throw new Error(t('该模型用于语音合成，不能执行文字对话测试。请分配到「语音合成」后试听。'));
   const start = performance.now();
   const sample = await withAiRequest(provider, 'chat/completions', {
     method: 'POST', headers: aiHeaders(provider, true),

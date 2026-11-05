@@ -1,6 +1,7 @@
 import {emitTo, isTauri, listenEvent} from './bridge';
 import {completeSession} from './backend';
 import {getSetting, setSetting} from './store';
+import {t} from './i18n';
 
 interface StopRequest {requestId:string; sessionId:string}
 interface StopResult {requestId:string; error?:string}
@@ -18,7 +19,7 @@ export async function requestInterviewStop(sessionId:string):Promise<void> {
     if(payload.error)reject(new Error(payload.error));else resolve();
   });
   try {
-    timer=setTimeout(()=>reject(new Error('浮窗尚未确认停止收音，请重试结束面试。')),5000);
+    timer=setTimeout(()=>reject(new Error(t('浮窗尚未确认停止收音，请重试结束面试。'))),5000);
     await emitTo('overlay','interview-stop-request',{requestId,sessionId});
     await result;
   } finally {if(timer)clearTimeout(timer);off();}
@@ -32,7 +33,7 @@ export function listenForInterviewStop():()=>void {
     try {
       const engine=await import('./interviewEngine');
       const current=engine.getInterviewEngineState().sessionId;
-      if(current && current!==payload.sessionId)throw new Error('当前面试已改变，请刷新工作台后重试。');
+      if(current && current!==payload.sessionId)throw new Error(t('当前面试已改变，请刷新工作台后重试。'));
       if(current)await engine.endInterview(true);
       else await completeSession(payload.sessionId);
       if(getSetting('interview.sessionId',null)===payload.sessionId)await setSetting('interview.sessionId',null);

@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateFixture} from './compile-fixture.mjs';
+import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 import { webcrypto } from 'node:crypto';
 function load(overrides = {}) {
   const sandbox = { exports: {}, URL, crypto: webcrypto, Uint8Array, Int16Array, DataView, ArrayBuffer,
-    setTimeout, clearTimeout, console, DOMException, AbortController, ...overrides };
+    setTimeout, clearTimeout, console, DOMException, AbortController,
+    require: name => { if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts'); throw new Error(name); },
+    ...overrides };
   return evaluateFixture('src/lib/realtimeAsrProtocol.ts',sandbox);
 }
 test('real-time ASR waits for task-started, sends raw PCM, replaces partial text, and deduplicates final sentences', async () => {

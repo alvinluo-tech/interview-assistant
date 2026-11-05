@@ -2,10 +2,11 @@ import { useSyncExternalStore } from 'react';
 import { cmd, isTauri, listenEvent } from './bridge';
 import { getSetting, setSetting } from './store';
 import { createUpdateClient, type UpdateSnapshot } from './updateCheck';
+import { t } from './i18n';
 
 export const updater = createUpdateClient({
   invoke: async (command, args) => {
-    if (!isTauri()) throw new Error('请在桌面应用中检查和安装更新。');
+    if (!isTauri()) throw new Error(t('请在桌面应用中检查和安装更新。'));
     return cmd<UpdateSnapshot>(command, args);
   },
   listen: callback => listenEvent<UpdateSnapshot>('updater-state', callback),

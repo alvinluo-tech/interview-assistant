@@ -1,4 +1,5 @@
 import { cmd, isTauri, listenEvent } from './bridge';
+import { t } from './i18n';
 import { getAiSettings } from './aiSettings';
 import { createQuestionSpeaker, streamSpeech, synthesizeSpeech } from './aiRequests';
 import { createCloudSpeechSession } from './ttsSession';
@@ -18,16 +19,16 @@ export function questionSpeaker(state: (speaking: boolean) => void, error: (reas
       const url = URL.createObjectURL(new Blob([bytes])); const audio = new Audio(url);
       const clean = () => {audio.pause(); audio.src = ''; URL.revokeObjectURL(url);};
       audio.onplay = () => changed(true); audio.onended = () => {changed(false); clean();};
-      audio.onerror = () => {failed(new Error('音频播放失败，请检查音色和模型配置。')); clean();};
+      audio.onerror = () => {failed(new Error(t('音频播放失败，请检查音色和模型配置。'))); clean();};
       void audio.play().catch(reason => {failed(reason); clean();});
       return clean;
     },
     system: async (text, changed, failed, signal) => {
       if (!isTauri()) {
-        if (!window.speechSynthesis) throw new Error('当前浏览器无法播放系统语音。请在桌面应用中使用。');
+        if (!window.speechSynthesis) throw new Error(t('当前浏览器无法播放系统语音。请在桌面应用中使用。'));
         const utterance = new SpeechSynthesisUtterance(text); utterance.lang = spec?.language || 'zh-CN';utterance.rate=spec?.rate || 1;
-        if(spec&&spec.accent!=='standard'&&spec.accent!=='cantonese')throw new Error('系统语音没有已确认的这个方言音色，请配置支持的云端语音。');
-        if(spec){const voices=speechSynthesis.getVoices();const voice=voices.find(voice=>{const lang=voice.lang.toLowerCase().replace('_','-');return spec!.language==='yue-HK'?lang.startsWith('yue')||lang==='zh-hk':spec!.language==='en-US'?lang.startsWith('en'):lang.startsWith('zh')&&lang!=='zh-hk';});if(voice)utterance.voice=voice;else if(voices.length)throw new Error('本机未安装匹配的语音包，可继续文字面试或配置云语音。');}
+        if(spec&&spec.accent!=='standard'&&spec.accent!=='cantonese')throw new Error(t('系统语音没有已确认的这个方言音色，请配置支持的云端语音。'));
+        if(spec){const voices=speechSynthesis.getVoices();const voice=voices.find(voice=>{const lang=voice.lang.toLowerCase().replace('_','-');return spec!.language==='yue-HK'?lang.startsWith('yue')||lang==='zh-hk':spec!.language==='en-US'?lang.startsWith('en'):lang.startsWith('zh')&&lang!=='zh-hk';});if(voice)utterance.voice=voice;else if(voices.length)throw new Error(t('本机未安装匹配的语音包，可继续文字面试或配置云语音。'));}
         utterance.onstart = () => changed(true); utterance.onend = () => changed(false);
         utterance.onerror = event => {if (event.error !== 'canceled' && event.error !== 'interrupted') failed(event.error);};
         speechSynthesis.speak(utterance); return () => speechSynthesis.cancel();

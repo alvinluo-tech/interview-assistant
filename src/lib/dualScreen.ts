@@ -7,6 +7,7 @@
  * - 断线 15s 宽限内不弹回本地浮窗（原版 KG 语义）；「切回电脑」= exit → released。
  */
 import { cmd, listenEvent, emitTo, setOverlaySize, setOverlayZones, setCursorPointFeed } from './bridge';
+import { t } from './i18n';
 import {
   answerNow,
   capturePage,
@@ -176,7 +177,7 @@ export function startDualTakeover(): () => void {
     if (!active) return;
     if (id === 'exit') return release();
     try { await dispatchAction(id); }
-    catch { await dualSend({ t: 'action-error', message: '操作失败，请重试或切回电脑查看。' }).catch(() => {}); }
+    catch { await dualSend({ t: 'action-error', message: t('操作失败，请重试或切回电脑查看。') }).catch(() => {}); }
   };
 
   const scheduleRestore = () => {
@@ -196,10 +197,10 @@ export function startDualTakeover(): () => void {
 
   // ---- 状态推送（solver 快照） ----
   const followUpLabels: { intent: string; label: string }[] = [
-    { intent: 'simplify', label: '继续简化' },
-    { intent: 'brute-force', label: '换暴力解法' },
-    { intent: 'code-review', label: '截图检查当前代码' },
-    { intent: 'partial-pass', label: '降通过率' },
+    { intent: 'simplify', label: t('继续简化') },
+    { intent: 'brute-force', label: t('换暴力解法') },
+    { intent: 'code-review', label: t('截图检查当前代码') },
+    { intent: 'partial-pass', label: t('降通过率') },
   ];
   async function pushState() {
     if (!active || disposed || releasing) return;
@@ -216,7 +217,7 @@ export function startDualTakeover(): () => void {
       data: {
         brand: '面绪',
         mode: s.mode,
-        modeLabel: info.label,
+        modeLabel: t(info.label),
         statusText: s.statusText,
         solving: s.phase === 'capturing' || s.phase === 'uploading' || s.phase === 'thinking' || s.phase === 'streaming',
         elapsed: s.elapsedSec,

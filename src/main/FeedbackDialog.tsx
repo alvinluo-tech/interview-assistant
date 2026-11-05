@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button, Dialog, DialogTitle, Textarea } from '@/ui/primitives';
 import { saveFeedback } from '@/lib/backend';
 import { showToast } from '@/ui/primitives';
+import { t } from '@/lib/i18n';
 
 export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [text, setText] = useState('');
@@ -14,14 +15,14 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
   if (!open) return null;
   return (
     <Dialog open onClose={onClose} className="max-w-md">
-      <DialogTitle>反馈</DialogTitle>
+      <DialogTitle>{t('反馈')}</DialogTitle>
       <p className="mb-3 text-sm text-muted-foreground">
-        本复刻版为本地模式，反馈会保存在本地（不走云端工单）。有问题可以直接改源码。
+        {t('本复刻版为本地模式，反馈会保存在本地（不走云端工单）。有问题可以直接改源码。')}
       </p>
       <Textarea
         rows={5}
         maxLength={2000}
-        placeholder="说说你想要什么，越具体越好。"
+        placeholder={t('说说你想要什么，越具体越好。')}
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
@@ -33,10 +34,10 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
           onClick={() => {
             setSaving(true);
             void saveFeedback(text).then(() => { setSubmitted(true); window.setTimeout(onClose, 600); })
-              .catch(error => showToast({type:'error',title:'反馈保存失败',description:String(error)})).finally(() => setSaving(false));
+              .catch(error => showToast({type:'error',title:t('反馈保存失败'),description:t(String(error))})).finally(() => setSaving(false));
           }}
         >
-          {submitted ? '已保存' : saving ? '保存中…' : '保存到本地'}
+          {submitted ? t('已保存') : saving ? t('保存中…') : t('保存到本地')}
         </Button>
       </div>
     </Dialog>

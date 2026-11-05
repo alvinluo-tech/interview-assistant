@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateFixture } from './compile-fixture.mjs';
+import { evaluateFixture, evaluateModuleFixture } from './compile-fixture.mjs';
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
 function engine({ completionFails = false, imageSaveFails = false, captureFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[],writeFailure={value:false} } = {}) {
@@ -19,7 +19,8 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
     exports: {}, console, Date: fixedTime ? class extends Date { static now() { return 1000; } } : Date, AbortController,
     window: { setInterval: () => { const id = {}; timers.add(id); return id; }, clearInterval(id) {timers.delete(id);}, setTimeout(fn) {const id={}; checkpoints.set(id,fn); return id;}, clearTimeout(id){checkpoints.delete(id);} },
     require: name => {
-      if (name === './aiContext') return evaluateFixture('src/lib/aiContext.ts',{exports:{}});
+      if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts');
+      if (name === './aiContext') return evaluateModuleFixture('src/lib/aiContext.ts');
       if (name === './bridge') return bridge;
       if (name === './store') return { getSetting: (key, fallback) => settings[key] ?? fallback, DEFAULT_EXAM_CUSTOMIZATION: {}, setSetting: async (key,value) => {settings[key] = value;} };
       if (name === './backend') return {
