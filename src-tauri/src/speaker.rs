@@ -95,12 +95,7 @@ fn embedding(extractor: &SpeakerEmbeddingExtractor, pcm: &[i16]) -> Result<Vec<f
     if pcm.len() < 19200 || pcm.len() > 16000 * 30 {
         return Err("需要 1.2–30 秒的单人语音。".into());
     }
-    let energy = pcm.iter().filter(|x| x.unsigned_abs() > 500).count();
-    let clipped = pcm.iter().filter(|x| x.unsigned_abs() > 32700).count();
-    if energy < pcm.len() / 20 || clipped > pcm.len() / 20 {
-        return Err("语音太轻或有削波，请靠近麦克风并调整音量。".into());
-    }
-    let samples: Vec<f32> = pcm.iter().map(|x| *x as f32 / 32768.0).collect();
+    let samples = crate::speaker_audio::prepare_samples(pcm)?;
     let stream = extractor.create_stream().ok_or("声纹分析启动失败")?;
     stream.accept_waveform(16000, &samples);
     stream.input_finished();

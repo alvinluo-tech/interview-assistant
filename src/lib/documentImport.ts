@@ -44,8 +44,21 @@ export async function importDocument(file: File, options: ImportOptions = {}) {
           getPage: async (number: number) => {
             signal?.throwIfAborted();
             const page = await pdf.getPage(number);
-            const content = await page.getTextContent();
-            const text = content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('');
+            // Older macOS WebKit versions do not support async iteration on
+            // ReadableStream, which PDF.js getTextContent() relies on.
+            const reader = (page.streamTextContent() as ReadableStream<import('pdfjs-dist/types/src/display/api').TextContent>).getReader();
+            let text = '';
+            try {
+              while (true) {
+                signal?.throwIfAborted();
+                const { value, done } = await reader.read();
+                if (done) break;
+                text += value.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('');
+              }
+            } catch (error) {
+              await reader.cancel().catch(() => {});
+              throw error;
+            } finally { reader.releaseLock(); }
             return { text, render: async () => {
               signal?.throwIfAborted();
               const natural = page.getViewport({ scale: 1 });

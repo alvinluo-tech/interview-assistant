@@ -23,6 +23,7 @@ mod screen_permissions;
 mod settings;
 mod speech;
 mod speaker;
+mod speaker_audio;
 mod updater;
 #[cfg(target_os = "macos")]
 mod window_macos;
