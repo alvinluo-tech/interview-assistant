@@ -39,7 +39,7 @@ async function mockStop({realtime=true,text='这是我的回答',length=192000,v
     ...(realtime?{realtime:{finish:async()=>{calls.finish++;if(failure)throw failure;return text;},close:async()=>{calls.close++;}}}:{}),
   };
   const recorderRef={current:rec};
-  const sandbox={exports:{},recorderRef,Int16Array,setRecording:()=>{},setMicLevel:()=>{},setSilentSince:()=>{},
+  const sandbox={exports:{},recorderRef,Int16Array,t:evaluateModuleFixture('src/lib/i18n.ts').t,setRecording:()=>{},setMicLevel:()=>{},setSilentSince:()=>{},
     setVoicePreview:()=>{},setVoiceStatus:()=>{},setTranscribing:()=>{},showToast:t=>toasts.push(t),
     setDraft:update=>{draft=update(draft);},encodeWav:x=>x,profileRef:{current:{}},recognitionLanguage:()=> 'zh',
     transcribeAudio:async()=>{calls.transcribe++;return text;},
