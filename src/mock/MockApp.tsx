@@ -221,6 +221,7 @@ function MockRoom() {
           onResult:result=>{
             if(recorderRef.current!==rec)return;
             if(result.isFinal)rec.finals.push(result.text);
+            if(result.text.trim())setSilentSince(null);
             setVoicePreview([...rec.finals,...(result.isFinal?[]:[result.text])].join(' '));
           },
           onState:state=>{if(recorderRef.current===rec)setVoiceStatus(state==='reconnecting'?t('连接中断，正在重连；中断期间的语音请重说。'):state==='ready'?t('实时字幕连接就绪'):t('正在连接语音服务…'));},
@@ -261,8 +262,9 @@ function MockRoom() {
     setRecording(false);
     setMicLevel(0);
     setSilentSince(null);
-    if (rec.length < 6400 || rec.voicedMs < 250) {
-      recorderRef.current=null;rec.controller.abort();await rec.realtime?.close();setVoicePreview('');setVoiceStatus(t('未检测到足够的人声'));
+    // Realtime ASR must finalize quiet speech rather than discard recognized captions.
+    if (!rec.realtime && (rec.length < 6400 || rec.voicedMs < 250)) {
+      recorderRef.current=null;rec.controller.abort();setVoicePreview('');setVoiceStatus(t('未检测到足够的人声'));
       showToast({ type: 'info', title: t('没听到你说话，再说一次') });
       return;
     }
