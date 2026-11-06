@@ -1,4 +1,4 @@
-import {recordCandidateResponse,markTranscriptSpeaker} from '@/lib/interviewEngine';
+import {markTranscriptSpeaker} from '@/lib/interviewEngine';
 import {GenerationDetails} from './GenerationDetails';
 import {selectSolverTurn} from '@/lib/examEngine';
 /*
@@ -9,6 +9,7 @@ import {selectSolverTurn} from '@/lib/examEngine';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Camera,
   Columns2,
   Mic,
   MousePointerClick,
@@ -154,6 +155,11 @@ function InterviewShell({
   const { interactive, toggleInteractive, bindHotkey } = usePlatform();
   const isDark = skin.theme === 'dark';
   const configuredSource = useSetting<'SPEAKER' | 'PHONE' | 'MICROPHONE'>('interview.audioSource', 'SPEAKER')[0];
+  const captureQuestion=()=>{
+    if(!engine.sessionId || engine.status==='ended')return;
+    setTab('solver');
+    void solve();
+  };
 
   // 热键：answer = 立即回答；capture = 切 solver 截屏
   useEffect(() => {
@@ -167,14 +173,13 @@ function InterviewShell({
       }
     });
     const offCapture = bindHotkey('capture', () => {
-      setTab('solver');
-      void solve();
+      captureQuestion();
     });
     return () => {
       offAnswer();
       offCapture();
     };
-  }, [bindHotkey, tab, engine.messages, preview]);
+  }, [bindHotkey, tab, engine.messages, preview,interactive,engine.sessionId]);
 
   const started = engine.status !== 'idle' && engine.status !== 'ended';
   const statusInfo = statusOf(engine);
@@ -196,6 +201,7 @@ function InterviewShell({
         <span className={`ov-dot size-1.5 rounded-full ${started ? '' : 'opacity-40'}`} />
         <span className="ov-text-2 truncate text-[11px] font-semibold">{statusInfo.text}</span>
         <div className="flex-1" />
+        <DwellIconButton id="chat-solver" hoverMs={HOVER_MS.action} label={t('笔试答题')} icon={<Columns2 size={13}/>} onTrigger={()=>setTab('solver')}/>
         {/* 穿透/窗口切换 */}
         <DwellIconButton id="iv-mode" hoverMs={HOVER_MS.switchInteractive}
           label={interactive ? t('切回穿透模式') : t('悬停切到窗口模式')}
@@ -241,10 +247,10 @@ function InterviewShell({
       )}
 
       {/* 底部操作栏 */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex max-h-[50vh] shrink-0 flex-col gap-1.5 overflow-y-auto">
         {tab === 'chat' ? (
           <>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               <DwellButton id="chat-language" variant="muted" hoverMs={HOVER_MS.action} onTrigger={switchLanguage}>{t('答案 · {lang}', { lang: speechProfile.answerLanguage==='en-US'?'English':speechProfile.answerLanguage==='follow'?t('跟随'):speechProfile.answerLanguage==='yue-HK'?t('粤语'):t('中文') })}</DwellButton>
               <DwellButton
                 id="chat-toggle"
@@ -278,16 +284,14 @@ function InterviewShell({
                 {t('立即回答')}
               </DwellButton>
               <DwellButton
-                id="chat-solver"
+                id="chat-screenshot"
                 variant="muted"
                 hoverMs={HOVER_MS.capture}
                 hotkey={hotkeys.capture}
-                onTrigger={() => {
-                  setTab('solver');
-                  if (solver.turns.length === 0) void solve();
-                }}
+                disabled={!engine.sessionId || engine.status==='ended'}
+                onTrigger={() => void captureQuestion()}
               >
-                {t('笔试答题')}
+                <span className="flex items-center gap-1"><Camera size={12}/>{t('截图提问')}</span>
               </DwellButton>
             </div>
             <VoiceAskRow kind="chat" hotkey={hotkeys['voice-ask']} />
@@ -318,13 +322,10 @@ function AudioInputFeedback({ engine }: { engine: EngineState }) {
               : audio.bufferedMs ? t('已收音，等待停顿后转写')
                 : audio.lastTranscriptAt ? t('转写已完成，等待继续说话') : t('等待说话');
   return (
-    <div className="ov-panel rounded-md px-2 py-1.5 text-[10px]" data-testid="audio-input-feedback">
-      <div className="ov-text-2 flex items-center gap-1.5"><Mic size={12} /><span className="min-w-0 flex-1 truncate" title={audio.deviceLabel}>{audio.source === 'SPEAKER' ? (audio.deviceLabel ? t('系统声音 · {label}', { label: audio.deviceLabel }) : t('系统声音')) : audio.deviceLabel || t('麦克风')}</span><span role="status" className="shrink-0">{label}</span></div>
-      <div role="meter" aria-label={t('收音音量')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={active ? audio.level : 0} className="mt-1.5 h-1 overflow-hidden rounded-full bg-current/10">
-        <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-100" style={{ width: `${active ? audio.level : 0}%` }} />
-      </div>
+    <div className="ov-text-3 px-1 text-[10px]" data-testid="audio-input-feedback">
+      <div className="ov-text-2 flex items-center gap-1.5"><Mic size={10} className="shrink-0 opacity-50" /><span className="min-w-0 flex-1 truncate" title={audio.deviceLabel}>{audio.source === 'SPEAKER' ? (audio.deviceLabel ? t('系统声音 · {label}', { label: audio.deviceLabel }) : t('系统声音')) : audio.deviceLabel || t('麦克风')}</span><span role="status" className="shrink-0">{label}</span></div>
       {noInput && <div className="ov-text-2 mt-1">{t('尚未收到音频数据，请暂停后继续，或返回工作台检查输入设备。')}</div>}
-      {active && !noInput && <div className="ov-text-3 mt-1">{audio.recognitionMode === 'realtime' ? t('持续音频流 · 边说边更新字幕，句子定稿后回答') : audio.recognitionMode === 'segmented' ? t('分段实时 · 约每 2.5 秒更新字幕，停顿后校正并回答') : t('说完停顿后自动转写，也可点「立即转写」')}</div>}
+
     </div>
   );
 }
@@ -366,7 +367,6 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
   const following = useRef(true);
   const {interactive,toggleInteractive}=usePlatform();
   const [editingQuestion,setEditingQuestion]=useState<{id:string;text:string}|null>(null);
-  const [actualAnswer,setActualAnswer]=useState<string|null>(null);
 
   useEffect(() => {
     registerOverlayList(listRef.current);
@@ -440,6 +440,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         className="ov-line-strong ov-text-2 ov-body-sm flex items-start gap-1 whitespace-pre-wrap border-l-2 pl-1.5"
                       >
                         <div className="min-w-0 flex-1">{m.text}
+                          {m.metadata?.origin==='screenshot'&&<span className="ov-text-3 ml-2 text-[10px]">{t('屏幕题目')}</span>}
                           {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
                           {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
                           {m.metadata?.superseded ? <span className="ov-text-3 ml-2 text-[10px]">{t('已更正')}</span> : (!m.metadata?.speaker||m.metadata.speaker.role==='interviewer')&&<DwellButton id={`correct-${m.id}`} compact hoverMs={1200} onTrigger={()=>{if(!interactive)toggleInteractive();setEditingQuestion({id:m.id,text:m.text});}}>{t('更正并重答')}</DwellButton>}
@@ -480,11 +481,6 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
           </div>
         )}
       </div>
-      {engine.sessionId && <DwellButton id="record-actual-answer" compact hoverMs={1500} onTrigger={()=>{if(!interactive)toggleInteractive();setActualAnswer(actualAnswer===null?'':null);}}>{t('补充我的实际回答')}</DwellButton>}
-      {actualAnswer!==null && <form className="ov-chip mx-1 mt-2 rounded-md border p-2" onSubmit={event=>{event.preventDefault();if(!actualAnswer.trim())return;void recordCandidateResponse(actualAnswer).then(()=>setActualAnswer(null)).catch(error=>showToast({type:'error',title:t('实际回答未保存'),description:String(error)}));}}>
-        <label className="ov-text-2 text-[11px]">{t('实际说法与参考答案不同时，可在这里补充')}<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={actualAnswer} onChange={event=>setActualAnswer(event.target.value)}/></label>
-        <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!actualAnswer.trim()}>{t('保存补充')}</button><button type="button" onClick={()=>setActualAnswer(null)}>{t('取消')}</button></div>
-      </form>}
       {editingQuestion && <form className="ov-chip mx-1 mt-2 rounded-md border p-2" onSubmit={event=>{event.preventDefault();const target=editingQuestion;if(!target.text.trim())return;setEditingQuestion(null);void answerQuestion(target.text,{correction:true,questionMessageId:target.id});}}>
         <label className="ov-text-2 text-[11px]">{t('更正识别内容')}<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={editingQuestion.text} onChange={event=>setEditingQuestion({...editingQuestion,text:event.target.value})}/></label>
         <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!editingQuestion.text.trim()}>{t('更正并重新回答')}</button><button type="button" onClick={()=>setEditingQuestion(null)}>{t('取消')}</button></div>
@@ -566,7 +562,7 @@ function SolverActions({
     solver.phase === 'thinking' || solver.phase === 'streaming' || solver.phase === 'capturing';
   return (
     <>
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap gap-1.5">
         <button
           type="button"
           onClick={onBack}
@@ -616,7 +612,7 @@ function SolverActions({
           {t('接住追问')}
         </DwellButton>
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap gap-1.5">
         <DwellButton
           id="sv-mode"
           variant="muted"
@@ -666,7 +662,6 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
   const [opening, setOpening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [error, setError] = useState('');
-  const [level, setLevel] = useState(0);
   const deviceId = useSetting('interview.microphoneId', '')[0];
   const recorderRef = useRef<MicrophoneCapture | null>(null);
   const chunksRef = useRef<Int16Array[]>([]);
@@ -702,12 +697,10 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
         await pauseListening();
       }
       chunksRef.current = []; countRef.current = 0;
-      let lastMeter = 0;
-      const capture = await openMicrophone({ deviceId, onPcm: (pcm, volume) => {
+      const capture = await openMicrophone({ deviceId, onPcm: pcm => {
         if (!alive.current) return;
         if (countRef.current + pcm.length <= 16000 * 60) { chunksRef.current.push(pcm); countRef.current += pcm.length; }
         else setError(t('录音已满 60 秒，请点击「结束并提问」。'));
-        if (performance.now() - lastMeter > 100) { lastMeter = performance.now(); setLevel(Math.min(100, Math.round(volume / 80 * 100))); }
       }, onError: message => {
         if (!alive.current) return;
         setError(message); setRecording(false);
@@ -728,7 +721,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
     if (!capture || busy.current) return;
     busy.current = true; recorderRef.current = null;
     await capture.close();
-    setRecording(false); setLevel(0); restore();
+    setRecording(false); restore();
     const total = countRef.current;
     if (total < 8000) { setError(t('录音太短，请至少说半秒后再结束。')); busy.current = false; return; }
     const pcm = new Int16Array(total);
@@ -740,7 +733,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
     try {
       const text = await transcribeAudio(encodeWav(pcm), { signal: controller.signal,...(kind==='chat'?{lang:getSpeechProfile('interview').inputLanguage}:{}) });
       if (!alive.current || controller.signal.aborted) return;
-      if (!text) { setError(t('没有识别到文字，请检查音量条后重试。')); return; }
+      if (!text) { setError(t('本段未识别到有效文字，请靠近麦克风说完整一句话后稍作停顿。')); return; }
       if (kind === 'chat') await answerQuestion(text, { voiceAsk: true });
       else await followUp({ message: text });
     } catch (e) { if (alive.current && !controller.signal.aborted) setError(t('语音识别失败：{msg}', { msg: (e as Error).message })); }
@@ -756,7 +749,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
           {opening ? t('正在打开麦克风…') : transcribing ? t('识别中…') : recording ? t('结束并提问') : t('语音提问')}
         </span>
       </DwellButton>
-      {recording && <div role="meter" aria-label={t('语音提问音量')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={level} className="h-1 overflow-hidden rounded-full bg-current/10"><div className="h-full bg-emerald-500" style={{ width: `${level}%` }} /></div>}
+
       {error && <div role="alert" className="ov-text-2 px-1 text-[11px]">{error}</div>}
     </div>
   );
@@ -838,7 +831,7 @@ function EndButton({ onEnd }: { onEnd: () => void }) {
     >
       <Square size={11} />
       {!interactive && progress > 0 && (
-        <span className="ov-bar absolute bottom-0 left-0 h-[2px]" style={{ width: `${progress * 100}%` }} />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-current opacity-25" />
       )}
     </button>
   );

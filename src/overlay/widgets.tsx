@@ -55,19 +55,19 @@ export function DwellButton({
       type="button"
       disabled={disabled}
       onClick={interactive && !disabled ? onTrigger : undefined}
-      className={`relative flex h-9 min-w-0 flex-1 flex-col items-center justify-center gap-0 overflow-hidden rounded-md border px-1 leading-[1.15] transition-opacity ${variantClass} ${compact ? 'px-0.5' : ''} ${disabled ? 'opacity-50' : 'hover:opacity-90'}`}
+      className={`relative flex min-h-9 min-w-[5rem] max-w-full flex-auto flex-col items-center justify-center gap-0.5 rounded-md border px-2 py-1 leading-snug transition-opacity ${variantClass} ${compact ? 'text-xs' : ''} ${disabled ? 'opacity-50' : 'hover:opacity-90'}`}
     >
-      <span className="flex max-w-full items-center justify-center gap-1 truncate">
-        <span className="truncate text-[12.5px]">{children}</span>
+      <span className="flex w-full min-w-0 flex-col items-center justify-center gap-0.5">
+        <span className="max-w-full whitespace-normal break-words text-center text-[12.5px] [overflow-wrap:anywhere]" data-overlay-action-label>{children}</span>
         {hotkey && showHints && (
           <span className="ov-text-3 shrink-0 whitespace-nowrap text-[9px] opacity-65">
             {hotkeyBadge(hotkey, isMac())}
           </span>
         )}
       </span>
-      {subLabel && <span className="ov-text-3 max-w-full truncate text-[9px] opacity-65">{subLabel}</span>}
+      {subLabel && <span className="ov-text-3 max-w-full whitespace-normal break-words text-center text-[9px] opacity-65">{subLabel}</span>}
       {!interactive && progress > 0 && (
-        <span className="ov-bar absolute bottom-0 left-0 h-[3px]" style={{ width: `${progress * 100}%` }} />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-current opacity-25" />
       )}
     </button>
   );
@@ -114,11 +114,11 @@ export function DwellIconButton({
       aria-label={label}
       disabled={disabled}
       onClick={interactive && !disabled ? onTrigger : undefined}
-      className={`ov-text relative flex h-6.5 w-6.5 items-center justify-center rounded-md border ${variantClass} ${disabled ? 'opacity-50' : ''}`}
+      className={`ov-text relative flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border ${variantClass} ${disabled ? 'opacity-50' : ''}`}
     >
       {icon}
       {!interactive && progress > 0 && (
-        <span className="ov-bar absolute bottom-0 left-0 h-[2px]" style={{ width: `${progress * 100}%` }} />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-current opacity-25" />
       )}
     </button>
   );
@@ -161,7 +161,7 @@ export function DragHandle({ id = 'drag', hoverMs = 900 }: { id?: string; hoverM
         <circle cx="5" cy="5" r="0.9" fill="currentColor" />
       </svg>
       {!interactive && progress > 0 && (
-        <span className="ov-bar absolute bottom-0 left-0 h-[2px]" style={{ width: `${progress * 100}%` }} />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-current opacity-25" />
       )}
     </div>
   );

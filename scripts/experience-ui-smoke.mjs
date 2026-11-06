@@ -29,6 +29,8 @@ if(name==='plugin:store|delete'){delete (__test.settings||{})[args.key];return;}
 if(name==='cmd_data_commit'){__test.data[args.key]=args.value;return {revision:++__test.revision,data:__test.data};}
 if(name==='cmd_data_read')return {revision:__test.revision,data:__test.data};
 if(name==='cmd_system_speech'){const handler=__test.callbacks.get(__test.events.get('system-speech-state'));handler?.({payload:{id:args.id,speaking:true}});setTimeout(()=>handler?.({payload:{id:args.id,speaking:false}}),60);}
+if(name==='cmd_check_screen_capture_permission')return true;
+if(name==='cmd_capture_screen')return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVhUAAAAASUVORK5CYII=';
 if(name==='cmd_exam_read_image')return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVhUAAAAASUVORK5CYII=';
 if(name==='cmd_storage_layout')return {data:'<app>/data',attachments:'<app>/attachments',backups:'<app>/data/backups',cache:'<cache>',logs:'<logs>',settings:'<settings>'};
 return null;}};
@@ -37,7 +39,7 @@ await writeFile('artifacts/experience-fixture.tsx', `import React,{useState} fro
 import '/src/index.css';import{MockApp}from'/src/mock/MockApp.tsx';import{RecordsPage}from'/src/main/sections/RecordsPage.tsx';
 import{PromptWorkbench}from'/src/main/sections/PromptWorkbench.tsx';import{InterviewOverlay}from'/src/overlay/InterviewOverlay.tsx';import{SimulatedPlatform}from'/src/overlay/platform.tsx';import*as engine from'/src/lib/interviewEngine.ts';window.__engine=engine;import{DeveloperInfo}from'/src/main/sections/DeveloperInfo.tsx';import{StorageSettings}from'/src/main/sections/StorageSettings.tsx';import{AiServicesTab}from'/src/main/sections/AiServicesTab.tsx';
 import{writeData}from'/src/lib/backend.ts';import{saveAiSettings}from'/src/lib/aiSettings.ts';import{defaultAiSettings}from'/src/lib/aiConfig.ts';import{setSetting}from'/src/lib/store.ts';
-await saveAiSettings({...defaultAiSettings(),providers:[{id:'fixture',name:'测试连接',baseUrl:'http://127.0.0.1:9/v1',apiKey:'',authMode:'none',models:[{id:'test-chat',name:'测试模型',source:'custom'}],lastFetchedAt:null}],routes:{chat:{providerId:'fixture',modelId:'test-chat'},vision:null,stt:null,tts:null}});
+await saveAiSettings({...defaultAiSettings(),providers:[{id:'fixture',name:'测试连接',baseUrl:'http://127.0.0.1:9/v1',apiKey:'',authMode:'none',models:[{id:'test-chat',name:'测试模型',source:'custom'}],lastFetchedAt:null}],routes:{chat:{providerId:'fixture',modelId:'test-chat'},vision:{providerId:'fixture',modelId:'test-chat'},stt:null,tts:null}});
 await writeData('interviewSessions',[{id:'mock_session',type:'MOCK_INTERVIEW',title:'模拟面试样例',createdAt:Date.now()-62000,status:'ACTIVE',messages:[{id:'opening',role:'INTERVIEWER',text:'你好，我们开始吧。能结合你最熟悉的项目，讲讲一次性能优化的经历吗？',createdAt:Date.now(),metadata:{turnKind:'NEW'}}],metadata:{mock:true,config:{goalName:'后端开发',company:'项目深挖',difficultyLabel:'3–5 年',turnBudget:8,basicsRatio:40,assistMode:false}}},{id:'real',type:'INTERVIEW',title:'真实面试样例',status:'COMPLETED',createdAt:Date.now(),messages:[]}]);
 await writeData('examSessions',[{id:'exam',title:'笔试样例',status:'COMPLETED',createdAt:Date.now(),questions:Array.from({length:7},(_,i)=>({id:'q'+i,questionText:'原题 '+(i+1)+'：求两个整数之和。',answer:'答案 '+(i+1)+'：a + b',createdAt:Date.now(),screenshotRefs:['exam/turn/image.png']}))}]);
 window.__resetOpening=()=>writeData('interviewSessions',window.__test.data.interviewSessions.map(s=>s.id==='mock_session'?{...structuredClone(s),messages:[],status:'ACTIVE'}:s));
@@ -143,9 +145,24 @@ try {
   await cdp.evaluate("(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'更正后的问题');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
   await cdp.click('更正并重新回答');await cdp.waitFor("document.body.innerText.includes('更正前的参考答案')&&document.body.innerText.includes('更正后的问题')");
   assert.ok(await cdp.evaluate("__engine.getInterviewEngineState().messages.some(message=>message.metadata?.revision===2)"));
-  await cdp.click('补充我的实际回答');await cdp.waitFor("!!document.querySelector('textarea')");
-  await cdp.evaluate("(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'我实际采用本地缓存');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
-  await cdp.click('保存补充');await cdp.waitFor("document.body.innerText.includes('我的实际回答')");
+  assert.equal(await cdp.evaluate("document.body.innerText.includes('补充我的实际回答')"),false);
+  assert.equal(await cdp.evaluate("document.querySelector('[data-testid=audio-input-feedback] [role=meter]')!==null"),false);
+  for(const width of [320,420,560]){
+    await cdp.command('Emulation.setDeviceMetricsOverride',{width,height:640,deviceScaleFactor:1,mobile:false});await delay(100);
+    const clipped=await cdp.evaluate("Array.from(document.querySelectorAll('[data-overlay-action-label]')).filter(e=>{const r=e.getBoundingClientRect();return r.width<25 || r.height<12 || e.scrollWidth>e.clientWidth+2 || r.right>innerWidth+1;}).map(e=>e.textContent)");
+    assert.deepEqual(clipped,[],`action labels clipped at ${width}px`);
+  }
+  await cdp.evaluate("import('/src/lib/aiSettings.ts').then(async m=>{const settings=m.getAiSettings();await m.saveAiSettings({...settings,routes:{...settings.routes,vision:settings.routes.chat}});})");
+  await cdp.evaluate("Array.from(document.querySelectorAll('[data-overlay-action-label]')).find(e=>e.textContent.trim()==='截图提问').closest('button').click()");
+  await cdp.evaluate("import('/src/lib/examEngine.ts').then(m=>{window.__screenSolver=m;})");
+  await cdp.waitFor("__screenSolver.getSolverState().phase==='done'&&__screenSolver.getSolverState().turns.length>0");
+  assert.ok(await cdp.evaluate("__test.calls.some(c=>c.name==='cmd_capture_screen')"));
+  assert.equal(await cdp.evaluate("!!document.querySelector('textarea[aria-label=截图中的问题]')"),false);
+  assert.equal(await cdp.evaluate("__screenSolver.getSolverState().interviewSessionId===__engine.getInterviewEngineState().sessionId"),true);
+  assert.ok(await cdp.evaluate("!!__screenSolver.getSolverState().turns.at(-1).body.trim()"));
+  assert.equal(await cdp.evaluate("document.querySelectorAll('.ov-bar,[role=meter]').length"),0);
+  await cdp.click('返回对话');
+  const compactShot=await cdp.command('Page.captureScreenshot',{format:'png'});await writeFile('artifacts/interview-compact.png',Buffer.from(compactShot.data,'base64'));
   await cdp.evaluate("__engine.endInterview()");assert.deepEqual(await cdp.evaluate('__errors'),[]);
   // Phone transport uses synthetic sockets, so there is no LAN traffic.
   await cdp.command('Page.enable', {});
@@ -164,5 +181,5 @@ try {
   await cdp.evaluate("__phone.socket.onmessage({data:JSON.stringify({t:'state',data:__phone.snapshot})});document.getElementById('end').click()");
   assert.equal(await cdp.evaluate('__phone.sent.at(-1).id'),'end-session');
   await cdp.evaluate("__phone.socket.onmessage({data:JSON.stringify({t:'ended'})})"); assert.equal(await cdp.evaluate('__phone.socket.readyState'),3);
-  console.log('PASS: task preference save; provider capability controls; question correction UI; actual-answer supplement; mock room/system speech; MiMo and Aliyun voice defaults; cancellable speech preparation; streamed playback; cached replay; answer interrupts speech; separate history; seven source/answer/image records; storage; phone return/resume/end.');
+  console.log('PASS: task preference save; provider capability controls; question correction UI; compact action labels; direct screenshot answer without editing; no progress strips; mock room/system speech; MiMo and Aliyun voice defaults; cancellable speech preparation; streamed playback; cached replay; answer interrupts speech; separate history; seven source/answer/image records; storage; phone return/resume/end.');
 } finally {if(cdp.socket){await cdp.command('Browser.close',{}).catch(()=>{});cdp.close();}browser.kill();server.kill();}

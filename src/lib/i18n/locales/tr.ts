@@ -1551,4 +1551,10 @@ export const tr: Record<string, string> = {
   "本次资料量达到上限": "veri hacmi sınırına ulaşıldı",
   "模型重复查询了相同资料": "model aynı veriyi yeniden sorguladı",
   "国家教育考试": "Ulusal eğitim sınavları",
+  "截图提问": "Ekran görüntüsünden sor",
+  "截图中的问题": "Görüntüdeki soru",
+  "识别后可修改，再发送给面试助手。": "Metni inceleyip düzenleyin, ardından mülakat asistanına gönderin.",
+  "未识别到问题文字，请重新截图或手动输入。": "Soru metni bulunamadı. Yeniden görüntü alın veya elle yazın.",
+  "截图识别失败": "Ekran görüntüsü tanınamadı",
+  "屏幕题目": "Ekrandaki soru",
 };

@@ -508,7 +508,7 @@ export async function recordCandidateResponse(text:string):Promise<void> {
   await persistMessages(state.messages);
 }
 
-export async function answerQuestion(question: string, opts?: { correction?: boolean; voiceAsk?: boolean;questionMessageId?:string }) {
+export async function answerQuestion(question: string, opts?: { correction?: boolean; voiceAsk?: boolean;questionMessageId?:string;origin?:'screenshot' }) {
   question=question.trim();if(!question)return;
   if (state.turns.some((turn) => turn.answerPending) && !opts?.correction) {
     bus.emit('toast', { type: 'info', title: t('AI 正在回答，请等回答结束后再发送') });
@@ -516,8 +516,9 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
   }
   const sessionId = state.sessionId;
   if (!sessionId || getInterviewEngineState().status==='ended') return;
+  const returnStatus=state.status==='answering' || state.status==='listening'?'listening':state.status;
   const latestQuestion=[...state.messages].reverse().find(knownInterviewer);
-  let source=opts?.questionMessageId?state.messages.find(message=>message.id===opts.questionMessageId):latestQuestion?.text===question?latestQuestion:undefined;
+  let source=opts?.questionMessageId?state.messages.find(message=>message.id===opts.questionMessageId):opts?.origin==='screenshot'?undefined:latestQuestion?.text===question?latestQuestion:undefined;
   if(opts?.questionMessageId&&!source)return;
   if(opts?.correction){
     source ??= [...state.messages].reverse().find(knownInterviewer);
@@ -528,7 +529,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
     const corrected:ChatMessage={id:`q${Date.now()}-${++answerSequence}`,role:'INTERVIEWER',text:question,createdAt:Date.now(),metadata:{origin:'typed',questionId,contextCutoffId:source?.metadata?.contextCutoffId || source?.id,revision:(source?.metadata?.revision || 1)+1}};
     corrected.metadata!.questionId ??= corrected.id;source=corrected;setState({messages:[...state.messages,corrected]});
   }else if(!source){
-    source={id:`q${Date.now()}-${++answerSequence}`,role:'INTERVIEWER',text:question,createdAt:Date.now(),metadata:{origin:'typed',revision:1}};
+    source={id:`q${Date.now()}-${++answerSequence}`,role:'INTERVIEWER',text:question,createdAt:Date.now(),metadata:{origin:opts?.origin || 'typed',revision:1}};
     source.metadata!.questionId=source.id;setState({messages:[...state.messages,source]});
   }
   const current=++answerGeneration;
@@ -607,7 +608,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
     setState({
       messages: finalMessages,
       turns: state.turns.map((x) => (x.id === turn.id ? { ...x, answer, answerPending: false } : x)),
-      status: state.status === 'answering' ? 'listening' : state.status,
+      status: state.status === 'answering' ? returnStatus : state.status,
     });
     await persistMessages(finalMessages);
     void translateMessage(assistantMsg.id);
@@ -617,7 +618,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
     const aborted = err?.name === 'AbortError';
     if (!aborted) {
       setState({
-        status: state.status === 'answering' ? 'listening' : state.status,
+        status: state.status === 'answering' ? returnStatus : state.status,
         aiDown: true,
         errorMessage: t('AI 作答失败：{msg}', { msg: err.message || t('请检查对话服务配置后重试') }),
       });
@@ -627,7 +628,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
       setState({ messages: finalMessages });
       await persistMessages(finalMessages);
     } else {
-      setState({ status: state.status === 'answering' ? 'listening' : state.status });
+      setState({ status: state.status === 'answering' ? returnStatus : state.status });
     }
   } finally {
     if(checkpointTimer !== null)window.clearTimeout(checkpointTimer);

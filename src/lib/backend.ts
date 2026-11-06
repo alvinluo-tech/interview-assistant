@@ -161,7 +161,7 @@ export interface ChatMessage {
   text: string;
   createdAt: number;
   metadata?: { turnKind?: 'NEW' | 'CONT' | 'SKIP'; webSearch?: { queries: string[]; sources: string[] };
-    origin?:'audio_transcript'|'typed'|'model_generated'|'candidate_response'|'legacy_unknown';
+    origin?:'audio_transcript'|'typed'|'screenshot'|'model_generated'|'candidate_response'|'legacy_unknown';
     questionId?:string;revision?:number;contextCutoffId?:string;superseded?:boolean;completionStatus?:string;hintUsed?:boolean;
     sources?:import('./knowledgeContext').ContextSource[];request?:import('./aiTaskPolicy').AiRequestTrace;
     translation?:{language:import('./speechProfile').SpeechLanguage;text:string;status:'pending'|'ready'|'failed';error?:string};

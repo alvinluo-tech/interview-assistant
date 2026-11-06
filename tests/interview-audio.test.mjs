@@ -126,6 +126,15 @@ test('slow phone transcription keeps at most three segments instead of accumulat
   } finally { await h.engine.endInterview(false); }
 });
 
+test('a screenshot question can be answered while audio is unavailable without pretending capture recovered',async()=>{
+  const h=harness();await h.start('PHONE');h.engine.reportInterviewError(new Error('audio unavailable'));
+  await h.engine.answerQuestion('屏幕上的订单幂等问题',{origin:'screenshot'});
+  const state=h.engine.getInterviewEngineState();
+  assert.equal(state.messages.find(m=>m.role==='INTERVIEWER').metadata.origin,'screenshot');
+  assert.equal(state.status,'error');assert.ok(state.messages.some(m=>m.metadata?.origin==='model_generated'&&m.text));
+  await h.engine.endInterview(false);
+});
+
 test('expired recognition releases the queue and ignores a late speaker identification result', async () => {
   let expire, finishIdentification;
   const h = harness({identify:()=>new Promise(resolve=>{finishIdentification=resolve;}),

@@ -4,7 +4,7 @@ import { evaluateFixture, evaluateModuleFixture } from './compile-fixture.mjs';
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
 function engine({ completionFails = false, imageSaveFails = false, captureFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[],writeFailure={value:false} } = {}) {
-  let resolveRequest, options, requests = 0, sentImages = [], captures = 0;
+  let resolveRequest, rejectRequest, options, requests = 0, sentImages = [], captures = 0;
   let resolveSession, resolveCapture, created = 0;
   const calls = [], saved = [],prompts=[],createdInputs=[];
   const timers = new Set(), checkpoints = new Map();
@@ -31,14 +31,14 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
       };
       if (name === './ai') return { EXAM_SYSTEM_PROMPT: '', buildExamUserPrompt: () => 'test', chatWithImages: async (_prompt, _images, opts) => {
         requests++;prompts.push(_prompt); sentImages.push(_images); options = opts;
-        if (deferred) return new Promise(resolve => { resolveRequest = resolve; });
+        if (deferred) return new Promise((resolve,reject) => { resolveRequest = resolve;rejectRequest=reject; });
         opts.onDelta?.('answer'); return 'answer';
       } };
       throw new Error(`Unexpected dependency ${name}`);
     },
   });
   return { api, calls, saved, settings, timers,prompts,createdInputs,sentImages, captures:()=>captures, runCheckpoints:()=>{for(const fn of [...checkpoints.values()])fn();checkpoints.clear();}, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
-    created: () => created, resolveSession: () => resolveSession?.({ id: 'synthetic-session' }), resolveCapture: () => resolveCapture?.('synthetic') };
+    reject:error=>rejectRequest?.(error),created: () => created, resolveSession: () => resolveSession?.({ id: 'synthetic-session' }), resolveCapture: () => resolveCapture?.('synthetic') };
 }
 
 test('first solve sends all collected screenshots without taking a replacement', async () => {
@@ -46,6 +46,25 @@ test('first solve sends all collected screenshots without taking a replacement',
   await h.api.solve();
   assert.deepEqual(Array.from(h.sentImages[0]),['synthetic-page-1','synthetic-page-2']);
   assert.equal(h.captures(),2);
+});
+
+test('disk failure before upload retains collected pages and recovers without another capture',async()=>{
+  const writeFailure={value:true},h=engine({deferred:false,writeFailure});
+  await h.api.capturePage();await h.api.capturePage();
+  await assert.doesNotReject(h.api.solve());
+  assert.equal(h.requests(),0);assert.equal(h.api.getSolverState().phase,'error');
+  assert.equal(h.api.getSolverState().pendingScreenshots.length,2);
+  writeFailure.value=false;await h.api.solve();
+  assert.equal(h.captures(),2);assert.equal(h.requests(),1);assert.equal(h.api.getSolverState().phase,'done');
+});
+
+test('a partial follow-up survives simultaneous model and disk failures without rejecting the UI action',async()=>{
+  const writeFailure={value:false},h=engine({writeFailure});
+  const first=h.api.solve({screenshots:['original']});await flush();h.resolve('original answer');await first;
+  const follow=h.api.followUp({message:'继续'});await flush();h.options().onDelta('部分追问答案');writeFailure.value=true;
+  h.reject(new Error('HTTP 503'));await assert.doesNotReject(follow);
+  assert.match(h.api.getSolverState().turns.at(-1).body,/部分追问答案/);
+  assert.equal(h.api.getSolverState().phase,'error');assert.equal(h.timers.size,0);
 });
 
 test('code review captures the current screen before requesting an answer', async () => {

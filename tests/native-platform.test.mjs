@@ -52,6 +52,7 @@ test('unmounting before event registration completes cannot leak a listener or d
   const api = evaluateFixture('src/lib/bridge.ts', {
     exports: {}, window: { __TAURI_INTERNALS__: {} },
     require: name => {
+      if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts');
       if (name === '@tauri-apps/api/core') return {};
       if (name === '@tauri-apps/api/event') return { listen: (_event, callback) => {
         handler = callback;

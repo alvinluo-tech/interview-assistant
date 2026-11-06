@@ -75,6 +75,62 @@ function fixture({ sendBinary = async () => {}, overrides = {} } = {}) {
       { onResult: value => results.push(value), onError: value => errors.push(value), onState: value => states.push(value) }) };
 }
 
+test('small live microphone chunks tolerate 80ms bridge sends without accumulating two seconds',async()=>{
+  const pending=[];const f=fixture({sendBinary:()=>new Promise(resolve=>pending.push(resolve))});
+  const capture=await f.open();let nextDelivery=80;
+  const settle=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
+  try {
+    for(let ms=0;ms<12000;ms+=20){
+      capture.push(new Int16Array(320).fill(ms/20));
+      if(ms>=nextDelivery&&pending.length){pending.shift()();nextDelivery=ms+80;}
+      await settle();
+      assert.equal(f.errors.length,0,`live audio incorrectly overflows at ${ms}ms with a usable transport`);
+    }
+    for(let i=0;i<100&&pending.length;i++){pending.shift()();await settle();}
+    const frames=f.sent.filter(Array.isArray);
+    assert.equal(frames.reduce((sum,frame)=>sum+frame.length,0),12000*32);
+    assert.ok(frames.every(frame=>frame.length<=3200),'audio frames must remain at most 100ms');
+    const actual=Uint8Array.from(frames.flat());const view=new DataView(actual.buffer);
+    for(let block=0;block<600;block++)for(let sample=0;sample<320;sample++)assert.equal(view.getInt16((block*320+sample)*2,true),block);
+  } finally {await capture.close();while(pending.length)pending.shift()();}
+});
+
+test('a pending retired send cannot block or reset the reconnected PCM sender',async()=>{
+  const {openRealtimeAsr}=load({setTimeout:(fn,ms)=>setTimeout(fn,ms>=500&&ms<3000?1:ms)});
+  const sockets=[],errors=[];let releaseOld;
+  const capture=await openRealtimeAsr({apiKey:'synthetic',modelId:'fun-asr-realtime'},async()=>{
+    const index=sockets.length;
+    const socket={sent:[],listener:null,addListener(fn){this.listener=fn;return()=>{};},async disconnect(){},async send(data){
+      this.sent.push(data);
+      if(Array.isArray(data)&&index===0)return new Promise(resolve=>{releaseOld=resolve;});
+      if(typeof data==='string'&&JSON.parse(data).header.action==='run-task')this.listener({type:'Text',data:JSON.stringify({header:{task_id:JSON.parse(data).header.task_id,event:'task-started'}})});
+    }};sockets.push(socket);return socket;
+  },{onResult(){},onError:error=>errors.push(error)});
+  try {
+    capture.push(new Int16Array(1600).fill(1));
+    sockets[0].listener({type:'Close',data:{}});await new Promise(resolve=>setTimeout(resolve,20));
+    assert.equal(sockets.length,2);
+    capture.push(new Int16Array(1600).fill(2));await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(sockets[1].sent.filter(Array.isArray).length,1,'new socket must send without waiting for retired send');
+    releaseOld();await new Promise(resolve=>setTimeout(resolve,0));
+    capture.push(new Int16Array(1600).fill(3));await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(sockets[1].sent.filter(Array.isArray).length,2);assert.equal(errors.length,0);
+    assert.equal(sockets[0].sent.filter(Array.isArray).length,1);
+  } finally {releaseOld?.();await capture.close();}
+});
+
+test('stalled real transport still fails at the two-second total PCM bound',async()=>{
+  let release;const f=fixture({sendBinary:()=>new Promise(resolve=>{release=resolve;})});const capture=await f.open();
+  try {
+    capture.push(new Int16Array(1600)); // 100ms currently in flight.
+    for(let i=0;i<19;i++)capture.push(new Int16Array(1600));
+    assert.equal(f.errors.length,0);
+    capture.push(new Int16Array(1));await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(f.errors.length,1,'the in-flight 100ms must count toward the two-second audio limit');
+    assert.match(f.errors[0].message,/积压/);assert.equal(f.disconnects(),1);
+  } finally {release?.();await capture.close();}
+});
+
 test('Singapore official endpoints stream Fun-ASR and reject unavailable models before sending credentials', async () => {
   for (const endpoint of ['wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference', 'wss://ws-example.ap-southeast-1.maas.aliyuncs.com/api-ws/v1/inference']) {
     const f = fixture(); const capture = await f.open({ endpoint, modelId: 'fun-asr-realtime' });

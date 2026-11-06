@@ -279,10 +279,10 @@ function ExamShell({
 
       {/* 底栏 */}
       <div
-        className="mt-1 border-t px-2 py-1.5"
+        className="mt-1 max-h-[50vh] shrink-0 overflow-y-auto border-t px-2 py-1.5"
         style={{ background: skin.surfaceBg, borderTopColor: skin.borderColor }}
       >
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           <DwellButton
             id="mode"
             variant="muted"
@@ -419,7 +419,7 @@ function DwellChip({
       {icon}
       <span className="truncate">{label}</span>
       {!interactive && progress > 0 && (
-        <span className="ov-bar absolute bottom-0 left-0 h-[2px]" style={{ width: `${progress * 100}%` }} />
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-current opacity-25" />
       )}
     </button>
   );

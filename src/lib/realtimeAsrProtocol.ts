@@ -29,7 +29,7 @@ export function validateRealtimeEndpoint(value: string): string {
   return url.href;
 }
 
-/** Duplex PCM transport. Audio queued for >2 seconds is rejected instead of silently growing stale. */
+/** Duplex PCM transport with a bounded two-second PCM backlog (not server recognition latency). */
 export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeConnect, callbacks: RealtimeCallbacks) {
   const endpoint = validateRealtimeEndpoint(config.endpoint || DEFAULT_REALTIME_ENDPOINT);
   if (!isRealtimeAsrModel(config.modelId)) throw new Error(t('持续实时模式请选择 Fun-ASR-Realtime 或 paraformer-realtime-v2；MiMo 请使用自动或分段模式。'));
@@ -37,7 +37,7 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
   if (!config.apiKey || /[\r\n\u0000]/.test(config.apiKey)) throw new Error(t('请填写有效的百炼 API Key。'));
   if (config.vocabularyId && !/^[\w-]{1,200}$/.test(config.vocabularyId)) throw new Error(t('百炼热词表 ID 格式无效。'));
   let socket: RealtimeSocket | null = null, removeListener: (() => void) | undefined;
-  let closed = false, ready = false, epoch = 0, retries = 0, sending = false, queuedBytes = 0;
+  let closed = false, ready = false, epoch = 0, retries = 0, sendingEpoch:number|null = null, queuedBytes = 0, inFlightBytes = 0;
   let taskId = '', retryTimer: ReturnType<typeof setTimeout> | undefined;
   let stableSince = 0;
   let queue: number[][] = [];
@@ -65,7 +65,7 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
   }
   async function close() {
     if (closed) return;
-    closed = true; epoch++; ready = false; queue = []; queuedBytes = 0;
+    closed = true; epoch++; ready = false; queue = []; queuedBytes = 0; inFlightBytes = 0;
     clearTimeout(retryTimer); config.signal?.removeEventListener('abort', abort);
     rejectStarted?.(new DOMException(t('实时识别已取消'), 'AbortError'));
     resolveFinished?.();
@@ -79,7 +79,7 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
     if (closed || retryTimer) return;
     if (ready && Date.now() - stableSince >= 60000) retries = 0;
     if (retries >= 3) { void fail(new Error(t('实时语音连接多次中断：{message}', { message: safeError(error).message }))); return; }
-    ready = false; queue = []; queuedBytes = 0;
+    ready = false; queue = []; queuedBytes = 0; inFlightBytes = 0;
     epoch++; void detach();
     callbacks.onState?.('reconnecting');
     const wait = Math.min(4000, 500 * 2 ** retries++);
@@ -152,16 +152,28 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
     finally { clearTimeout(timeout); resolveStarted = undefined; rejectStarted = undefined; }
   }
   async function drain() {
-    if (sending || !ready || closed) return;
-    sending = true;
-    const sendingEpoch = epoch;
+    if (sendingEpoch === epoch || !ready || closed) return;
+    const currentEpoch = epoch, target = socket;
+    sendingEpoch = currentEpoch;
     try {
-      while (queue.length && ready && socket && !closed) {
-        const frame = queue.shift()!; queuedBytes -= frame.length;
-        await send(frame);
+      while (queue.length && ready && target && !closed && currentEpoch === epoch) {
+        // Coalesce the queued microphone callbacks into <=100ms PCM frames.
+        // One native IPC round-trip per tiny callback can be slower than live audio.
+        const frame:number[] = [];
+        while(queue.length && frame.length<3200){
+          const part=queue[0],take=Math.min(part.length,3200-frame.length);
+          frame.push(...part.slice(0,take));
+          if(take===part.length)queue.shift();else queue[0]=part.slice(take);
+        }
+        queuedBytes -= frame.length;inFlightBytes=frame.length;
+        await send(frame,target);
+        if(currentEpoch===epoch)inFlightBytes=0;
       }
-    } catch (error) { if (sendingEpoch === epoch) reconnect(error); }
-    finally { sending = false; if (ready && queue.length) void drain(); }
+    } catch (error) { if (currentEpoch === epoch) reconnect(error); }
+    finally {
+      if(sendingEpoch===currentEpoch){sendingEpoch=null;if(currentEpoch===epoch)inFlightBytes=0;}
+      if (ready && queue.length && sendingEpoch!==epoch) void drain();
+    }
   }
   config.signal?.addEventListener('abort', abort, { once: true });
   if (config.signal?.aborted) { await close(); throw new DOMException(t('实时识别已取消'), 'AbortError'); }
@@ -169,7 +181,7 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
   return {
     push(pcm: Int16Array) {
       if (closed || !ready) return; // Reconnection gaps are explicitly reported; never replay stale speech.
-      if (pcm.byteLength > 64000 || queuedBytes + pcm.byteLength > 64000) { void fail(new Error(t('语音发送积压超过两秒，请检查网络后重试。'))); return; }
+      if (pcm.byteLength > 64000 || queuedBytes + inFlightBytes + pcm.byteLength > 64000) { void fail(new Error(t('语音发送积压超过两秒，请检查网络后重试。'))); return; }
       const bytes = new Uint8Array(pcm.length * 2); const view = new DataView(bytes.buffer);
       pcm.forEach((sample, index) => view.setInt16(index * 2, sample, true));
       queue.push(Array.from(bytes)); queuedBytes += bytes.length; void drain();
@@ -179,7 +191,7 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         const deadline = Date.now() + 8000;
-        while (sending || queue.length) {
+        while (sendingEpoch === epoch || queue.length) {
           if (closed || !ready) throw new Error(t('语音发送已中断'));
           if (Date.now() >= deadline) throw new Error(t('语音发送超时'));
           await new Promise(resolve => setTimeout(resolve, 10));

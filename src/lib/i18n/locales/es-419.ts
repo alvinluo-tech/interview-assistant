@@ -1551,4 +1551,10 @@ export const es419: Record<string, string> = {
   "本次资料量达到上限": "límite de volumen de datos alcanzado",
   "模型重复查询了相同资料": "el modelo volvió a consultar el mismo material",
   "国家教育考试": "Exámenes educativos nacionales",
+  "截图提问": "Preguntar con captura",
+  "截图中的问题": "Pregunta en la captura",
+  "识别后可修改，再发送给面试助手。": "Revisa y edita el texto antes de enviarlo al asistente de entrevista.",
+  "未识别到问题文字，请重新截图或手动输入。": "No se encontró una pregunta. Captura otra vez o escribe el texto.",
+  "截图识别失败": "Error al reconocer la captura",
+  "屏幕题目": "Pregunta en pantalla",
 };

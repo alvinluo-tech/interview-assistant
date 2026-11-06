@@ -252,6 +252,16 @@ function scheduleTurnCheckpoint(current: number) {
   }, 2000);
 }
 
+/** Recovery writes may fail too; UI fire-and-forget actions must still settle. */
+async function persistRecovery(current:number) {
+  try {await persistTurns();}
+  catch(error){
+    if(current!==generation)return;
+    const message=t('答案暂未保存：{msg}',{msg:String((error as Error).message || error)});
+    setState({phase:'error',statusText:'',errorMessage:[state.errorMessage,message].filter(Boolean).join('\n')});
+  }
+}
+
 // ---------------- 截屏与作答 ----------------
 
 function captureOptions(){return {protectedOnTop:true,compatibilityMode:getSetting('capture.compatibilityMode',false),captureMode:getSetting('capture.mode','screen')};}
@@ -345,7 +355,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   setState({ turns, activeTurnId: turn.id,selectedTurnId:turn.id });
   ensureTicker();
   const startedAt = Date.now();
-  let raw = '';
+  let raw = '', answerCompleted=false;
   try {
     try {
       const refs = await cmd<string[]>('cmd_exam_store_images', {sessionId: state.sessionId, turnId: turn.id, images: shots});
@@ -391,6 +401,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
         : t,
     );
     setState({ phase: 'done', statusText: '', turns: doneTurns, activeTurnId: null });
+    answerCompleted=true;
     await persistTurns();
   } catch (e) {
     if (current !== generation) return;
@@ -404,9 +415,10 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       statusText: '',
       errorMessage: String(err?.message ?? e),
       activeTurnId: null,
-      turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:(err as {completionStatus?:string}).completionStatus || 'failed'}:t),
+      ...(!raw&&!answerCompleted?{pendingScreenshots:[...shots]}:{}),
+      turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:answerCompleted?(t.completionStatus || 'complete'):(err as {completionStatus?:string}).completionStatus || 'failed'}:t),
     });
-    await persistTurns();
+    await persistRecovery(current);
   } finally { if (current === generation) { if(checkpointTimer!==null){window.clearTimeout(checkpointTimer);checkpointTimer=null;} requestController = null; } }
 }
 
@@ -475,6 +487,7 @@ export async function followUp(opts: {
   });
   ensureTicker();
   const startedAt = Date.now();
+  let answerCompleted=false;
   try {
     const context=assembleExamContext(state.turns,last.id);
     let images=opts.screenshots || [];
@@ -518,6 +531,7 @@ export async function followUp(opts: {
       ),
       activeTurnId: null,
     });
+    answerCompleted=true;
     await persistTurns();
   } catch (e) {
     if (current !== generation) return;
@@ -526,9 +540,9 @@ export async function followUp(opts: {
       statusText: '',
       errorMessage: String((e as Error).message ?? e),
       activeTurnId: null,
-      turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:(e as {completionStatus?:string}).completionStatus || 'failed'}:t),
+      turns:state.turns.map(t=>t.id===turn.id?{...t,completionStatus:answerCompleted?(t.completionStatus || 'complete'):(e as {completionStatus?:string}).completionStatus || 'failed'}:t),
     });
-    await persistTurns();
+    await persistRecovery(current);
   } finally { if (current === generation) { if(checkpointTimer!==null){window.clearTimeout(checkpointTimer);checkpointTimer=null;} requestController = null; } }
 }
 

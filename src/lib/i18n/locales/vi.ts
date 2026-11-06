@@ -1551,5 +1551,11 @@ export const vi: Record<string, string> = {
   "本次资料量达到上限": "dung lượng tài liệu đạt giới hạn",
   "模型重复查询了相同资料": "mô hình tra cứu lặp lại cùng một tài liệu",
   "国家教育考试": "Kỳ thi giáo dục quốc gia",
+  "截图提问": "Hỏi từ ảnh chụp",
+  "截图中的问题": "Câu hỏi trong ảnh chụp",
+  "识别后可修改，再发送给面试助手。": "Kiểm tra và sửa văn bản rồi gửi cho trợ lý phỏng vấn.",
+  "未识别到问题文字，请重新截图或手动输入。": "Không tìm thấy câu hỏi. Chụp lại hoặc nhập thủ công.",
+  "截图识别失败": "Nhận dạng ảnh chụp thất bại",
+  "屏幕题目": "Câu hỏi trên màn hình",
 };
 

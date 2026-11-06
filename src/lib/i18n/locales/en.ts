@@ -1551,4 +1551,10 @@ export const en: Record<string, string> = {
   "本次资料量达到上限": "data volume limit reached",
   "模型重复查询了相同资料": "the model re-queried the same data",
   "国家教育考试": "National education exams",
+  "截图提问": "Ask from screenshot",
+  "截图中的问题": "Question in screenshot",
+  "识别后可修改，再发送给面试助手。": "Review and edit the text, then send it to the interview assistant.",
+  "未识别到问题文字，请重新截图或手动输入。": "No question text found. Capture again or enter it manually.",
+  "截图识别失败": "Screenshot recognition failed",
+  "屏幕题目": "Screen question",
 };

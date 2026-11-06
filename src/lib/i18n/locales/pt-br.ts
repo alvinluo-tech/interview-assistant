@@ -1551,4 +1551,10 @@ export const ptBr: Record<string, string> = {
   "本次资料量达到上限": "limite de volume de dados atingido",
   "模型重复查询了相同资料": "o modelo consultou os mesmos dados repetidamente",
   "国家教育考试": "Exames nacionais de educação",
+  "截图提问": "Perguntar por captura",
+  "截图中的问题": "Pergunta na captura",
+  "识别后可修改，再发送给面试助手。": "Revise e edite o texto antes de enviar ao assistente de entrevista.",
+  "未识别到问题文字，请重新截图或手动输入。": "Nenhuma pergunta encontrada. Capture novamente ou digite o texto.",
+  "截图识别失败": "Falha ao reconhecer a captura",
+  "屏幕题目": "Pergunta na tela",
 };

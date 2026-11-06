@@ -2,7 +2,7 @@ import { getAiSettings, getAiLoadError } from './aiSettings';
 import { resolveAiRoute, usesLiveSpeech, type AiRole } from './aiConfig';
 import { aiFetch } from './aiTransport';
 import { aiHeaders, consumeChatResult, withAiRequest } from './aiProtocol';
-import {PROMPT_VERSION,outputLimit,checkInputBudget,type AiTask,type AiRequestTrace} from './aiTaskPolicy';
+import {PROMPT_VERSION,outputLimit,checkInputBudget,retryDelay,type AiTask,type AiRequestTrace} from './aiTaskPolicy';
 import {applyTaskInstructions,type TaskPreferences} from './taskPrompts';
 import {getSetting} from './store';
 import { recognizeSpeech, type TranscriptionOptions } from './speechProtocol';
@@ -29,6 +29,13 @@ function route(role: AiRole) {
   const settings = getAiSettings();
   return { settings, ...resolveAiRoute(settings, role) };
 }
+function waitForRetry(ms:number,signal?:AbortSignal):Promise<void> {
+  return new Promise((resolve,reject)=>{
+    const abort=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);reject(signal?.reason || new DOMException('Aborted','AbortError'));};
+    const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve();},ms);
+    signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
+  });
+}
 async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<string> {
   const { settings, provider, modelId } = route(role);
   const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
@@ -41,17 +48,28 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
     opts.schema&&capabilities?.structuredOutput==='json_object'?{type:'json_object'}:undefined;
   try {
   checkInputBudget(messages,limit,capabilities);
+  let emitted=false;
+  const recoverableTask=['interview-answer','exam-solve','exam-followup'].includes(task);
+  for(let attempt=0;;attempt++){
+  opts.signal?.throwIfAborted();
+  try {
   return await withAiRequest(provider, 'chat/completions', {
     method: 'POST', headers: aiHeaders(provider, true),
     body: JSON.stringify({ model: modelId, messages, stream: true,
       ...(opts.temperature === undefined || capabilities?.temperature===false ? {} : { temperature: opts.temperature }),
       ...(outputParameter==='none'?{}:{[outputParameter]:limit}),...(format?{response_format:format}:{}),
     }),
-  }, settings.timeoutMs, async (response,pending) => {
-    const result=await consumeChatResult(response,delta=>{trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending);
+  }, Math.max(1,settings.timeoutMs-(Date.now()-trace.startedAt)), async (response,pending) => {
+    const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending);
     trace.completionStatus=result.completionStatus;trace.finishReason=result.finishReason;Object.assign(trace,result.usage);
     return result.text;
   }, aiFetch, opts.signal);
+  } catch(error){
+    const delay=recoverableTask&&!emitted&&attempt===0&&!opts.signal?.aborted?retryDelay(error,attempt):null;
+    if(delay===null || Date.now()-trace.startedAt+delay>=settings.timeoutMs)throw error;
+    await waitForRetry(delay,opts.signal);
+  }
+  }
   }catch(error){trace.completionStatus=opts.signal?.aborted?'cancelled':(error as {completionStatus?:string}).completionStatus || 'failed';throw error;}
   finally {trace.elapsedMs=Date.now()-trace.startedAt;opts.onTrace?.({...trace});}
 }

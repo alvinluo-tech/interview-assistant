@@ -113,7 +113,7 @@ function requestHarness(capabilities,response) {
   const provider={id:'p',name:'测试接口',baseUrl:'https://example.invalid/v1',authMode:'none',apiKey:'',models:[{id:'model',source:'custom',capabilities}]};
   const api=load('src/lib/aiRequests.ts',{'./aiSettings':{getAiSettings:()=>({timeoutMs:5000}),getAiLoadError:()=>''},
     './aiConfig':{resolveAiRoute:()=>({provider,modelId:'model'})},'./store':{getSetting:(_key,fallback)=>fallback},
-    './aiTransport':{aiFetch:async (_url,init)=>{calls.push(JSON.parse(init.body));return response || new Response(JSON.stringify({choices:[{message:{content:'OK'},finish_reason:'stop'}],usage:{prompt_tokens:20,completion_tokens:2,prompt_tokens_details:{cached_tokens:10}}}),{headers:{'content-type':'application/json'}});}}});
+    './aiTransport':{aiFetch:async (_url,init)=>{calls.push(JSON.parse(init.body));return (typeof response==='function'?response(calls.length):response) || new Response(JSON.stringify({choices:[{message:{content:'OK'},finish_reason:'stop'}],usage:{prompt_tokens:20,completion_tokens:2,prompt_tokens_details:{cached_tokens:10}}}),{headers:{'content-type':'application/json'}});}}});
   return {calls,traces,request:options=>api.chatStream({messages:[{role:'user',content:'测试'}],task:'mock-question',temperature:0.5,schema:{name:'question',schema:{type:'object'}},onTrace:trace=>traces.push(trace),...options})};
 }
 
@@ -123,6 +123,29 @@ test('known provider capabilities select compatible parameters and capture actua
   assert.equal(body.max_completion_tokens,500);assert.equal(body.max_tokens,undefined);assert.equal(body.temperature,undefined);
   assert.equal(body.response_format.json_schema.strict,true);assert.equal(body.capabilities,undefined);
   assert.equal(h.traces[0].completionStatus,'complete');assert.equal(h.traces[0].cachedTokens,10);assert.ok(h.traces[0].firstOutputMs>=0);
+});
+
+test('interview and exam recover one transient pre-output failure without adding turns',async()=>{
+  const h=requestHarness(undefined,n=>n===1?new Response('{}',{status:503}):undefined);
+  assert.equal(await h.request({task:'exam-solve'}),'OK');assert.equal(h.calls.length,2);assert.equal(h.traces.length,1);
+});
+
+test('retries remain bounded and authentication failures never repeat',async()=>{
+  const h=requestHarness(undefined,()=>new Response('{}',{status:503}));
+  await assert.rejects(h.request({task:'interview-answer'}),/503/);assert.equal(h.calls.length,2);
+  const denied=requestHarness(undefined,()=>new Response('{}',{status:401}));await assert.rejects(denied.request({task:'exam-followup'}),/401/);assert.equal(denied.calls.length,1);
+});
+
+test('cancelling during a transient retry delay sends no replacement request',async()=>{
+  const controller=new AbortController(),h=requestHarness(undefined,()=>new Response('{}',{status:503}));
+  const result=h.request({task:'interview-answer',signal:controller.signal});setTimeout(()=>controller.abort(),20);
+  await assert.rejects(result,error=>error.name==='AbortError');assert.equal(h.calls.length,1);
+});
+
+test('a failed stream after visible output never retries or duplicates the partial answer',async()=>{
+  const h=requestHarness(undefined,()=>new Response('data: '+JSON.stringify({choices:[{delta:{content:'已有半段答案'}}]})+'\n\ndata: '+JSON.stringify({error:{message:'HTTP 503 stream interrupted'}})+'\n\n',{headers:{'content-type':'text/event-stream'}}));
+  const chunks=[];await assert.rejects(h.request({task:'exam-solve',onDelta:text=>chunks.push(text)}),/503/);
+  assert.equal(h.calls.length,1);assert.deepEqual(chunks,['已有半段答案']);
 });
 
 test('unknown capabilities do not force JSON support and input overflow sends no request',async()=>{
