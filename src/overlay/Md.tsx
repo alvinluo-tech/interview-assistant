@@ -1,19 +1,59 @@
-/* 浮窗 markdown 渲染器：代码块逐行渲染、折行不横滚、答案标签、表格/引用/列表。 */
-import { Fragment, useId, type ReactNode } from 'react';
+/*
+ * 浮窗 markdown 渲染器。
+ *
+ * 两条路径：
+ * - ≤ RICH_MARKDOWN_LIMIT：用 react-markdown + remark-gfm（CommonMark + GFM 全量语法），
+ *   代码块/表格/标签由自定义组件接管，格式问题交给规范解析器，不再手写状态机。
+ * - 超过上限：退回原来的手写渲染器（线性、带预算保护）。remark 的解析成本随长度线性上升，
+ *   浮窗里不能让几万字的答案在流式阶段反复重解析。
+ *
+ * 流式更新统一节流：每 RENDER_THROTTLE_MS 最多重新解析一次，避免每个 token 都跑一遍 AST。
+ */
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { t } from '@/lib/i18n';
 import { DwellButton } from './widgets';
 import { usePlatformOptional } from './platform';
 
+/** 超过这个长度改用轻量渲染器。 */
+export const RICH_MARKDOWN_LIMIT = 20000;
+/** 流式节流窗口。 */
+export const RENDER_THROTTLE_MS = 120;
+
 export function Md({ text }: { text: string }) {
-  return <div className="overlay-md">{renderBlocks(text)}</div>;
+  const throttled = useThrottled(text, RENDER_THROTTLE_MS);
+  if (text.length > RICH_MARKDOWN_LIMIT) {
+    return <div className="overlay-md">{renderBlocks(text)}</div>;
+  }
+  return (
+    <div className="overlay-md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>{throttled}</ReactMarkdown>
+    </div>
+  );
 }
 
-/**
- * 代码块右上角的复制按钮。
- * 浮窗里是穿透模式，只能用驻留按钮；主窗口（复盘报告等）没有平台容器，退化成普通按钮。
- */
+/** 把高频变更的文本压到固定频率，保证 remark 不会每个 token 都解析一次。 */
+function useThrottled(value: string, ms: number): string {
+  const [shown, setShown] = useState(value);
+  const latest = useRef(value);
+  const timer = useRef<number | null>(null);
+  latest.current = value;
+  useEffect(() => {
+    if (timer.current !== null) return;
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      setShown(latest.current);
+    }, ms);
+  }, [value, ms]);
+  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  return shown;
+}
+
+/** 代码块右上角的复制按钮：浮窗走驻留按钮，主窗口（无平台容器）退化成普通按钮。 */
 function CopyCodeButton({ code }: { code: string }) {
   const platform = usePlatformOptional();
+  // 每块代码一个唯一 zone id，否则多个代码块会抢同一个热区。
   const id = `md-copy-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const copy = () => {
     void import('@tauri-apps/plugin-clipboard-manager')
@@ -25,6 +65,66 @@ function CopyCodeButton({ code }: { code: string }) {
   }
   return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{t('复制')}</DwellButton>;
 }
+
+function CodeBlock({ language, code }: { language: string; code: string }) {
+  return (
+    <div className="overlay-code-block">
+      <div className="overlay-code-head">
+        <span className="overlay-code-lang">{language || t('代码')}</span>
+        <CopyCodeButton code={code} />
+      </div>
+      <pre className="overlay-code-body">{code}</pre>
+    </div>
+  );
+}
+
+/** 最小的 hast 结构，只用来从 `pre > code` 里取语言和原文。 */
+type HastNode = {
+  type: string;
+  value?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+};
+
+function hastText(node?: HastNode): string {
+  if (!node) return '';
+  if (node.type === 'text') return node.value ?? '';
+  return (node.children ?? []).map(hastText).join('');
+}
+
+function hastLanguage(node?: HastNode): string {
+  const code = node?.children?.[0];
+  const names = code?.properties?.className;
+  const list = Array.isArray(names) ? names.map(String) : typeof names === 'string' ? [names] : [];
+  for (const name of list) {
+    const hit = /^language-([\w+#-]+)$/.exec(name);
+    if (hit) return hit[1];
+  }
+  return '';
+}
+
+const COMPONENTS = {
+  /*
+   * 围栏代码块由 `pre` 整体接管：react-markdown 传给组件的是 hast 节点，能直接取到
+   * `pre > code` 的语言和原文。这样单行且没写语言的围栏块也仍然是代码块，
+   * 不会被误判成行内代码（行内代码只走下面的 `code`）。
+   */
+  pre: ({ node }: { node?: HastNode }) => (
+    <CodeBlock language={hastLanguage(node)} code={hastText(node).replace(/\n$/, '')} />
+  ),
+  code: ({ children }: { children?: ReactNode }) => <code className="inline-code">{children}</code>,
+  a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+    <a href={href} target="_blank" rel="noreferrer">{children}</a>
+  ),
+  // 「核心要点 / 参考回答」这类标签单独加样式。
+  strong: ({ children }: { children?: ReactNode }) => {
+    const label = String(children ?? '');
+    const isLabel = /^(核心要点|参考回答|要点|回答|答案)$/.test(label);
+    return <strong className={isLabel ? 'md-answer-label' : undefined}>{children}</strong>;
+  },
+} as const;
+
+// ---------------- 超长内容的轻量渲染器（原实现，保持不动） ----------------
 
 function renderBlocks(src: string, depth=0, budget={remaining:6000}): ReactNode[] {
   const plain=()=>[<pre key="plain" className="whitespace-pre-wrap break-words font-sans" style={{overflowWrap:'anywhere'}} aria-label={t('复杂内容按纯文本显示')}>{src}</pre>];
@@ -185,10 +285,9 @@ function inline(src: string): ReactNode[] {
   let key = 0;
   while ((m = pattern.exec(src)) !== null) {
     if (m.index > last) {
-      nodes.push(<Fragment key={key++}>{src.slice(last, m.index)}</Fragment>);
+      nodes.push(<span key={key++}>{src.slice(last, m.index)}</span>);
     }
     if (m[1]) {
-      // 答案标签：**核心要点**/**参考回答** 单独成段标记
       const isLabel = /^(核心要点|参考回答|要点|回答|答案)$/.test(m[2]);
       nodes.push(
         <strong key={key++} className={isLabel ? 'md-answer-label' : undefined}>
@@ -215,7 +314,7 @@ function inline(src: string): ReactNode[] {
     last = m.index + m[0].length;
   }
   if (last < src.length) {
-    nodes.push(<Fragment key={key++}>{src.slice(last)}</Fragment>);
+    nodes.push(<span key={key++}>{src.slice(last)}</span>);
   }
   return nodes;
 }
