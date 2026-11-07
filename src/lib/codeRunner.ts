@@ -166,7 +166,8 @@ function disposePython() {
 
 function pythonWorker(): Worker {
   if (pyWorker) return pyWorker;
-  const worker = new Worker(new URL('../workers/pyodide.runner.ts', import.meta.url), { type: 'module' });
+  // 经典 Worker：Pyodide 在 worker 里靠 importScripts 加载 asm.js，module worker 没有这个 API。
+  const worker = new Worker(new URL('../workers/pyodide.runner.ts', import.meta.url));
   worker.onmessage = (event: MessageEvent<{ id: number; stdout: string; stderr: string }>) => {
     const pending = pyPending.get(event.data.id);
     if (!pending) return;

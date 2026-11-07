@@ -1,13 +1,16 @@
 /*
- * Python 执行 Worker：用 Pyodide（CPython → WASM）在 Web Worker 里跑用户代码。
+ * Python 执行 Worker（经典 Worker，不是 module worker）。
  *
- * 为什么必须在 Worker 里：Pyodide 的 eval 是同步阻塞的，主线程跑会卡死界面；
- * 而 Pyodide 的「中断」依赖 SharedArrayBuffer（需要 COOP/COEP 响应头，Tauri 资源协议上很别扭），
- * 所以超时只能靠主线程 terminate() 这个 Worker，下次执行再重新初始化。
+ * 为什么必须是经典 Worker：Pyodide 的加载器在 worker 里靠 `importScripts()` 加载
+ * `pyodide.asm.js`；module worker 没有 importScripts，Pyodide 会判定不出运行环境直接报错
+ * （它没有 eval 兜底，我们也不想给应用开 unsafe-eval）。
  *
- * 沙箱边界：Pyodide 只有内存文件系统（MEMFS），没有宿主 fs；WASM 本身没有 socket。
- * 这里额外把 fetch / XMLHttpRequest / WebSocket / importScripts 清掉，避免用户代码
- * 通过 Pyodide 的 pyfetch 走 JS 的 fetch 出去。
+ * 所以这里用 UMD 版 `/pyodide/pyodide.js` + `importScripts`，全程只加载同源经典脚本，
+ * 符合应用 CSP（script-src 'self' 'wasm-unsafe-eval'）。
+ *
+ * 沙箱边界：Pyodide 只有内存文件系统（MEMFS），WASM 本身没有 socket；
+ * 加载完成后把 fetch / XMLHttpRequest / WebSocket / importScripts 全部清掉，
+ * 避免用户代码借 Pyodide 的 pyfetch 出网。
  */
 
 interface RunRequest { id: number; code: string; stdin: string }
@@ -19,23 +22,24 @@ interface PyodideApi {
   setStderr(options: { batched: (text: string) => void }): void;
 }
 
-const scope = self as unknown as {
+interface WorkerScope {
   onmessage: ((event: MessageEvent<RunRequest>) => void) | null;
   postMessage: (message: RunResponse) => void;
-};
+  loadPyodide?: (options: { indexURL: string }) => Promise<PyodideApi>;
+  importScripts?: (...urls: string[]) => void;
+}
 
+declare function importScripts(...urls: string[]): void;
+
+const scope = self as unknown as WorkerScope;
 let ready: Promise<PyodideApi> | null = null;
 
 function boot(): Promise<PyodideApi> {
   if (ready) return ready;
   ready = (async () => {
-    // 只允许同源加载 Pyodide 自身的资源；加载完成后立即封掉出网能力。
-    // 运行时拼路径：public/ 下的文件不能被 Vite 当成源码 import（会直接报错），
-    // 拼成变量后 import() 才不会被静态分析。
-    const base = ['', 'pyodide', ''].join('/');
-    const moduleUrl = [base, 'pyodide.mjs'].join('');
-    const module = await import(/* @vite-ignore */ moduleUrl) as { loadPyodide: (options: { indexURL: string }) => Promise<PyodideApi> };
-    const pyodide = await module.loadPyodide({ indexURL: base });
+    importScripts('/pyodide/pyodide.js');
+    if (typeof scope.loadPyodide !== 'function') throw new Error('pyodide runtime missing');
+    const pyodide = await scope.loadPyodide({ indexURL: '/pyodide/' });
     const globals = globalThis as unknown as Record<string, unknown>;
     globals.fetch = undefined;
     globals.XMLHttpRequest = undefined;

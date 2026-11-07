@@ -9,7 +9,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const source = path.dirname(require.resolve('pyodide/package.json'));
 const destination = path.resolve('public/pyodide');
-const files = ['pyodide.mjs', 'pyodide.asm.js', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'];
+const files = ['pyodide.js', 'pyodide.asm.js', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'];
 
 mkdirSync(destination, { recursive: true });
 for (const file of files) {
