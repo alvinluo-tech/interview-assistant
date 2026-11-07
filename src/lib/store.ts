@@ -31,6 +31,9 @@ async function getStore() {
   return storePromise;
 }
 
+/** 已下线的设置键：旧版本写过，现在没有任何读取方，加载时顺手从 store.json 清掉。 */
+const RETIRED_KEYS = ['local.user'];
+
 export function hydrateStore(): Promise<void> {
   if (hydrated) return Promise.resolve();
   if (hydration) return hydration;
@@ -42,6 +45,13 @@ export function hydrateStore(): Promise<void> {
       if (v !== null && v !== undefined) loaded.set(key, v);
     }
     loaded.forEach((value, key) => {cache.set(key, value);mirrorDesktopTheme(key, value);});
+    for (const key of RETIRED_KEYS) {
+      // 清理失败只影响文件整洁，不能让设置加载整体失败。
+      try {
+        const stale = await store.get<unknown>(key);
+        if (stale !== null && stale !== undefined) { await store.delete(key); await store.save(); }
+      } catch { /* ignore */ }
+    }
     hydrated = true;
     listeners.forEach((l) => l());
   })().catch(error => {storePromise = null;throw error;}).finally(() => {hydration = null;});
@@ -250,7 +260,6 @@ export const ALL_KEYS = [
   'audio.excludedOutputs',
   'interviewPreference', // 复刻新增：面试偏好（本地化替代 updateInterviewPreference）
   'mac.screenShareNoticeDismissed',
-  'local.user', // 复刻新增：本地用户
   'desktop.theme', // 主窗口深浅色（'system' | 'light' | 'dark'）
   'desktop.uiScale', // 主窗口界面大小
   'interview.microphoneId', // 麦克风检查/语音提问选择的输入设备

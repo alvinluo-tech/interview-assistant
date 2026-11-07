@@ -4,8 +4,8 @@
  */
 import { lazy, Suspense, useEffect, useState } from 'react';
 import {
+  ArrowUpRight,
   BookOpen,
-  ChevronsUpDown,
   Copy,
   FileText,
   History,
@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import brandIcon from '../../src-tauri/icons/128x128@2x.png';
-import { Badge, Card, ToastViewport } from '@/ui/primitives';
+import { Card, ToastViewport, showToast } from '@/ui/primitives';
 import { BRAND, isMac } from '@/lib/env';
 import { t } from '@/lib/i18n';
 import { getSetting, setSetting, useSetting } from '@/lib/store';
@@ -38,7 +38,6 @@ import { UsageNotice } from './UsageNotice';
 import { Onboarding } from './Onboarding';
 import { ChangelogDialog } from './ChangelogDialog';
 import { FeedbackDialog } from './FeedbackDialog';
-import { LocalProfileDialog } from './LocalProfileDialog';
 import { UpdateNotice } from './UpdateNotice';
 const FreeChatPage = lazy(() => import('./sections/FreeChatPage').then(module => ({default: module.FreeChatPage})));
 
@@ -104,7 +103,6 @@ export function MainWindow() {
   const onboardingSkipped = useSetting('onboarding.skipped', false)[0];
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
 
   // 启动副作用：注册 panic + 动作热键、浮窗异常事件
   useEffect(() => {
@@ -182,13 +180,11 @@ export function MainWindow() {
       <UsageNotice />
       {changelogOpen && <ChangelogDialog onClose={() => setChangelogOpen(false)} />}
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
-      <LocalProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
       <div className="flex min-h-0 flex-1">
         <Sidebar
           section={section}
           onNavigate={setSection}
           onFeedback={() => setFeedbackOpen(true)}
-          onProfile={() => setProfileOpen(true)}
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto">
@@ -285,18 +281,33 @@ export function BrandMark({ size = 36 }: { size?: number }) {
   );
 }
 
+const PROJECT_REPO = 'https://github.com/alvinluo-tech/interview-assistant';
+
+/** 用系统浏览器打开项目仓库；打不开时给出提示，不让点击看起来没反应。 */
+function openProjectRepo() {
+  void import('@tauri-apps/plugin-opener')
+    .then(({ openUrl }) => openUrl(PROJECT_REPO))
+    .catch(reason => showToast({ type: 'error', title: t('链接暂时无法打开'), description: String(reason) }));
+}
+
+/** GitHub 标志（lucide 已移除品牌图标，这里内联一份） */
+function GitHubMark({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.1c-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .3.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z" />
+    </svg>
+  );
+}
+
 function Sidebar({
   section,
   onNavigate,
   onFeedback,
-  onProfile,
 }: {
   section: Section;
   onNavigate: (s: Section) => void;
   onFeedback: () => void;
-  onProfile: () => void;
 }) {
-  const [user] = useSetting('local.user', { name: t('本地用户'), email: '' });
   return (
     <aside className="flex min-h-0 w-56 shrink-0 flex-col overflow-y-auto border-r bg-muted/35">
       <div className="flex items-center gap-2.5 px-4 pb-2 pt-4">
@@ -346,15 +357,25 @@ function Sidebar({
 
       <div className="flex-1" />
 
-      {/* 剩余额度卡（本地模式：不限制） */}
-      <div className="mx-3 mb-2 rounded-lg border bg-card p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">{t('剩余额度')}</span>
-          <Badge variant="amber">{t('本地版')}</Badge>
-        </div>
-        <div className="mt-1 text-lg font-semibold">{t('无限')}</div>
-        <div className="text-[11px] text-muted-foreground">{t('使用自己的 AI 接口 · 不限量')}</div>
-      </div>
+      {/* GitHub 卡片：跳转到项目仓库 */}
+      <button
+        type="button"
+        onClick={openProjectRepo}
+        className="group mx-3 mb-2 flex items-start gap-2.5 rounded-lg border bg-card p-3 text-left transition-colors hover:border-foreground/20 hover:bg-accent/60"
+      >
+        <span className="mt-px text-muted-foreground transition-colors group-hover:text-foreground">
+          <GitHubMark size={16} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1 text-[13px] font-medium">
+            {t('GitHub 仓库')}
+            <ArrowUpRight size={12} className="text-muted-foreground" />
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+            {t('查看源码、更新日志与问题反馈')}
+          </span>
+        </span>
+      </button>
 
       <div className="mx-3 mb-2 flex flex-col gap-0.5">
         <button
@@ -374,23 +395,6 @@ function Sidebar({
         >
           <MessageSquareText size={15} className="text-muted-foreground" />
           {t('反馈')}
-        </button>
-      </div>
-
-      <div className="border-t px-3 py-2.5">
-        <button
-          type="button"
-          onClick={onProfile}
-          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-        >
-          <span className="flex size-7 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
-            {user.name.slice(0, 1)}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium">{user.name}</span>
-            {user.email && <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>}
-          </span>
-          <ChevronsUpDown size={13} className="text-muted-foreground" />
         </button>
       </div>
     </aside>
