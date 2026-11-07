@@ -34,7 +34,9 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
         if (deferred) return new Promise((resolve,reject) => { resolveRequest = resolve;rejectRequest=reject; });
         opts.onDelta?.('answer'); return 'answer';
       } };
-      throw new Error(`Unexpected dependency ${name}`);
+      if (name === './codeQuestion') return { extractCodeBlock: () => null, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [] };
+      if (name === './codeScaffold') return { buildScaffold: () => ({ filename: 'solution.py', content: '', runnable: false }) };
+      if (name === './codeRunner') return { verifyCode: async () => ({ verdict: 'unverified', runner: '', passed: 0, total: 0, outcomes: [] }) };      throw new Error(`Unexpected dependency ${name}`);
     },
   });
   return { api, calls, saved, settings, timers,prompts,createdInputs,sentImages, captures:()=>captures, runCheckpoints:()=>{for(const fn of [...checkpoints.values()])fn();checkpoints.clear();}, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),

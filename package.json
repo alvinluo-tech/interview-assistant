@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/sync-pdf-assets.mjs && vite",
-    "build": "node scripts/sync-pdf-assets.mjs && tsc && vite build",
+    "dev": "node scripts/sync-pdf-assets.mjs && node scripts/sync-pyodide.mjs && vite",
+    "build": "node scripts/sync-pdf-assets.mjs && node scripts/sync-pyodide.mjs && tsc && vite build",
     "preview": "vite preview",
     "test:byok": "node scripts/test-byok.mjs",
     "test:audio": "node --test tests/interview-audio.test.mjs",
@@ -41,7 +41,9 @@
     "@tauri-apps/plugin-websocket": "^2.5.0",
     "lucide-react": "^1.62.0",
     "pdfjs-dist": "^6.4.299",
+    "pyodide": "0.26.4",
     "qrcode": "^1.5.4",
+    "quickjs-emscripten": "0.32.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

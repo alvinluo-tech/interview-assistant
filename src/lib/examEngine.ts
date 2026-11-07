@@ -9,6 +9,9 @@ import { getSetting, ExamCustomization, DEFAULT_EXAM_CUSTOMIZATION } from './sto
 import { t } from './i18n';
 import {assembleExamContext} from './aiContext';
 import type {AiRequestTrace} from './aiTaskPolicy';
+import { extractCodeBlock, detectLanguage, detectRunMode, parseSamples, type RunMode } from './codeQuestion';
+import { buildScaffold } from './codeScaffold';
+import { verifyCode, type CodeVerdict } from './codeRunner';
 
 export const EXAM_MODES = {
   instant: {
@@ -64,6 +67,11 @@ export interface SolverTurn {
   /** [[FOLLOWUP: a|b|c]] 服务端建议的追问 */
   followUpOptions: string[];
   createdAt: number;
+  /** 代码题的本地验证结果（异步写入，不阻塞答案） */
+  verification?: CodeVerdict;
+  codeLanguage?: string;
+  codeMode?: RunMode;
+  sampleCount?: number;
 }
 
 export interface SolverState {
@@ -403,6 +411,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     setState({ phase: 'done', statusText: '', turns: doneTurns, activeTurnId: null });
     answerCompleted=true;
     await persistTurns();
+    void verifyTurnCode(turn.id, doneTurns.find((x) => x.id === turn.id)?.body ?? '', doneTurns.find((x) => x.id === turn.id)?.questionText, current);
   } catch (e) {
     if (current !== generation) return;
     const err = e as Error;
@@ -611,6 +620,30 @@ export function extractLastCodeBlock(text: string): string | null {
   return last ? last[1] : null;
 }
 
+/**
+ * 代码题本地验证：解析题面样例 → 生成可运行文件 → 在本地 WASM 执行器里跑 → 把结论写回 turn。
+ * 全程异步：失败只影响这一行标注，不影响答案本身，也不会把整场笔试置为出错。
+ */
+async function verifyTurnCode(turnId: string, answer: string, questionText: string | undefined, generationAtStart: number) {
+  const block = extractCodeBlock(answer);
+  if (!block) return;
+  const language = detectLanguage(block, questionText ?? '');
+  const samples = parseSamples(questionText ?? '');
+  if (!samples.length) return;
+  const mode = detectRunMode(block.code, questionText ?? '');
+  // ACM 模式答案本身就是完整程序；核心代码模式要先补读入/调用/打印的驱动。
+  const runnable = mode === 'acm' ? block.code : buildScaffold({ language, code: block.code, mode, samples }).content;
+  let verdict: CodeVerdict;
+  try {
+    verdict = await verifyCode({ language, code: runnable, samples });
+  } catch (error) {
+    verdict = { verdict: 'unverified', runner: '', passed: 0, total: samples.length, outcomes: [], note: 'error' };
+  }
+  if (generationAtStart !== generation) return;
+  setState({ turns: state.turns.map((turn) => (turn.id === turnId ? { ...turn, verification: verdict, codeLanguage: language, codeMode: mode, sampleCount: samples.length } : turn)) });
+  void persistTurns();
+}
+
 export function stripMarkdown(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, '')
@@ -621,6 +654,27 @@ export function stripMarkdown(text: string): string {
 }
 
 /** Keep recognized source text separate from the answer, including streaming partial tags. */
+export interface TurnScaffold {
+  language: string;
+  mode: RunMode;
+  samples: number;
+  filename: string;
+  content: string;
+  runnable: boolean;
+  note?: string;
+}
+
+/** 给当前这道题生成「可运行文件」，供浮窗的「复制可运行代码」按钮使用。 */
+export function scaffoldForTurn(turn: SolverTurn): TurnScaffold | null {
+  const block = extractCodeBlock(turn.body);
+  if (!block) return null;
+  const language = detectLanguage(block, turn.questionText ?? '');
+  const samples = parseSamples(turn.questionText ?? '');
+  const mode = detectRunMode(block.code, turn.questionText ?? '');
+  const scaffold = buildScaffold({ language, code: block.code, mode, samples });
+  return { language, mode, samples: samples.length, ...scaffold };
+}
+
 export function splitExamResponse(raw: string): {questionText: string; answer: string} {
   const question = /<exam-question>([\s\S]*?)(?:<\/exam-question>|$)/.exec(raw);
   const answer = /<exam-answer>([\s\S]*?)(?:<\/exam-answer>|$)/.exec(raw);

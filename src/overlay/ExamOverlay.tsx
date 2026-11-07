@@ -28,11 +28,14 @@ import {
   followUp,
   prepareExamRun,
   extractLastCodeBlock,
+  scaffoldForTurn,
+  type TurnScaffold,
   stripMarkdown,
   type SolverState,
 } from '@/lib/examEngine';
 import { setOverlaySize, setSessionActive, isTauri } from '@/lib/bridge';
 import { applyOverlayPalette } from '@/lib/overlayPalette';
+import type { CodeVerdict } from '@/lib/codeRunner';
 import { effectiveHotkeys, hotkeyBadge, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
 import { isMac, BRAND } from '@/lib/env';
 import { t } from '@/lib/i18n';
@@ -107,6 +110,27 @@ async function copyAnswerToClipboard(body?:string) {
   } catch {
     showToast({type:'error',title:t('复制失败，请再按一次')});
   }
+}
+
+async function copyRunnableCode() {
+  const s = getSolverState();
+  const turn = s.turns.find((item) => item.id === s.selectedTurnId) || s.turns[s.turns.length - 1];
+  const scaffold = turn ? scaffoldForTurn(turn) : null;
+  if (!scaffold) { showToast({ type: 'info', title: t('这道题没有识别到代码') }); return; }
+  try {
+    await writeText(scaffold.content);
+    showToast({ type: 'success', title: scaffold.runnable ? t('已复制 {name}（含题面样例）', { name: scaffold.filename }) : t('已复制代码与样例，需自行补 main', { name: scaffold.filename }) });
+  } catch {
+    showToast({ type: 'error', title: t('复制失败，请再按一次') });
+  }
+}
+
+function verificationLabel(verdict: CodeVerdict, language?: string): string {
+  const lang = language || verdict.runner || '';
+  if (verdict.verdict === 'passed') return t('已运行题面样例 {passed}/{total}（{lang}·本地）', { passed: verdict.passed, total: verdict.total, lang });
+  if (verdict.verdict === 'failed') return t('样例未全部通过：{passed}/{total}（{lang}·本地）', { passed: verdict.passed, total: verdict.total, lang });
+  const reason = verdict.note === 'no-samples' ? t('题面没有给出带输出的样例') : verdict.note === 'timeout' ? t('执行超时') : verdict.note === 'error' ? t('执行器异常') : t('暂不支持该语言');
+  return t('未执行验证：{note}', { note: reason });
 }
 
 function useSolverState(): SolverState {
@@ -223,6 +247,7 @@ function ExamShell({
                 <div data-overlay-scroll-anchor={i === solver.turns.length - 1 || undefined}>
                   <Md text={turn.body.replace(/^> .*\n\n/, '')} />
                   <GenerationDetails status={turn.completionStatus} request={turn.request}/>
+                  {turn.verification && <div className="ov-text-3 mt-1 text-[10px]" role="status">{verificationLabel(turn.verification, turn.codeLanguage)}</div>}
                   {turn.imageSaveError && <div role="alert" className="ov-text-2">{t('原题截图未保存，请保留题目并在需要时重新截图。')}</div>}
                 </div>
               </div>
@@ -257,7 +282,19 @@ function ExamShell({
               }
             />
           )}
-          <DwellChip
+          {(() => {
+            const scaffold: TurnScaffold | null = scaffoldForTurn(selected ?? solver.turns[solver.turns.length - 1]);
+            if (!scaffold) return null;
+            return (
+              <DwellChip
+                id="copy-runnable"
+                hoverMs={HOVER_MS.copyCode}
+                onTrigger={() => void copyRunnableCode()}
+                icon={<Copy size={11} />}
+                label={t('复制可运行代码')}
+              />
+            );
+          })()}          <DwellChip
             id="fu-simplify"
             hoverMs={HOVER_MS.followUp}
             onTrigger={() => void followUp({ intent: 'simplify' })}

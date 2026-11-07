@@ -175,6 +175,8 @@ const POLICY = {
     'src/lib/knowledgeContext.ts',
     'src/lib/preparation.ts',
     'src/lib/examEngine.ts',
+    // 题面解析：中文关键词是匹配「输入描述/示例/样例」等平台用词的正则，不渲染到界面。
+    'src/lib/codeQuestion.ts',
     'src/lib/interviewEngine.ts',
     // —— 数据/专有名词（渲染点已 t()，此处为词表/持久化名）——
     'src/lib/aiConfig.ts',

@@ -79,7 +79,7 @@ function examOverlay(body, clipboardFails=false) {
     'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':names,'@/ui/primitives':names,'./Md':{},'./GenerationDetails':{},
     '@/lib/overlayStyle':{normalizeStyle:style=>style,computeSkin:()=>({vars:{}})},
     '@/lib/store':{DEFAULT_OVERLAY_STYLE:{examWidth:420,examHeight:520},useSetting:(_key,fallback)=>[fallback,()=>{}],getSetting:(_key,fallback)=>fallback},
-    '@/lib/examEngine':{getSolverState:()=>state,subscribeSolver:()=>()=>{},extractLastCodeBlock:()=>null,stripMarkdown:text=>text,examModeInfo:()=>({shortLabel:'quick',maxScreenshotPages:4})},
+    '@/lib/examEngine':{getSolverState:()=>state,subscribeSolver:()=>()=>{},extractLastCodeBlock:()=>null,scaffoldForTurn:()=>null,stripMarkdown:text=>text,examModeInfo:()=>({shortLabel:'quick',maxScreenshotPages:4})},
     '@/lib/bridge':{setOverlaySize:async()=>{},setSessionActive:async()=>{}},
     '@/lib/env':{isMac:()=>false,BRAND:'fixture'},'@/lib/hotkeys':{effectiveHotkeys:()=>({})},
     '@/lib/overlayPalette':{applyOverlayPalette:async()=>{},restoreOverlayPalette:async()=>{}},
