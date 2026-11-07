@@ -27,7 +27,7 @@ import {
   type Resume,
   type Material,
 } from '@/lib/backend';
-import { getSetting, useSetting } from '@/lib/store';
+import { useSetting } from '@/lib/store';
 import { captureKnowledge } from '@/lib/knowledgeContext';
 import { cmd } from '@/lib/bridge';
 import { activeMockSession, mockMeta } from '@/lib/mock';
@@ -50,7 +50,7 @@ async function openMockWindow(sessionId: string) {
   await cmd('cmd_open_mock', { sessionId });
 }
 
-export function MockPage() {
+export function MockPage({ onNavigate }: { onNavigate?: (section: string) => void }) {
   const [speechProfile,saveSpeechProfile]=useSpeechProfile('mock');
   const [sessions] = useData<InterviewSession[]>('interviewSessions', []);
   const resumes = useData<Resume[]>('resumes', [])[0];
@@ -63,6 +63,7 @@ export function MockPage() {
   const [basicsRatio, setBasicsRatio] = useState(50);
   const [assistMode, setAssistMode] = useSetting('mock.assistMode', false);
   const [starting, setStarting] = useState(false);
+  const [materialIds, setMaterialIds] = useState<string[]>([]);
   const [abandoning, setAbandoning] = useState<string | null>(null);
   const [reportViewingId, setReportViewingId] = useState<string | null>(null);
   const aiReady = useAiReady('chat');
@@ -100,7 +101,7 @@ export function MockPage() {
             company: goal?.companyName,
             resumeSummary: resume?.summary,
             knowledge: captureKnowledge({ resume, goal,
-              materials: materials.filter(material => getSetting<string[]>('interview.pendingMaterialIds', []).includes(material.id)),
+              materials: materials.filter(material => materialIds.includes(material.id)),
               query: goal?.description || goal?.name }),
             difficultyLabel: DIFFICULTY.find((d) => d.key === difficulty)?.label ?? '应届生',
             turnBudget,
@@ -216,6 +217,29 @@ export function MockPage() {
               ))}
             </Select>
           </label>
+        </div>
+
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">{t('面试资料（已选 {count}/20 份）', { count: materialIds.length })}</span>
+            <button type="button" className="text-xs text-primary hover:underline" onClick={() => onNavigate?.('resource')}>{t('管理资料')}</button>
+          </div>
+          <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto rounded-md border p-2">
+            {materials.length === 0 && <span className="text-xs text-muted-foreground">{t('还没有面试资料，先在「资料管理」里上传或新建一份')}</span>}
+            {materials.map((m) => {
+              const on = materialIds.includes(m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMaterialIds(on ? materialIds.filter((x) => x !== m.id) : [...materialIds, m.id].slice(0, 20))}
+                  className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${on ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'}`}
+                >
+                  {m.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-4">

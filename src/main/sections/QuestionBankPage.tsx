@@ -57,6 +57,8 @@ export function QuestionBankPage() {
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  // 「存进面试资料」的目标资料：默认第一份，可在页面顶部改，避免固定写进 materials[0]。
+  const [targetMaterialId, setTargetMaterialId] = useState('');
   const favorites = new Set(savedBank?.favorites ?? []);
   async function saveBank(patch: Partial<SavedBank>) {
     const current = readData<SavedBank[]>('questionBanks', []);
@@ -86,10 +88,10 @@ export function QuestionBankPage() {
   };
 
   const saveToMaterial = async (q: BankQuestion) => {
-    let target = materials[0];
+    let target = materials.find((m) => m.id === targetMaterialId);
     if (!target) {
       target = await saveMaterial({ name: t('面试题库收藏'), source: 'ai' });
-      void readData;
+      setTargetMaterialId(target.id);
     }
     await saveEntry(target.id, { question: q.question, answer: q.answer,origin:'model_generated' });
     showToast({ type: 'success', title: t('已存进面试资料，面试时助手会用上这道题的答案') });
@@ -145,6 +147,15 @@ export function QuestionBankPage() {
             {generating ? t('正在准备…') : t('生成我的面试准备')}
           </Button>
         </div>
+        <label className="mt-3 block text-xs font-medium text-muted-foreground">
+          {t('存进面试资料')}
+          <Select className="mt-1" value={targetMaterialId} onChange={(e) => setTargetMaterialId(e.target.value)}>
+            <option value="">{t('面试题库收藏')}</option>
+            {materials.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </Select>
+        </label>
         {generating && progress && (
           <div className="mt-3 flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
             <Loader2 size={12} className="animate-spin" />

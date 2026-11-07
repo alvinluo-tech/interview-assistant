@@ -19,7 +19,7 @@ export function PromptWorkbench({ onDirtyChange }: {
     async function save(value: string) {
         setBusy(true);
         try {
-            await setSetting('ai.taskPreferences', { ...saved, [task]: value }, { strict: true });
+            await setSetting('ai.taskPreferences', { ...saved, [task]: value });
             setText(value);
             showToast({ type: 'success', title: t('本任务的表达偏好已保存') });
         }

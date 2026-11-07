@@ -324,12 +324,17 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
 
   if (!material) return null;
 
-  const save = async () => {
+  const dirty = name !== (material?.name ?? '') || content !== (material?.content ?? '');
+
+  const save = async (): Promise<boolean> => {
     try {
     await saveMaterial({ id, name: name.trim() || t('未命名资料'), content });
     showToast({ type: 'success', title: t('已保存') });
-    }catch(error){showToast({type:'error',title:t('资料保存失败，输入已保留'),description:String((error as Error).message||error)});}
+    return true;
+    }catch(error){showToast({type:'error',title:t('资料保存失败，输入已保留'),description:String((error as Error).message||error)});return false;}
   };
+  // 「完成」= 保存并关闭：有未保存改动时先落盘，保存失败就留在编辑器里，不能静默丢弃。
+  const finish = async () => { if (!dirty || await save()) onClose(); };
 
   return (
     <Dialog open onClose={onClose} className="max-w-2xl">
@@ -414,7 +419,7 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
       </div>
 
       <div className="mt-4 flex justify-between">
-        <Button size="sm" variant="ghost" onClick={onClose}>
+        <Button size="sm" variant="ghost" onClick={() => void finish()}>
           {t('完成')}
         </Button>
         <Button size="sm" onClick={() => void save()}>

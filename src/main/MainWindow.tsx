@@ -36,7 +36,6 @@ import { RecordsPage } from './sections/RecordsPage';
 import { SettingsPage } from './sections/SettingsPage';
 import { UsageNotice } from './UsageNotice';
 import { Onboarding } from './Onboarding';
-import { ChangelogDialog } from './ChangelogDialog';
 import { FeedbackDialog } from './FeedbackDialog';
 import { UpdateNotice } from './UpdateNotice';
 const FreeChatPage = lazy(() => import('./sections/FreeChatPage').then(module => ({default: module.FreeChatPage})));
@@ -101,7 +100,6 @@ export function MainWindow() {
   const [section, setSection] = useState<Section>('interview');
   const usageAcked = useSetting('notice.usageAcknowledged.v2', false)[0];
   const onboardingSkipped = useSetting('onboarding.skipped', false)[0];
-  const [changelogOpen, setChangelogOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // 启动副作用：注册 panic + 动作热键、浮窗异常事件
@@ -178,7 +176,6 @@ export function MainWindow() {
       <UpdateNotice />
       {dataError&&<div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive">{t('本地数据读取失败，已阻止覆盖。请在「设置 → 关于」恢复手动备份。')}{dataError}</div>}
       <UsageNotice />
-      {changelogOpen && <ChangelogDialog onClose={() => setChangelogOpen(false)} />}
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       <div className="flex min-h-0 flex-1">
         <Sidebar
@@ -201,7 +198,7 @@ export function MainWindow() {
                   )}
                   {section === 'interview' && <InterviewWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'exam' && <ExamWorkbench onNavigate={(s) => setSection(s as Section)} />}
-                  {section === 'mock' && <MockPage />}
+                  {section === 'mock' && <MockPage onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'chat' && <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">{t('正在打开对话…')}</div>}><FreeChatPage /></Suspense>}
                   {section === 'question-bank' && <QuestionBankPage />}
                   {section === 'resource' && <ResourcePage />}

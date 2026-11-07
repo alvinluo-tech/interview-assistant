@@ -43,11 +43,11 @@ pub async fn cmd_capture_screen(
     app: AppHandle,
     compatibility_mode: Option<bool>,
     capture_mode: Option<String>,
-    _protected_on_top: Option<bool>,
+    protected_on_top: Option<bool>,
 ) -> Result<String, String> {
     // ScreenCaptureKit completions must be free to run on the UI thread.
     tauri::async_runtime::spawn_blocking(move || {
-        capture_screen(app, compatibility_mode, capture_mode)
+        capture_screen(app, compatibility_mode, capture_mode, protected_on_top)
     })
     .await
     .map_err(|e| format!("截图任务失败：{e}"))?
@@ -57,13 +57,16 @@ fn capture_screen(
     app: AppHandle,
     compatibility_mode: Option<bool>,
     capture_mode: Option<String>,
+    protected_on_top: Option<bool>,
 ) -> Result<String, String> {
     if !matches!(capture_mode.as_deref(), None | Some("screen" | "window")) {
         return Err("截图范围无效，请选择屏幕或前台窗口。".into());
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = (app, compatibility_mode);
+        // macOS 由窗口的内容保护（set_content_protected）负责把浮窗排除在录屏之外，
+        // 不需要在截图期间隐藏窗口；protectedOnTop 在这里没有额外动作。
+        let _ = (app, compatibility_mode, protected_on_top);
         if !crate::screen_permissions::check() {
             return Err("请在系统设置中允许本应用录制屏幕，必要时重启应用后重试。".into());
         }
@@ -90,6 +93,7 @@ fn capture_screen(
     {
         // 浮窗已处于捕获排除（WDA）时无需隐藏——隐藏/恢复窗口会让 WebView2 的
         // 事件队列在副屏接管等场景下丢事件；只有未排除（演示模式/系统不支持）才回退到收起。
+        // protectedOnTop=false 明确表示「允许浮窗出现在截图里」，此时不做任何收起。
         let overlay = app.get_webview_window("overlay");
         #[cfg(windows)]
         let already_excluded = crate::protection::window(&app, "overlay")
@@ -105,7 +109,7 @@ fn capture_screen(
             .as_ref()
             .map(|w| w.is_visible().unwrap_or(false))
             .unwrap_or(false);
-        let need_hide = was_overlay_visible && !already_excluded;
+        let need_hide = protected_on_top.unwrap_or(true) && was_overlay_visible && !already_excluded;
         if need_hide {
             if let Some(w) = &overlay {
                 let _ = w.hide();

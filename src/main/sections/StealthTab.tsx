@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Input, SectionHeader, SettingRow, Switch, showToast } from '@/ui/primitives';
-import { useSetting } from '@/lib/store';
 import { t } from '@/lib/i18n';
 import {
   getCaptureStatus, getDisguiseStatus, isTauri, relaunchApp, setCaptureExcluded,
@@ -10,7 +9,6 @@ import {
 } from '@/lib/bridge';
 
 export function StealthTab() {
-  const [hideFromTaskbar, setHideFromTaskbar] = useSetting('stealth.hideFromTaskbar', false);
   const [capture, setCapture] = useState<CaptureStatus | null>(null);
   const [identity, setIdentity] = useState<DisguiseStatus | null>(null);
   const [draft, setDraft] = useState<DisguiseConfig | null>(null);
@@ -102,9 +100,6 @@ export function StealthTab() {
           </p>)}
           <p className="mt-1">{capture?.limitation || t('需要 Windows 10 2004 或更新版本。旧系统可能显示黑块；请用实际录屏软件验证效果。')}</p>
         </div>
-        <SettingRow title={t('收起浮窗后不回到任务栏')} desc={t('收起后可从桌面图标重新唤回工作台。')}>
-          <Switch ariaLabel={t('收起浮窗后不回到任务栏')} checked={hideFromTaskbar} onCheckedChange={setHideFromTaskbar} />
-        </SettingRow>
       </Card>
       <Card className="p-5">
         <SectionHeader title={processRename ? t('进程伪装') : t('窗口标题')} desc={processRename ? t('窗口标题和图标保存后立即生效；进程文件名需要重启应用。') : t('Mac 支持自定义窗口标题，保存后立即生效。应用名称、图标和进程身份保持原样。')} />

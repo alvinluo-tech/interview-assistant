@@ -99,7 +99,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
           title={t('开始一场笔试')}
           desc={t('先选答题模式，进入浮窗后也可以随时切换；浮窗无边框置顶，不抢焦点。')}
           right={
-            <Button onClick={() => void start()} disabled={starting}>
+            <Button onClick={() => void start()} disabled={starting || !aiReady} title={aiReady ? undefined : t('请先在「设置 → AI 服务」配置截图识别或支持图片输入的对话模型')}>
               <Play size={14} />
               {starting ? t('启动中…') : t('开始笔试')}
             </Button>
@@ -273,7 +273,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
           <DualCameraSwitch scope="exam" />
         </SettingRow>
         <SettingRow title={t('截图范围')} desc={platform?.platform === 'macos' ? t('屏幕模式截取鼠标所在显示器，并排除本应用窗口；前台窗口模式只截取最靠前的其他应用窗口。') : t('默认截取屏幕；前台窗口模式只捕获当前题目窗口。空白图片会阻止发送。')}>
-          <Select value={captureMode} disabled={platform?.screenCapture === false} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">{t('屏幕')}</option><option value="window">{t('前台窗口')}</option></Select>
+          <Select value={captureMode} disabled={platform?.screenCapture === false} title={platform?.screenCapture === false ? t('当前系统或权限不支持截图，无法选择截图范围') : undefined} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">{t('屏幕')}</option><option value="window">{t('前台窗口')}</option></Select>
         </SettingRow>
         <SettingRow title={t('截图兼容模式（Windows）')} desc={t('优先读取前台窗口，失败后回退屏幕截图。默认模式会在屏幕黑屏时尝试窗口读取。')}>
           <Switch checked={platform?.platform === 'windows' && compatibility} disabled={platform?.platform !== 'windows'} onCheckedChange={setCompatibility} />

@@ -32,7 +32,13 @@ async function getStore() {
 }
 
 /** 已下线的设置键：旧版本写过，现在没有任何读取方，加载时顺手从 store.json 清掉。 */
-const RETIRED_KEYS = ['local.user'];
+const RETIRED_KEYS = [
+  'local.user',
+  'interview.autoOpenMockShell',
+  'stealth.hideFromTaskbar',
+  'changelog.seenDate',
+  'changelog.snoozedDate',
+];
 
 export function hydrateStore(): Promise<void> {
   if (hydrated) return Promise.resolve();
@@ -211,7 +217,6 @@ export const ALL_KEYS = [
   'capture.mode',
   'capture.compatibilityMode',
   'settings.owner',
-  'interview.autoOpenMockShell',
   'exam.showCopyCodeButton',
   'overlay.stylePresets',
   'interview.dualCamera',
@@ -243,9 +248,6 @@ export const ALL_KEYS = [
   'disguise.enabled',
   'disguise.windowTitle',
   'disguise.processName',
-  'stealth.hideFromTaskbar',
-  'changelog.seenDate',
-  'changelog.snoozedDate',
   'exam.goalId',
   'exam.customization',
   'exam.customizationOwner',

@@ -147,7 +147,7 @@ export function Onboarding({ onFinish }: { onFinish: (ownData: boolean) => void 
             >
               <div className="text-sm font-semibold">{t('实时面试')}</div>
               <div className="mt-1 text-xs text-muted-foreground">{t('面试官一说话，浮窗里就出参考回答')}</div>
-              <div className="mt-2 text-[11px] text-muted-foreground">{t('同时打开一个演示页，放一段面试官提问试试')}</div>
+              <div className="mt-2 text-[11px] text-muted-foreground">{t('进入面试助手后点「开始面试」，浮窗会跟着你走')}</div>
             </button>
             <button
               type="button"
@@ -159,7 +159,7 @@ export function Onboarding({ onFinish }: { onFinish: (ownData: boolean) => void 
             >
               <div className="text-sm font-semibold">{t('笔试答题')}</div>
               <div className="mt-1 text-xs text-muted-foreground">{t('题目在屏幕上，截一下就出答案')}</div>
-              <div className="mt-2 text-[11px] text-muted-foreground">{t('同时打开一个模拟笔试，对着题目截一张试试')}</div>
+              <div className="mt-2 text-[11px] text-muted-foreground">{t('进入笔试助手后点「开始笔试」，对着题目截图即可')}</div>
             </button>
           </div>
         </Card>

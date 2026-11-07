@@ -7,7 +7,6 @@
 import { useEffect, useState } from 'react';
 import { Eye, RotateCcw, Trash2, Plus } from 'lucide-react';
 import {
-  Badge,
   Button,
   Card,
   ConfirmDialog,
@@ -45,7 +44,6 @@ import { backupData, getDataError } from '@/lib/backend';
 import { UpdateStatusButton } from '../UpdateNotice';
 import { DeveloperInfo } from './DeveloperInfo';
 import { StorageSettings } from './StorageSettings';
-import { CHANGELOG } from '@/lib/changelog';
 import { isWindows } from '@/lib/env';
 
 type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'prompts' | 'storage' | 'changelog' | 'about';
@@ -102,7 +100,6 @@ export function SettingsPage() {
 // ---------------- 通用 ----------------
 
 function GeneralTab() {
-  const [autoOpen, setAutoOpen] = useSetting('interview.autoOpenMockShell', true);
   const [uiScale, setUiScale] = useSetting('desktop.uiScale', 1);
   const [theme, setTheme] = useSetting<DesktopTheme>('desktop.theme', 'system');
   const [locale, setLocale] = useState(currentLocale());
@@ -193,15 +190,6 @@ function GeneralTab() {
         >
           {t('恢复默认 100%')}
         </button>
-
-        <div className="mt-4 border-t pt-2">
-          <SettingRow
-            title={t('自动打开设备调试页面')}
-            desc={t('开始面试/笔试后自动打开演示页，用于提前检查摄像头/麦克风等设备。关闭后需自行打开。')}
-          >
-            <Switch checked={autoOpen} onCheckedChange={setAutoOpen} />
-          </SettingRow>
-        </div>
       </Card>
     </div>
   );
@@ -781,31 +769,19 @@ function HotkeysTab() {
 
 // ---------------- 更新日志 ----------------
 
+/** 更新说明由每次发布提供，这里只给出入口，避免本地维护一份会过期的副本。 */
 function ChangelogTab() {
+  const open = () => void import('@tauri-apps/plugin-opener')
+    .then(({ openUrl }) => openUrl('https://github.com/alvinluo-tech/interview-assistant/releases'))
+    .catch(reason => showToast({ type: 'error', title: t('链接暂时无法打开'), description: String(reason) }));
   return (
     <Card className="p-5">
       <SectionHeader title={t('更新日志')} desc={t('查看客户端更新记录。')} />
-      {CHANGELOG.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('暂无更新记录。')}</p>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {CHANGELOG.map((e) => (
-            <div key={e.date}>
-              <div className="mb-1.5 text-xs font-medium text-muted-foreground">{e.date}</div>
-              <div className="flex flex-col gap-1.5">
-                {e.items.map((it, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm">
-                    <Badge variant={it.tag === 'new' ? 'default' : it.tag === 'improved' ? 'secondary' : 'outline'}>
-                      {it.tag === 'new' ? t('新功能') : it.tag === 'improved' ? t('体验优化') : t('问题修复')}
-                    </Badge>
-                    <span>{t(it.text)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <Row label={t('客户端版本')} value={APP_VERSION} />
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{t('完整更新说明随每个版本发布，请在发布页查看。')}</p>
+      <div className="mt-3">
+        <Button size="sm" variant="outline" onClick={open}>{t('发布页')}</Button>
+      </div>
     </Card>
   );
 }
