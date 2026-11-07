@@ -237,14 +237,20 @@ export async function verifyCode(options: {
       });
       if (result.timedOut) break;
     } catch (error) {
+      const message = String((error as Error)?.message ?? error);
+      const timedOut = /timeout/i.test(message);
       outcomes.push({
         index,
         ok: false,
         expected: normalizeOutput(sample.output),
         actual: '',
-        timedOut: /timeout/i.test(String((error as Error)?.message ?? '')),
-        error: String((error as Error)?.message ?? error).slice(0, 800),
+        timedOut,
+        error: message.slice(0, 800),
       });
+      // 超时是「代码本身有问题」，但执行器启动/通信失败不是：那种情况不能判用户代码错。
+      if (!timedOut) {
+        return { verdict: 'unverified', runner: language as 'javascript' | 'python', passed: 0, total: samples.length, outcomes, note: 'error' };
+      }
       break;
     }
   }
