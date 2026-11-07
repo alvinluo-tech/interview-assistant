@@ -193,7 +193,14 @@ html.ov-palette-fade body.overlay #root * {
 .overlay-md table {
   border-collapse: collapse;
   margin: 4px 0;
+  /* 浮窗是穿透模式，无法横向滚动：列宽均分并让文字折行，避免右侧列被 overflow-x: clip 裁掉 */
+  width: 100%;
+  table-layout: fixed;
   font-size: calc(11.5px * var(--ov-font-scale, 1));
+}
+.overlay-md img {
+  max-width: 100%;
+  height: auto;
 }
 .overlay-md th,
 .overlay-md td {
@@ -208,7 +215,9 @@ html.ov-palette-fade body.overlay #root * {
   padding: 0 4px;
   font-size: calc(11px * var(--ov-font-scale, 1));
 }
-.overlay-md pre {
+/* 只给兜底的裸 pre 加上下间距；代码块内部的 .overlay-code-body 自带 margin: 0，
+   而 .overlay-md pre 的选择器权重更高，不排除会把 4px 间距塞进代码块里。 */
+.overlay-md pre:not(.overlay-code-body) {
   margin: 4px 0;
 }
 .overlay-md strong.md-answer-label {

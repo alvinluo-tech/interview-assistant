@@ -21,14 +21,18 @@ export const RICH_MARKDOWN_LIMIT = 20000;
 /** 流式节流窗口。 */
 export const RENDER_THROTTLE_MS = 120;
 
+/** 插件数组提到模块级：react-markdown 每次渲染都会重建 processor，但保持引用稳定更利于审阅。 */
+const REMARK_PLUGINS = [remarkGfm];
+
 export function Md({ text }: { text: string }) {
   const throttled = useThrottled(text, RENDER_THROTTLE_MS);
+  // 两条路径都用节流后的文本：超长内容更不能每个 token 重渲染一次。
   if (text.length > RICH_MARKDOWN_LIMIT) {
-    return <div className="overlay-md">{renderBlocks(text)}</div>;
+    return <div className="overlay-md">{renderBlocks(throttled)}</div>;
   }
   return (
     <div className="overlay-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>{throttled}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>{throttled}</ReactMarkdown>
     </div>
   );
 }
@@ -114,11 +118,12 @@ const COMPONENTS = {
   ),
   code: ({ children }: { children?: ReactNode }) => <code className="inline-code">{children}</code>,
   a: ({ href, children }: { href?: string; children?: ReactNode }) => (
-    <a href={href} target="_blank" rel="noreferrer">{children}</a>
+    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
   ),
-  // 「核心要点 / 参考回答」这类标签单独加样式。
-  strong: ({ children }: { children?: ReactNode }) => {
-    const label = String(children ?? '');
+  // 「核心要点 / 参考回答」这类标签单独加样式。用 hast 原文判断，
+  // 标签里带行内代码或强调时 String(children) 会变成 "[object Object]"。
+  strong: ({ node, children }: { node?: HastNode; children?: ReactNode }) => {
+    const label = node ? hastText(node) : String(children ?? '');
     const isLabel = /^(核心要点|参考回答|要点|回答|答案)$/.test(label);
     return <strong className={isLabel ? 'md-answer-label' : undefined}>{children}</strong>;
   },
