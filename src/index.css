@@ -218,7 +218,7 @@ html.ov-palette-fade body.overlay #root * {
   border-top-color: var(--ov-line);
 }
 
-/* 浮窗代码块：逐行渲染、折行不横滚（防截图识别排版） */
+/* 浮窗代码块：pre-wrap 保留缩进与连续空格，长行仍然折行（浮窗不能横向滚动） */
 .overlay-code-block {
   background: var(--ov-md-surface);
   border: 1px solid var(--ov-md-code-line);
@@ -229,9 +229,32 @@ html.ov-palette-fade body.overlay #root * {
   font-size: calc(11.5px * var(--ov-font-scale, 1));
   line-height: 1.5;
 }
-.overlay-code-line {
-  display: block;
-  white-space: normal;
+.overlay-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
+  font-family: inherit;
+  font-size: calc(10px * var(--ov-font-scale, 1));
+  opacity: 0.62;
+}
+.overlay-code-lang {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.overlay-code-copy {
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: inherit;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+.overlay-code-body {
+  margin: 0;
+  white-space: pre-wrap;
+  tab-size: 4;
   word-break: break-word;
   overflow-wrap: anywhere;
   color: var(--ov-fg);

@@ -307,6 +307,11 @@ function HoverHint({ zoneEl, dragging }: { zoneEl: HTMLElement; dragging: boolea
   );
 }
 
+/** 没有平台容器时返回 null（主窗口里复用浮窗组件时用）。 */
+export function usePlatformOptional(): OverlayPlatform | null {
+  return useContext(PlatformContext);
+}
+
 export function usePlatform(): OverlayPlatform {
   const ctx = useContext(PlatformContext);
   if (!ctx) throw new Error('usePlatform outside provider');

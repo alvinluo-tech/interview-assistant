@@ -1,9 +1,29 @@
 /* 浮窗 markdown 渲染器：代码块逐行渲染、折行不横滚、答案标签、表格/引用/列表。 */
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useId, type ReactNode } from 'react';
 import { t } from '@/lib/i18n';
+import { DwellButton } from './widgets';
+import { usePlatformOptional } from './platform';
 
 export function Md({ text }: { text: string }) {
   return <div className="overlay-md">{renderBlocks(text)}</div>;
+}
+
+/**
+ * 代码块右上角的复制按钮。
+ * 浮窗里是穿透模式，只能用驻留按钮；主窗口（复盘报告等）没有平台容器，退化成普通按钮。
+ */
+function CopyCodeButton({ code }: { code: string }) {
+  const platform = usePlatformOptional();
+  const id = `md-copy-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const copy = () => {
+    void import('@tauri-apps/plugin-clipboard-manager')
+      .then(({ writeText }) => writeText(code))
+      .catch(() => {});
+  };
+  if (!platform) {
+    return <button type="button" className="overlay-code-copy" onClick={copy}>{t('复制')}</button>;
+  }
+  return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{t('复制')}</DwellButton>;
 }
 
 function renderBlocks(src: string, depth=0, budget={remaining:6000}): ReactNode[] {
@@ -31,11 +51,11 @@ function renderBlocks(src: string, depth=0, budget={remaining:6000}): ReactNode[
       i++; // 跳过结束围栏
       nodes.push(
         <div className="overlay-code-block" key={key++}>
-          {codeLines.map((l, j) => (
-            <span className="overlay-code-line" key={j}>
-              {l || ' '}
-            </span>
-          ))}
+          <div className="overlay-code-head">
+            <span className="overlay-code-lang">{fence[1] || t('代码')}</span>
+            <CopyCodeButton code={codeLines.join('\n')} />
+          </div>
+          <pre className="overlay-code-body">{codeLines.join('\n')}</pre>
         </div>,
       );
       continue;
