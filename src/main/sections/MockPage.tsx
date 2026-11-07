@@ -56,14 +56,18 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
   const resumes = useData<Resume[]>('resumes', [])[0];
   const materials = useData<Material[]>('materials', [])[0];
   const goals = useData<Goal[]>('goals', [])[0];
-  const [resumeId, setResumeId] = useState(resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '');
-  const [goalId, setGoalId] = useState(goals[0]?.id ?? '');
-  const [difficulty, setDifficulty] = useState(DIFFICULTY[0].key);
-  const [turnBudget, setTurnBudget] = useState(12);
-  const [basicsRatio, setBasicsRatio] = useState(50);
+  // 这里的选项都要跨页面切换保留（组件在切页时会卸载），因此统一存进设置。
+  const defaultResumeId = resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '';
+  const [storedResumeId, setResumeId] = useSetting<string>('mock.pendingResumeId', '');
+  const resumeId = resumes.some((r) => r.id === storedResumeId) ? storedResumeId : defaultResumeId;
+  const [storedGoalId, setGoalId] = useSetting<string>('mock.pendingGoalId', '');
+  const goalId = goals.some((g) => g.id === storedGoalId) ? storedGoalId : (goals[0]?.id ?? '');
+  const [difficulty, setDifficulty] = useSetting<string>('mock.difficulty', DIFFICULTY[0].key);
+  const [turnBudget, setTurnBudget] = useSetting<number>('mock.turnBudget', 12);
+  const [basicsRatio, setBasicsRatio] = useSetting<number>('mock.basicsRatio', 50);
   const [assistMode, setAssistMode] = useSetting('mock.assistMode', false);
   const [starting, setStarting] = useState(false);
-  const [materialIds, setMaterialIds] = useState<string[]>([]);
+  const [materialIds, setMaterialIds] = useSetting<string[]>('mock.pendingMaterialIds', []);
   const [abandoning, setAbandoning] = useState<string | null>(null);
   const [reportViewingId, setReportViewingId] = useState<string | null>(null);
   const aiReady = useAiReady('chat');

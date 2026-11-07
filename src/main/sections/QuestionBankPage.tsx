@@ -16,7 +16,7 @@ import {
 import { useData, writeData, saveEntry, saveMaterial, type Goal, type Material, type Resume } from '@/lib/backend';
 import {generatePreparation} from '@/lib/preparation';
 import { readData } from '@/lib/backend';
-import { getSetting } from '@/lib/store';
+import { getSetting, useSetting } from '@/lib/store';
 import { t } from '@/lib/i18n';
 
 interface BankQuestion {
@@ -47,9 +47,12 @@ export function QuestionBankPage() {
   const goals = useData<Goal[]>('goals', [])[0];
   const resumes = useData<Resume[]>('resumes', [])[0];
   const materials = useData<Material[]>('materials', [])[0];
-  const [goalId, setGoalId] = useState(goals[0]?.id ?? '');
-  const [resumeId, setResumeId] = useState(resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '');
-  const [experience, setExperience] = useState(EXPERIENCE_OPTIONS[0]);
+  // 选择要跨页面保留：bankId 由这三项组成，重置会让已生成的题库看起来消失。
+  const [storedGoalId, setGoalId] = useSetting<string>('questionBank.pendingGoalId', '');
+  const goalId = goals.some((g) => g.id === storedGoalId) ? storedGoalId : (goals[0]?.id ?? '');
+  const [storedResumeId, setResumeId] = useSetting<string>('questionBank.pendingResumeId', '');
+  const resumeId = resumes.some((r) => r.id === storedResumeId) ? storedResumeId : (resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '');
+  const [experience, setExperience] = useSetting<string>('questionBank.experience', EXPERIENCE_OPTIONS[0]);
   const banks = useData<SavedBank[]>('questionBanks', [])[0];
   const bankId = JSON.stringify([goalId,resumeId,experience]);
   const savedBank = banks.find(bank => bank.id === bankId);

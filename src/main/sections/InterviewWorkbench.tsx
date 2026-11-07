@@ -37,7 +37,11 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
   const materials = useData<Material[]>('materials', [])[0];
   const sessions = useData<InterviewSession[]>('interviewSessions', [])[0];
   const [goalId, setGoalId] = useSetting<string | null>('exam.goalId', goals[0]?.id ?? null);
-  const [resumeId, setResumeId] = useState<string>(resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '');
+  // 选中的简历要跨页面切换保留：存在设置里，切到别的页面再回来不会重置。
+  const [storedResumeId, setResumeId] = useSetting<string>('interview.pendingResumeId', '');
+  const defaultResumeId = resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '';
+  // 记录过但简历已被删除时回退到默认，避免下拉框显示空值。
+  const resumeId = resumes.some((r) => r.id === storedResumeId) ? storedResumeId : defaultResumeId;
   const [materialIds, setMaterialIds] = useSetting<string[]>('interview.pendingMaterialIds', []);
   const [savedAudioSource, setAudioSource] = useSetting<'SPEAKER' | 'PHONE' | 'MICROPHONE'>(
     'interview.audioSource',
