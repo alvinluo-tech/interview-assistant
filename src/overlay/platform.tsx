@@ -245,10 +245,10 @@ export function OverlayPlatformProvider({
   ) : null;
 
   return (
-    <PlatformContext.Provider value={value}>
+    <PlatformContext value={value}>
       {children}
       {hint}
-    </PlatformContext.Provider>
+    </PlatformContext>
   );
 }
 

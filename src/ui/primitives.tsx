@@ -184,7 +184,7 @@ export function Dialog({
       <div
         className={`relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-card p-5 text-card-foreground shadow-xl ${className}`}
       >
-        <DialogCtx.Provider value={{ close: onClose, titleId, root }}>
+        <DialogCtx value={{ close: onClose, titleId, root }}>
           {dismissable && (
             <button
               type="button"
@@ -196,7 +196,7 @@ export function Dialog({
             </button>
           )}
           {children}
-        </DialogCtx.Provider>
+        </DialogCtx>
       </div>
     </div>,document.body,
   );
