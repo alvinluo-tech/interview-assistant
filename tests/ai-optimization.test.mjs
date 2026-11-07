@@ -20,6 +20,26 @@ test('length-limited completions preserve partial output but never become succes
   const response=new Response('data: {"choices":[{"delta":{"content":"def solve():"},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
   await assert.rejects(consumeChat(response),error=>error.partialText==='def solve():'&&error.completionStatus==='truncated');
 });
+test('thinking that exhausts the output budget is reported as reasoning, not as a lost answer',async()=>{
+  const {consumeChatResult}=load('src/lib/aiProtocol.ts');
+  const response=new Response('data: {"choices":[{"delta":{"reasoning_content":"先分析题意，再整理答案…"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
+  await assert.rejects(consumeChatResult(response),error=>error.completionStatus==='truncated'&&error.partialText===''&&/思考/.test(error.message));
+});
+test('reasoning content stays out of the answer while its token usage is reported',async()=>{
+  const {consumeChatResult}=load('src/lib/aiProtocol.ts');
+  const body='data: {"choices":[{"delta":{"reasoning_content":"内部推理"}}]}\n\ndata: {"choices":[{"delta":{"content":"正式回答"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"completion_tokens_details":{"reasoning_tokens":12}}}\n\ndata: [DONE]\n\n';
+  const result=await consumeChatResult(new Response(body,{headers:{'content-type':'text/event-stream'}}));
+  assert.equal(result.text,'正式回答');
+  assert.equal(result.completionStatus,'complete');
+  assert.equal(result.usage.reasoningTokens,12);
+  assert.ok(result.reasoningChars>0);
+});
+test('answer tasks reserve output budget for thinking tokens while model caps still apply',()=>{
+  const {outputLimit,TASK_OUTPUT_LIMIT}=load('src/lib/aiTaskPolicy.ts');
+  assert.ok(TASK_OUTPUT_LIMIT['interview-answer']>=4096);
+  assert.ok(TASK_OUTPUT_LIMIT['mock-question']>=2048);
+  assert.equal(outputLimit('interview-answer',{maxOutputTokens:2048}),2048);
+});
 test('invalid mock output is rejected instead of becoming a spoken question',async()=>{
   const api=load('src/lib/mock.ts',{'./ai':{chatStream:async()=>'{"notQuestion":true}'}});
   await assert.rejects(api.generateNextQuestion({difficultyLabel:'3 年',turnBudget:8,basicsRatio:50,assistMode:false},[]),/格式|问题/);
@@ -134,6 +154,15 @@ test('retries remain bounded and authentication failures never repeat',async()=>
   const h=requestHarness(undefined,()=>new Response('{}',{status:503}));
   await assert.rejects(h.request({task:'interview-answer'}),/503/);assert.equal(h.calls.length,2);
   const denied=requestHarness(undefined,()=>new Response('{}',{status:401}));await assert.rejects(denied.request({task:'exam-followup'}),/401/);assert.equal(denied.calls.length,1);
+});
+
+test('a model that rejects the output cap is retried once with a smaller cap instead of failing the answer',async()=>{
+  const h=requestHarness(undefined,n=>n===1?new Response(JSON.stringify({error:{message:'max_tokens is too large for this model'}}),{status:400}):undefined);
+  assert.equal(await h.request({task:'interview-answer'}),'OK');
+  assert.equal(h.calls.length,2);
+  assert.equal(h.calls[0].max_tokens,8192);
+  assert.equal(h.calls[1].max_tokens,4096);
+  assert.equal(h.traces[0].completionStatus,'complete');
 });
 
 test('cancelling during a transient retry delay sends no replacement request',async()=>{

@@ -21,6 +21,7 @@ import { InterviewOverlay } from './InterviewOverlay';
 import { OverlayPlatformProvider } from './platform';
 import { persistPosition } from './widgets';
 import { listenForInterviewStop } from '@/lib/interviewLifecycle';
+import { applyOverlayPalette, restoreOverlayPalette } from '@/lib/overlayPalette';
 import { ToastViewport } from '@/ui/primitives';
 
 type ActiveMode = 'exam' | 'interview' | 'preview' | 'interview-preview';
@@ -149,6 +150,9 @@ export function OverlayApp() {
     return (getSetting('overlay.mode', 'exam') as ActiveMode) ?? 'exam';
   }
 
+  // 热键放在既有 effect 之后：保持 effect 顺序稳定，避免影响依赖下标的测试与清理顺序。
+  useOverlayStyleHotkeys(style, seqMode() === 'exam' ? 'exam' : 'interview');
+
   if (!active) return null;
 
   const mode = seqMode();
@@ -203,6 +207,12 @@ export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
         case 'move-up':
         case 'move-down':
           await moveOverlay(p.action);
+          return;
+        case 'auto-palette':
+          await applyOverlayPalette(mode);
+          return;
+        case 'restore-palette':
+          await restoreOverlayPalette(mode);
           return;
         case 'size-up': {
           const w = sizeKey === 'interview' ? currentStyle.interviewWidth : currentStyle.examWidth;

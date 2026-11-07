@@ -27,13 +27,19 @@ export function App({ scene }: { scene: 'overlay' | 'mock' | 'main' }) {
       );
     }
     let reloading = false;
+    const RELOAD_LATCH = 'ml-overlay-idle-reload-at';
     const reloadIfIdle = () => {
       if (reloading) return;
       void import('@/lib/interviewEngine').then(({ getInterviewEngineState }) => {
-        if (!getInterviewEngineState().sessionId) {
-          reloading = true;
-          window.location.reload();
-        }
+        if (getInterviewEngineState().sessionId) return;
+        // 隐藏的浮窗窗口启动时 isVisible() 恒为 false；用 sessionStorage 闩锁保证一次启动只重载一次。
+        try {
+          const last = Number(window.sessionStorage.getItem(RELOAD_LATCH) || 0);
+          if (Date.now() - last < 60_000) return;
+          window.sessionStorage.setItem(RELOAD_LATCH, String(Date.now()));
+        } catch { /* 无 sessionStorage 时退回单次内存闩锁 */ }
+        reloading = true;
+        window.location.reload();
       });
     };
     // 每次浮窗隐藏都尝试刷新；会话仍活跃（如应急隐藏）时跳过，等真正空闲的那次隐藏

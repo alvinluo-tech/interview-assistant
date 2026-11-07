@@ -18,6 +18,7 @@ import { onEvent, setOverlayInteractive, setOverlayZones, setDragActive } from '
 import { isZonesSuppressed, subscribeDualTakeover } from '@/lib/dualScreen';
 import { getSetting, setSetting } from '@/lib/store';
 import type { OverlayMode } from '@/lib/overlayStyle';
+import { t } from '@/lib/i18n';
 
 export interface OverlayPlatform {
   inOverlay: true;
@@ -39,6 +40,36 @@ const PlatformContext = createContext<OverlayPlatform | null>(null);
 
 const ZONE_SCAN_MS = 350;
 const ZONE_EXPAND_PX = 4;
+
+/** 元素被哪些滚动/裁剪容器限制；结果按元素缓存，避免每轮扫描重复读计算样式。 */
+const CLIP_CACHE = new WeakMap<HTMLElement, HTMLElement[]>();
+function clipAncestors(el: HTMLElement): HTMLElement[] {
+  const cached = CLIP_CACHE.get(el);
+  if (cached) return cached;
+  const ancestors: HTMLElement[] = [];
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (/(auto|scroll|hidden|clip)/.test(`${style.overflow} ${style.overflowX} ${style.overflowY}`)) ancestors.push(node);
+  }
+  CLIP_CACHE.set(el, ancestors);
+  return ancestors;
+}
+
+/** 可见热区 = 元素矩形 ∩ 各裁剪祖先 ∩ 窗口视口；完全不可见时返回 null。 */
+function visibleRect(el: HTMLElement): { left: number; top: number; width: number; height: number } | null {
+  const base = el.getBoundingClientRect();
+  if (base.width <= 0 || base.height <= 0) return null;
+  let left = base.left, top = base.top, right = base.right, bottom = base.bottom;
+  for (const node of clipAncestors(el)) {
+    const r = node.getBoundingClientRect();
+    left = Math.max(left, r.left); top = Math.max(top, r.top);
+    right = Math.min(right, r.right); bottom = Math.min(bottom, r.bottom);
+  }
+  left = Math.max(left, 0); top = Math.max(top, 0);
+  right = Math.min(right, window.innerWidth); bottom = Math.min(bottom, window.innerHeight);
+  if (right - left < 2 || bottom - top < 2) return null;
+  return { left, top, width: right - left, height: bottom - top };
+}
 
 export function OverlayPlatformProvider({
   mode,
@@ -86,12 +117,13 @@ export function OverlayPlatformProvider({
         const list: { id: string; x: number; y: number; width: number; height: number }[] = [];
         for (const [id, el] of zonesRef.current) {
           if (!el.isConnected) continue;
-          const r = el.getBoundingClientRect();
-          if (r.width <= 0 || r.height <= 0) continue;
+          // 只上报真正可见的部分：滚出滚动容器或窗口的元素不能在其他应用的位置形成热区。
+          const r = visibleRect(el);
+          if (!r) continue;
           list.push({
             id,
-            x: Math.round(outer.x + (r.x - ZONE_EXPAND_PX) * sf),
-            y: Math.round(outer.y + (r.y - ZONE_EXPAND_PX) * sf),
+            x: Math.round(outer.x + (r.left - ZONE_EXPAND_PX) * sf),
+            y: Math.round(outer.y + (r.top - ZONE_EXPAND_PX) * sf),
             width: Math.round((r.width + ZONE_EXPAND_PX * 2) * sf),
             height: Math.round((r.height + ZONE_EXPAND_PX * 2) * sf),
           });
@@ -122,6 +154,13 @@ export function OverlayPlatformProvider({
     return onEvent<{ zoneId: string | null }>('cursor-zone', (p) => {
       setActiveZoneId(p.zoneId);
     });
+  }, [simulate]);
+
+  // 原生拖动状态：拖动中要提示「静止多久放下」
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    if (simulate) return;
+    return onEvent<{ active: boolean }>('drag-mode-changed', (p) => setDragging(!!p.active));
   }, [simulate]);
 
   // 热键事件
@@ -198,7 +237,74 @@ export function OverlayPlatformProvider({
     simulate,
   };
 
-  return <PlatformContext.Provider value={value}>{children}</PlatformContext.Provider>;
+  // 穿透模式下的悬停提示：告诉用户「悬停多久触发」和拖动时的「静止多久放下」。
+  const hintZoneId = dragging ? 'drag' : !interactive && !simulate ? activeZoneId : null;
+  const hintEl = hintZoneId ? zonesRef.current.get(hintZoneId) : undefined;
+  const hint = hintEl && hintEl.dataset.dwellMs && !hintEl.matches(':disabled') ? (
+    <HoverHint key={`${hintZoneId}-${dragging}`} zoneEl={hintEl} dragging={dragging} />
+  ) : null;
+
+  return (
+    <PlatformContext.Provider value={value}>
+      {children}
+      {hint}
+    </PlatformContext.Provider>
+  );
+}
+
+const HINT_WIDTH = 188;
+
+/** 悬停提示：进度条对应真实的驻留时长，拖动时切换为放下说明。 */
+function HoverHint({ zoneEl, dragging }: { zoneEl: HTMLElement; dragging: boolean }) {
+  const [progress, setProgress] = useState(0);
+  const [rect, setRect] = useState(() => zoneEl.getBoundingClientRect());
+  const hoverMs = Number(zoneEl.dataset.dwellMs) || 1100;
+  useEffect(() => {
+    // 滚动（capture 阶段能拿到内部滚动容器）或窗口尺寸变化时重算，提示不会停在旧位置。
+    const update = () => {
+      const visible = visibleRect(zoneEl);
+      setRect(visible ? new DOMRect(visible.left, visible.top, visible.width, visible.height) : zoneEl.getBoundingClientRect());
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [zoneEl]);
+  useEffect(() => {
+    if (dragging) return;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / hoverMs);
+      setProgress(p);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [dragging, hoverMs]);
+  const label = (zoneEl.getAttribute('aria-label')
+    || zoneEl.querySelector('[data-overlay-action-label]')?.textContent
+    || zoneEl.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 24);
+  const seconds = (hoverMs / 1000).toFixed(1).replace(/\.0$/, '');
+  const text = dragging
+    ? t('移动鼠标定位 · 静止 {s} 秒放下', { s: '0.8' })
+    : `${label ? `${label} · ` : ''}${t('悬停 {s} 秒', { s: seconds })}`;
+  const top = rect.top > 46 ? rect.top - 34 : rect.bottom + 6;
+  const left = Math.max(4, Math.min(rect.left + rect.width / 2 - HINT_WIDTH / 2, (window.innerWidth || 360) - HINT_WIDTH - 4));
+  return (
+    <div className="ov-panel ov-text-2 pointer-events-none fixed z-50 rounded-md border px-2 py-1 text-[10px] shadow-md" style={{ top, left, width: HINT_WIDTH }}>
+      <div className="truncate">{text}</div>
+      {!dragging && (
+        <span className="relative mt-1 block h-0.5 w-full overflow-hidden rounded-sm">
+          <span aria-hidden="true" className="absolute inset-0 opacity-20" style={{ background: 'currentColor' }} />
+          <span aria-hidden="true" className="absolute inset-y-0 left-0" style={{ width: `${Math.round(progress * 100)}%`, background: 'currentColor' }} />
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function usePlatform(): OverlayPlatform {
@@ -224,7 +330,7 @@ export function useDwell(
   zoneId: string,
   hoverMs: number,
   onTrigger: () => void,
-  opts?: { cooldownMs?: number; disabled?: boolean },
+  opts?: { cooldownMs?: number; disabled?: boolean; requireReentry?: boolean },
 ): number {
   const { activeZoneId } = usePlatform();
   const cooldownMs = opts?.cooldownMs ?? 800;
@@ -233,6 +339,8 @@ export function useDwell(
   const cooldownUntilRef = useRef(0);
   const startRef = useRef(0);
   const triggeredRef = useRef(false);
+  // 拖动这类动作：同一次悬停只触发一次，光标离开后重新进入才再次生效。
+  const reenteredRef = useRef(true);
   // 回调用 ref 持有：避免父组件每次渲染产生的新函数重置驻留进度
   const onTriggerRef = useRef(onTrigger);
   onTriggerRef.current = onTrigger;
@@ -243,6 +351,7 @@ export function useDwell(
     if (!active) {
       setProgress(0);
       triggeredRef.current = false;
+      reenteredRef.current = true;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       return;
@@ -251,6 +360,11 @@ export function useDwell(
     triggeredRef.current = false;
     const tick = () => {
       const now = performance.now();
+      if (opts?.requireReentry && !reenteredRef.current) {
+        setProgress(0);
+        rafRef.current = null;
+        return;
+      }
       if (now < cooldownUntilRef.current) {
         setProgress(0);
       } else {
@@ -258,6 +372,7 @@ export function useDwell(
         setProgress(p);
         if (p >= 1 && !triggeredRef.current) {
           triggeredRef.current = true;
+          reenteredRef.current = false;
           cooldownUntilRef.current = now + cooldownMs;
           startRef.current = now;
           onTriggerRef.current();
@@ -269,7 +384,7 @@ export function useDwell(
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [active, hoverMs, cooldownMs, zoneId]);
+  }, [active, hoverMs, cooldownMs, zoneId, opts?.requireReentry]);
 
   return active ? progress : 0;
 }

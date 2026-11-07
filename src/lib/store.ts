@@ -253,4 +253,7 @@ export const ALL_KEYS = [
   'local.user', // 复刻新增：本地用户
   'desktop.theme', // 主窗口深浅色（'system' | 'light' | 'dark'）
   'desktop.uiScale', // 主窗口界面大小
+  'interview.microphoneId', // 麦克风检查/语音提问选择的输入设备
+  'mock.assistMode', // 模拟面试 AI 辅助提示开关
+  'onboarding.defaultsSeeded', // 示例数据只预置一次
 ] as const;

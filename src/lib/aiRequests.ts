@@ -42,7 +42,9 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
   const task=opts.task || (role==='vision'?'exam-solve':'interview-answer');
   const messages=applyTaskInstructions(opts.messages,task,getSetting<TaskPreferences>('ai.taskPreferences',{}));
   const trace:AiRequestTrace={id:globalThis.crypto?.randomUUID?.() || `req-${Date.now()}-${Math.random()}`,task,promptVersion:PROMPT_VERSION,providerId:provider.id,modelId,startedAt:Date.now(),elapsedMs:0,completionStatus:'unknown'};
-  const limit=Math.min(opts.maxTokens || outputLimit(task,capabilities),capabilities?.maxOutputTokens || Infinity);
+  // 任务上限同时约束调用方传入的 maxTokens（例如语音对话），避免绕过上下文窗口预算。
+  const taskLimit=outputLimit(task,capabilities);
+  let limit=Math.min(opts.maxTokens || taskLimit, taskLimit);
   const outputParameter=capabilities?.outputParameter || 'max_tokens';
   const format=opts.schema&&capabilities?.structuredOutput==='json_schema'?{type:'json_schema',json_schema:{...opts.schema,strict:true}}:
     opts.schema&&capabilities?.structuredOutput==='json_object'?{type:'json_object'}:undefined;
@@ -60,11 +62,16 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
       ...(outputParameter==='none'?{}:{[outputParameter]:limit}),...(format?{response_format:format}:{}),
     }),
   }, Math.max(1,settings.timeoutMs-(Date.now()-trace.startedAt)), async (response,pending) => {
-    const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending);
+    const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending,()=>{emitted=true;});
     trace.completionStatus=result.completionStatus;trace.finishReason=result.finishReason;Object.assign(trace,result.usage);
     return result.text;
   }, aiFetch, opts.signal);
   } catch(error){
+    const message=String((error as Error)?.message || error);
+    if(!emitted && attempt===0 && limit>1024 && /max_(?:completion_)?tokens/i.test(message)){
+      limit=Math.max(1024,Math.floor(limit/2));
+      continue;
+    }
     const delay=recoverableTask&&!emitted&&attempt===0&&!opts.signal?.aborted?retryDelay(error,attempt):null;
     if(delay===null || Date.now()-trace.startedAt+delay>=settings.timeoutMs)throw error;
     await waitForRetry(delay,opts.signal);

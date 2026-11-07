@@ -43,3 +43,11 @@ export async function saveAiSettings(value: AiSettings) {
   notify();
   return settings;
 }
+/** 解密失败（换机/换账户/凭据损坏）时唯一的自救入口：删除本机保存的 AI 配置。 */
+export async function resetAiSettings() {
+  if (desktop()) await invoke('cmd_ai_reset_settings');
+  ++revision;
+  loadError = '';
+  settings = defaultAiSettings();
+  notify();
+}

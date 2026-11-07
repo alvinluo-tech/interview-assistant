@@ -84,7 +84,8 @@ export async function requestSpeech(provider: AiProvider, model: string, text: s
     return;
   }
   const segments = splitSpeechText(text);
-  for (const segment of service === 'compatible' && segments.length ? [text.trim()] : segments) {
+  // 兼容接口的 input 也有长度上限，必须逐段请求，不能把整段长文一次发出去。
+  for (const segment of segments) {
     signal?.throwIfAborted();
     const native = service === 'qwen' || service === 'bailian';
     // Retain the configured region AND workspace host; never send its key to another origin.

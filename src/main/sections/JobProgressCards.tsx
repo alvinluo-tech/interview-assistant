@@ -82,14 +82,14 @@ export function JobProgressCards() {
     setMarking(true);
     try {
       if (pending.kind === 'interview') {
-        setSessions(
-          sessions.map((s) =>
+        setSessions((prev) =>
+          prev.map((s) =>
             s.id === pending.id ? { ...s, outcome: markValue as InterviewSession['outcome'] } : s,
           ),
         );
       } else {
-        setExams(
-          exams.map((e) =>
+        setExams((prev) =>
+          prev.map((e) =>
             e.id === pending.id ? { ...e, outcome: markValue as ExamSessionRecord['outcome'] } : e,
           ),
         );

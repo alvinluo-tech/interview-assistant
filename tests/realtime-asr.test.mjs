@@ -119,15 +119,16 @@ test('a pending retired send cannot block or reset the reconnected PCM sender',a
   } finally {releaseOld?.();await capture.close();}
 });
 
-test('stalled real transport still fails at the two-second total PCM bound',async()=>{
+test('a stalled send reconnects at the two-second bound instead of ending the interview capture',async()=>{
   let release;const f=fixture({sendBinary:()=>new Promise(resolve=>{release=resolve;})});const capture=await f.open();
   try {
     capture.push(new Int16Array(1600)); // 100ms currently in flight.
     for(let i=0;i<19;i++)capture.push(new Int16Array(1600));
     assert.equal(f.errors.length,0);
     capture.push(new Int16Array(1));await new Promise(resolve=>setTimeout(resolve,0));
-    assert.equal(f.errors.length,1,'the in-flight 100ms must count toward the two-second audio limit');
-    assert.match(f.errors[0].message,/积压/);assert.equal(f.disconnects(),1);
+    assert.equal(f.errors.length,0,'a stalled transport must reconnect rather than kill capture');
+    assert.ok(f.states.includes('reconnecting'));
+    assert.equal(f.disconnects(),1);
   } finally {release?.();await capture.close();}
 });
 
@@ -197,7 +198,7 @@ test('finish drains PCM before requesting the final text and closing the transpo
   assert.equal(f.errors.length, 0);
 });
 
-test('queue overflow and malformed service responses fail visibly and release the socket', async () => {
+test('an oversized PCM chunk and malformed service responses fail visibly and release the socket', async () => {
   const f = fixture({ sendBinary: () => new Promise(() => {}) });
   const capture = await f.open();
   capture.push(new Int16Array(1600)); capture.push(new Int16Array(32001));

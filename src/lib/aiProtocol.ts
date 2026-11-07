@@ -4,7 +4,7 @@ import { t } from './i18n';
 
 export type AiFetch = (url: string, init: RequestInit) => Promise<Response>;
 export type CompletionStatus = 'complete' | 'truncated' | 'refused' | 'unknown' | 'cancelled' | 'failed';
-export interface ChatCompletion {text:string;completionStatus:CompletionStatus;finishReason?:string;usage?:{inputTokens?:number;outputTokens?:number;cachedTokens?:number}}
+export interface ChatCompletion {text:string;completionStatus:CompletionStatus;finishReason?:string;reasoningChars?:number;usage?:{inputTokens?:number;outputTokens?:number;cachedTokens?:number;reasoningTokens?:number}}
 export class AiCompletionError extends Error {
   constructor(message:string,public partialText:string,public completionStatus:CompletionStatus) {super(message);this.name='AiCompletionError';}
 }
@@ -67,10 +67,16 @@ export async function withAiRequest<T>(
     if (scope.signal.aborted) throw scope.signal.reason ?? new DOMException(t('已取消请求'), 'AbortError');
     if (error instanceof AiCompletionError) throw new AiCompletionError(redactError(error.message,normalized.apiKey),
       normalized.apiKey ? error.partialText.split(normalized.apiKey).join(t('[密钥已隐藏]')) : error.partialText,error.completionStatus);
-    if (error instanceof Error) throw new Error(redactError(error.message, normalized.apiKey));
+    if (error instanceof Error) throw markTransient(new Error(redactError(error.message, normalized.apiKey)), error);
     if (typeof error === 'string' && error.includes('url not allowed')) throw new Error(t('接口地址被桌面 HTTP 权限拦截，请使用已更新的客户端'));
-    throw new Error(t('无法连接接口，请检查地址、网络、证书和服务状态'));
+    throw markTransient(new Error(t('无法连接接口，请检查地址、网络、证书和服务状态')), error);
   } finally { scope.cleanup(); }
+}
+/** Network failures are worth one bounded retry; auth/format errors are not. */
+function markTransient(failure: Error, cause: unknown): Error {
+  const name=(cause as {name?:string})?.name;
+  if (name === 'TypeError' || typeof cause !== 'object') (failure as Error & {transient?:boolean}).transient = true;
+  return failure;
 }
 
 export async function discoverModels(provider: AiProvider, fetcher: AiFetch, signal?: AbortSignal): Promise<{ id: string; name: string }[]> {
@@ -147,19 +153,22 @@ function extractText(value: unknown): string {
   return '';
 }
 /** One parser for both text and vision, including split UTF-8 and final unterminated lines. */
-export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal): Promise<ChatCompletion> {
+export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal, onReasoning?:()=>void): Promise<ChatCompletion> {
   if (!response.body) throw new Error(t('接口未返回响应内容'));
   const type = response.headers.get('content-type') ?? '';
-  let full='',finishReason:string|undefined,ended=false,refused=false;
+  let full='',reasoning='',finishReason:string|undefined,ended=false,refused=false;
   let usage:ChatCompletion['usage'];
-  const consume = (json: {error?:{message?:string};choices?:{finish_reason?:string;delta?:{content?:unknown;refusal?:unknown};message?:{content?:unknown;refusal?:unknown}}[];usage?:{prompt_tokens?:number;completion_tokens?:number;prompt_tokens_details?:{cached_tokens?:number}}}) => {
+  const consume = (json: {error?:{message?:string};choices?:{finish_reason?:string;delta?:{content?:unknown;reasoning_content?:unknown;reasoning?:unknown;refusal?:unknown};message?:{content?:unknown;reasoning_content?:unknown;refusal?:unknown}}[];usage?:{prompt_tokens?:number;completion_tokens?:number;completion_tokens_details?:{reasoning_tokens?:number};prompt_tokens_details?:{cached_tokens?:number}}}) => {
     if(json.error)throw new Error(json.error.message || t('模型请求失败'));
     const choice=json.choices?.[0];
     if(choice?.finish_reason)finishReason=choice.finish_reason;
     if(choice?.delta?.refusal || choice?.message?.refusal)refused=true;
+    // 思考内容与正文分开累计：思维链既不能当答案展示，也提示输出预算被谁用掉。
+    const thought=extractText(choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? choice?.message?.reasoning_content);
+    if(thought){reasoning+=thought;onReasoning?.();}
     const text=extractText(choice?.delta?.content ?? choice?.message?.content);
     if(text){full+=text;if(full.length>2_000_000)throw new Error(t('回答过长，请缩小任务范围。'));onDelta?.(text);}
-    if(json.usage)usage={inputTokens:json.usage.prompt_tokens,outputTokens:json.usage.completion_tokens,cachedTokens:json.usage.prompt_tokens_details?.cached_tokens};
+    if(json.usage)usage={inputTokens:json.usage.prompt_tokens,outputTokens:json.usage.completion_tokens,cachedTokens:json.usage.prompt_tokens_details?.cached_tokens,reasoningTokens:json.usage.completion_tokens_details?.reasoning_tokens};
   };
   if (type.includes('application/json')) {
     consume(await response.json());
@@ -201,10 +210,15 @@ export async function consumeChatResult(response: Response, onDelta?: (text: str
   } finally {signal?.removeEventListener('abort',abort);await reader.cancel().catch(() => {}); reader.releaseLock();}
   }
   const completionStatus:CompletionStatus=finishReason==='length'?'truncated':refused||finishReason==='content_filter'?'refused':finishReason==='stop'?'complete':'unknown';
-  if(completionStatus==='truncated')throw new AiCompletionError(t('回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。'),full,'truncated');
+  if(completionStatus==='truncated'){
+    const message=!full&&reasoning
+      ? t('思考过程占满了输出预算，没有生成正文；可以直接重试。')
+      : t('回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。');
+    throw new AiCompletionError(message,full,'truncated');
+  }
   if(completionStatus==='refused')throw new AiCompletionError(t('模型未能完成此请求，已保留已有内容。'),full,'refused');
   if (!full) throw new Error(t('模型没有返回文本回答，请确认该模型支持此用途'));
-  return {text:full,completionStatus,finishReason,usage};
+  return {text:full,completionStatus,finishReason,reasoningChars:reasoning.length,usage};
 }
 /** Compatibility facade; task callers use consumeChatResult to retain completion metadata. */
 export async function consumeChat(response:Response,onDelta?:(text:string)=>void):Promise<string>{

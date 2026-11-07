@@ -1,11 +1,17 @@
 import { t } from './i18n';
 export type AiTask = 'free-chat' | 'interview-answer' | 'exam-solve' | 'exam-followup' | 'mock-question' | 'mock-hint' | 'mock-report' | 'question-bank' | 'document-extract' | 'translation';
 export const PROMPT_VERSION = '2026-10-30.1';
+/**
+ * 输出上限必须覆盖「思考 + 正文」：DeepSeek V4 等模型默认开启 thinking，
+ * 思维链与正文共用 max_tokens；上限过小会把预算全部消耗在思考上并以
+ * finish_reason=length 结束，表现为「回答因输出长度限制被截断」。
+ * 这里的值仍是成本/延迟护栏，用户可在「模型输出上限」里进一步收紧。
+ */
 export const TASK_OUTPUT_LIMIT: Record<AiTask, number> = {
     'free-chat': 4096,
     translation: 4096,
-    'interview-answer': 1800, 'exam-solve': 8192, 'exam-followup': 8192, 'mock-question': 768,
-    'mock-hint': 1024, 'mock-report': 6144, 'question-bank': 8192, 'document-extract': 12000,
+    'interview-answer': 8192, 'exam-solve': 8192, 'exam-followup': 8192, 'mock-question': 4096,
+    'mock-hint': 4096, 'mock-report': 6144, 'question-bank': 8192, 'document-extract': 12000,
 };
 export interface ModelCapabilities {
     contextWindow?: number;
@@ -28,6 +34,8 @@ export interface AiRequestTrace {
     inputTokens?: number;
     outputTokens?: number;
     cachedTokens?: number;
+    /** Provider-reported thinking tokens; they share the output budget on reasoning models. */
+    reasoningTokens?: number;
 }
 export function outputLimit(task: AiTask, capabilities?: ModelCapabilities): number {
     return Math.min(TASK_OUTPUT_LIMIT[task], capabilities?.maxOutputTokens || Infinity, capabilities?.contextWindow ? Math.max(256, Math.floor(capabilities.contextWindow / 3)) : Infinity);
@@ -61,8 +69,12 @@ export function checkInputBudget(messages: {
 export function retryDelay(error: unknown, attempts: number): number | null {
     if (attempts >= 2 || (error as Error)?.name === 'AbortError')
         return null;
+    // 连接层失败（断网、代理抖动、证书握手）在面试里很常见，重试一次比让用户手动重来便宜。
+    if ((error as { transient?: boolean })?.transient)
+        return Math.min(8000, 1500 * 2 ** attempts);
     const message = String((error as Error)?.message || error);
-    if (!/HTTP (?:408|429|500|502|503|504)\b/.test(message))
+    // 429 多为额度不足或限流，1.5 秒后重试通常只会再失败一次；交给用户处理。
+    if (!/HTTP (?:408|500|502|503|504)\b/.test(message))
         return null;
     return Math.min(8000, 1500 * 2 ** attempts);
 }

@@ -479,16 +479,68 @@ pub async fn cmd_open_mock(app: AppHandle, window: tauri::WebviewWindow, session
     Ok(())
 }
 
+/// 把主窗口真正提到最前。
+/// `show()` 只是让窗口可见，前台锁（Windows 不允许后台进程随便抢焦点）会让它停在别的应用后面，
+/// 面试结束后用户就“看不到主窗口回来了”。这里用置顶/取消置顶的方式强制提到最前。
+#[cfg(windows)]
+fn bring_to_front(win: &WebviewWindow) -> Result<(), String> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOW,
+        SetForegroundWindow, SetWindowPos, ShowWindow,
+    };
+    let hwnd = win.hwnd().map_err(|e| e.to_string())?;
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_SHOW);
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+        );
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_NOTOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+        );
+        let _ = SetForegroundWindow(hwnd);
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn bring_to_front(_win: &WebviewWindow) -> Result<(), String> {
+    Ok(())
+}
+
 #[tauri::command]
 pub fn cmd_show_main(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("main") {
         if let Some(window) = crate::protection::window(&app, "main") {
-            crate::protection::reapply(&window)?;
-            crate::disguise::reapply(&window)?;
+            // 反录制/伪装只是加固：它们失败也不能让主窗口永远不出现，否则用户手里一个窗口都没有。
+            if let Err(error) = crate::protection::reapply(&window) {
+                log::warn!("[capture] show main: {error}");
+            }
+            if let Err(error) = crate::disguise::reapply(&window) {
+                log::warn!("[disguise] show main: {error}");
+            }
         }
-        let _ = win.unminimize();
+        win.unminimize().map_err(|e| e.to_string())?;
         win.show().map_err(|e| e.to_string())?;
-        let _ = win.set_focus();
+        if let Err(error) = bring_to_front(&win) {
+            log::warn!("[window] foreground main: {error}");
+        }
+        if let Err(error) = win.set_focus() {
+            log::warn!("[window] focus main: {error}");
+        }
+    } else {
+        log::warn!("[window] main window missing");
     }
     Ok(())
 }

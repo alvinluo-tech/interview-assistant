@@ -43,7 +43,8 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
   let queue: number[][] = [];
   const seen = new Set<string>(), finalTexts: string[] = [];
   let resolveStarted: (() => void) | undefined, rejectStarted: ((error: Error) => void) | undefined;
-  let resolveFinished: (() => void) | undefined;
+  let resolveFinished: (() => void) | undefined, rejectFinished: ((error: Error) => void) | undefined;
+  let finishSent = false;
   const safeError = (error: unknown) => new Error(String((error as Error)?.message || error).split(config.apiKey).join('<redacted>').slice(0, 500));
 
   async function send(data: string | number[], target = socket) {
@@ -68,16 +69,21 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
     closed = true; epoch++; ready = false; queue = []; queuedBytes = 0; inFlightBytes = 0;
     clearTimeout(retryTimer); config.signal?.removeEventListener('abort', abort);
     rejectStarted?.(new DOMException(t('实时识别已取消'), 'AbortError'));
-    resolveFinished?.();
+    // 取消时让等待定稿的 finish() 以 AbortError 结束，而不是把半截文本当成功。
+    if (rejectFinished) rejectFinished(new DOMException(t('实时识别已取消'), 'AbortError'));
+    else resolveFinished?.();
+    resolveFinished = undefined; rejectFinished = undefined;
     const previous = socket;
-    if (previous) void previous.send(JSON.stringify({ header: { action: 'finish-task', task_id: taskId, streaming: 'duplex' }, payload: { input: {} } })).catch(() => {});
+    // finish-task 已由 finish() 发出时不要重复发送。
+    if (previous && !finishSent) void previous.send(JSON.stringify({ header: { action: 'finish-task', task_id: taskId, streaming: 'duplex' }, payload: { input: {} } })).catch(() => {});
     await detach(); callbacks.onState?.('closed');
   }
   function abort() { void close(); }
   async function fail(error: unknown) { if (closed) return; const failure = safeError(error); await close(); callbacks.onError(failure); }
   function reconnect(error: unknown) {
     if (closed || retryTimer) return;
-    if (ready && Date.now() - stableSince >= 60000) retries = 0;
+    // 连接稳定 10 秒就重新计数；60 秒对面试来说太长，网络抖动几次就会误判「多次中断」。
+    if (ready && Date.now() - stableSince >= 10000) retries = 0;
     if (retries >= 3) { void fail(new Error(t('实时语音连接多次中断：{message}', { message: safeError(error).message }))); return; }
     ready = false; queue = []; queuedBytes = 0; inFlightBytes = 0;
     epoch++; void detach();
@@ -179,12 +185,18 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
   if (config.signal?.aborted) { await close(); throw new DOMException(t('实时识别已取消'), 'AbortError'); }
   try { await establish(); } catch (error) { await close(); throw error; }
   return {
-    push(pcm: Int16Array) {
-      if (closed || !ready) return; // Reconnection gaps are explicitly reported; never replay stale speech.
-      if (pcm.byteLength > 64000 || queuedBytes + inFlightBytes + pcm.byteLength > 64000) { void fail(new Error(t('语音发送积压超过两秒，请检查网络后重试。'))); return; }
+    push(pcm: Int16Array): boolean {
+      if (closed || !ready) return false; // Reconnection gaps are explicitly reported; never replay stale speech.
+      if (pcm.byteLength > 64000) { void fail(new Error(t('语音发送积压超过两秒，请检查网络后重试。'))); return false; }
+      if (queuedBytes + inFlightBytes + pcm.byteLength > 64000) {
+        // 发送端落后超过两秒：这批音频已经过期，换一条连接继续，而不是让整场面试停止收音。
+        reconnect(new Error(t('语音发送积压超过两秒，请检查网络后重试。')));
+        return false;
+      }
       const bytes = new Uint8Array(pcm.length * 2); const view = new DataView(bytes.buffer);
       pcm.forEach((sample, index) => view.setInt16(index * 2, sample, true));
       queue.push(Array.from(bytes)); queuedBytes += bytes.length; void drain();
+      return true;
     },
     async finish() {
       if (closed || !socket) return finalTexts.join(' ');
@@ -196,11 +208,24 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
           if (Date.now() >= deadline) throw new Error(t('语音发送超时'));
           await new Promise(resolve => setTimeout(resolve, 10));
         }
-        const finished = new Promise<void>((resolve, reject) => { resolveFinished = resolve; timeout = setTimeout(() => reject(new Error(t('语音定稿超时，请重试'))), 8000); });
+        // 重连窗口里队列可能为空且没有在途发送，但连接并没有就绪，不能发 finish-task。
+        if (closed || !ready || !socket) throw new Error(t('语音发送已中断'));
+        const remaining = Math.max(500, deadline - Date.now());
+        const finished = new Promise<void>((resolve, reject) => {
+          resolveFinished = resolve;
+          rejectFinished = reject;
+          timeout = setTimeout(() => reject(new Error(t('语音定稿超时，请重试'))), remaining);
+        });
         void finished.catch(() => {});
+        finishSent = true;
         await send(JSON.stringify({ header: { action: 'finish-task', task_id: taskId, streaming: 'duplex' }, payload: { input: {} } }));
         await finished; return finalTexts.join(' ');
-      } finally { clearTimeout(timeout); await close(); }
+      } finally {
+        clearTimeout(timeout);
+        resolveFinished = undefined;
+        rejectFinished = undefined;
+        await close();
+      }
     },
     close,
   };

@@ -40,6 +40,10 @@ pub fn window(app: &AppHandle, label: &str) -> Option<Window> {
 }
 
 pub fn dev_bypass() -> bool {
+    // 只在调试构建生效；正式包不能被环境变量或固定路径关掉反录制。
+    if !cfg!(debug_assertions) {
+        return false;
+    }
     std::env::var_os("MIANSHI_NO_WDA").is_some()
         || std::env::var_os("MIANLING_NO_WDA").is_some()
         || std::path::Path::new(r"C:\dev\skip-wda.flag").exists()

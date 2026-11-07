@@ -236,8 +236,8 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
               <Button
                 size="sm"
                 onClick={() => {
-                  setSessions(
-                    allSessions.map((x) => (x.id === renaming.id ? { ...x, title: renaming.title.trim() } : x)),
+                  setSessions((prev) =>
+                    prev.map((x) => (x.id === renaming.id ? { ...x, title: renaming.title.trim() } : x)),
                   );
                   setRenaming(null);
                 }}
@@ -255,7 +255,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
         body={t('删除后无法恢复，确定删除「{name}」吗？', { name: deleting?.title ?? '' })}
         onCancel={() => setDeleting(null)}
         onConfirm={() => {
-          if (deleting) setSessions(allSessions.filter((x) => x.id !== deleting.id));
+          if (deleting) setSessions((prev) => prev.filter((x) => x.id !== deleting.id));
           setDeleting(null);
         }}
       />
@@ -306,8 +306,8 @@ function ExamRecords() {
                 className="h-7 rounded border bg-background px-1 text-[11px]"
                 value={r.outcome ?? ''}
                 onChange={(e) =>
-                  setRecords(
-                    records.map((x) =>
+                  setRecords((prev) =>
+                    prev.map((x) =>
                       x.id === r.id ? { ...x, outcome: (e.target.value || null) as ExamSessionRecord['outcome'] } : x,
                     ),
                   )
@@ -356,7 +356,12 @@ function ExamRecords() {
         body={t('删除后无法恢复，确定删除「{name}」吗？', { name: deleting?.title ?? '' })}
         onCancel={() => setDeleting(null)}
         onConfirm={() => {
-          if (deleting) setRecords(records.filter((x) => x.id !== deleting.id));
+          if (deleting) {
+            const id = deleting.id;
+            setRecords((prev) => prev.filter((x) => x.id !== id));
+            // 记录删除后同步回收截图附件，避免只写不删。
+            void cmd('cmd_exam_delete_images', { sessionId: id }).catch(() => {});
+          }
           setDeleting(null);
         }}
       />

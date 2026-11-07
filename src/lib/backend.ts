@@ -127,7 +127,7 @@ export function readData<T>(key: string, fallback: T): T {
 }
 
 export { persist as writeData };
-export function useData<T>(key: string, fallback: T): [T, (v: T) => void] {
+export function useData<T>(key: string, fallback: T): [T, (v: T | ((prev: T) => T)) => void] {
   const value = useSyncExternalStore(
     (cb) => {
       listeners.add(cb);
@@ -136,9 +136,14 @@ export function useData<T>(key: string, fallback: T): [T, (v: T) => void] {
     () => readData(key, fallback),
     () => fallback,
   );
-  return [value, (v: T) => { void persist(key, v).catch(error => {
-    void import('./events').then(({ bus }) => bus.emit('toast', { type: 'error', title: t('数据保存失败'), description: String(error.message || error) }));
-  }); }];
+  return [value, (v: T | ((prev: T) => T)) => {
+    // 基于写入瞬间的最新缓存计算，避免用旧渲染快照覆盖别处刚写入的记录。
+    const latest = readData<T>(key, fallback);
+    const next = typeof v === 'function' ? (v as (prev: T) => T)(latest) : v;
+    void persist(key, next).catch(error => {
+      void import('./events').then(({ bus }) => bus.emit('toast', { type: 'error', title: t('数据保存失败'), description: String(error.message || error) }));
+    });
+  }];
 }
 
 export async function saveFeedback(text: string) {
@@ -227,6 +232,7 @@ export interface Goal {
   companyName?: string;
   description?: string;
   createdAt: number;
+  isSample?: boolean;
 }
 
 export interface MaterialEntry {
@@ -244,6 +250,7 @@ export interface Material {
   createdAt: number;
   updatedAt: number;
   entries: MaterialEntry[];
+  isSample?: boolean;
 }
 
 // ---------------- CRUD ----------------
@@ -393,7 +400,7 @@ export async function deleteResume(id: string) {
   await persist('resumes', resumes.filter((r) => r.id !== id));
 }
 
-export async function saveMaterial(m: { id?: string; name?: string; content?: string; source?: Material['source'] }): Promise<Material> {
+export async function saveMaterial(m: { id?: string; name?: string; content?: string; source?: Material['source']; isSample?: boolean }): Promise<Material> {
   const materials = readData<Material[]>('materials', []);
   if(m.id&&!materials.some(item=>item.id===m.id))throw new Error(t('资料已删除，编辑内容尚未保存。'));
   if (m.id) {
@@ -413,6 +420,7 @@ export async function saveMaterial(m: { id?: string; name?: string; content?: st
     createdAt: Date.now(),
     updatedAt: Date.now(),
     entries: [],
+    ...(m.isSample ? { isSample: true } : {}),
   };
   await persist('materials', [full, ...materials]);
   return full;
@@ -455,8 +463,10 @@ export async function deleteEntry(materialId: string, entryId: string) {
   );
 }
 
-/** 预置示例数据（首次启动，原版 onboarding default data 同概念） */
+/** 预置示例数据（只在主窗口首次启动时执行一次，删除后不会再写回） */
 export async function ensureDefaultData() {
+  const { getSetting, setSetting } = await import('./store');
+  if (getSetting('onboarding.defaultsSeeded', false)) return;
   const resumes = readData<Resume[]>('resumes', []);
   const goals = readData<Goal[]>('goals', []);
   const materials = readData<Material[]>('materials', []);
@@ -473,24 +483,24 @@ export async function ensureDefaultData() {
     });
   }
   if (goals.length === 0) {
-    await saveGoal({ name: '后端工程师', companyName: '', description: '' });
+    await saveGoal({ name: '后端工程师', companyName: '', description: '', isSample: true });
   }
   if (materials.length === 0) {
-    const m = await saveMaterial({ name: '自我介绍模板', source: 'manual' });
+    const m = await saveMaterial({ name: '自我介绍模板', source: 'manual', isSample: true });
     await saveEntry(m.id, {
       question: '请做一个简短的自我介绍',
       answer:
         '面试官您好，我是计算机专业的应届生，主攻后端方向。在校期间做过一个电商订单系统，负责订单服务的核心链路，压测到过 3k QPS；实习时参与库存超卖治理，用 Redis 分布式锁加消息队列削峰把超卖率降到零。我的特点是基础扎实、喜欢刨根问底，希望能加入贵司继续深入后端方向。',
     });
   }
+  await setSetting('onboarding.defaultsSeeded', true);
 }
 
 export async function cleanupDefaultData() {
   const resumes = readData<Resume[]>('resumes', []);
   const materials = readData<Material[]>('materials', []);
+  const goals = readData<Goal[]>('goals', []);
   await persist('resumes', resumes.filter((r) => !r.isSample));
-  await persist(
-    'materials',
-    materials.filter((m) => m.name !== '自我介绍模板'),
-  );
+  await persist('materials', materials.filter((m) => !m.isSample));
+  await persist('goals', goals.filter((g) => !g.isSample));
 }

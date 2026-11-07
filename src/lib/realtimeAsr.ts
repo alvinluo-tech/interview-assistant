@@ -25,14 +25,18 @@ export async function recognizeRealtimeWav(wav: Blob, options: { signal?: AbortS
   const session = await openConfiguredRealtimeAsr({ onResult: result => { last = result.text; }, onError: error => { failure = error; } }, { signal: options.signal, language: options.lang });
   try {
     const samples = Math.min(data.getUint32(40, true) / 2, (data.byteLength - 44) / 2);
+    let dropped = 0;
     for (let offset = 0; offset < samples; offset += 1600) {
       options.signal?.throwIfAborted();
       if (failure) throw failure;
       const pcm = new Int16Array(Math.min(1600, samples - offset));
       for (let i = 0; i < pcm.length; i++) pcm[i] = data.getInt16(44 + (offset + i) * 2, true);
-      session.push(pcm);
+      if (!session.push(pcm)) dropped++;
       await new Promise(resolve => setTimeout(resolve, 100));
     }
+    if (failure) throw failure;
+    // 重连窗口里 push 会被丢弃；不提示就会把缺一段的转写当完整问题发给模型。
+    if (dropped) throw new Error(t('语音连接中断，本段识别不完整，请重试。'));
     const text = (await session.finish()).trim() || last;
     if (failure) throw failure;
     if (!text) throw new Error(t('没有识别到有效语音，请说完整一句话后重试。'));

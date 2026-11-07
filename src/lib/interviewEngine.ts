@@ -290,8 +290,15 @@ async function previewUtterance(utterance: LiveUtterance) {
   }
 }
 
-export function reportInterviewError(error: unknown) {
+export function reportInterviewError(error: unknown, retry = true) {
   setState({ status: 'error', errorMessage: String((error as Error)?.message ?? error), audio: { ...state.audio, level: 0, speaking: false } });
+  if (retry) scheduleRecovery();
+}
+
+/** 权限被拒、组件版本不匹配这类错误自动重连也不会好，只保留手动重试。 */
+function retryableCaptureError(error: unknown): boolean {
+  const code = (error as { code?: string })?.code;
+  return code !== 'NotAllowedError' && code !== 'SecurityError' && code !== 'ComponentMismatch';
 }
 
 function effectiveGateMs(): number {
@@ -384,7 +391,7 @@ function finalizeUtterance() {
       transcriptionControllers.delete(controller);
       if (generation === captureGeneration) setState({ audio: { ...state.audio, pending: Math.max(0, state.audio.pending - 1) } });
     }
-  }).catch(error => { if (generation === captureGeneration) reportInterviewError(error); });
+  }).catch(error => { if (generation === captureGeneration) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String((error as Error)?.message ?? error) }) }); });
 }
 
 async function recognizeUtterance(wavBlob: Blob, controller: AbortController, generation: number, liveId?: number) {
@@ -416,18 +423,34 @@ async function recognizeUtterance(wavBlob: Blob, controller: AbortController, ge
     if(localSpeaker()){const bytes=await wavBlob.arrayBuffer();const view=new DataView(bytes);if(bytes.byteLength>=44){pcm=new Int16Array((bytes.byteLength-44)/2);for(let i=0;i<pcm.length;i++)pcm[i]=view.getInt16(44+i*2,true);}}
     await deliverPhoneSpeech(text,pcm,generation,controller.signal);return;
   }
+  // 短句先挂在 partial 上等 3 秒，看它是不是一句话被切成了两段。
+  // 文本本身必须由 pendingShort 持有：partial 会被下一句覆盖、被 resetAudio 清空，
+  // 只靠 partial 比较的定时器会把这句话静默丢掉。
   if (text.length < 6 && liveId === undefined) {
+    flushShortUtterance();
     setState({ partial: text });
-    window.setTimeout(() => {
-      if (generation === captureGeneration && !controller.signal.aborted && state.partial === text) {
-        setState({ partial: '' });
-        void deliverUtterance(text,undefined,undefined,controller.signal);
-      }
-    }, 3000);
+    const entry = { text, generation, timer: 0 };
+    pendingShort = entry;
+    // 先登记再起定时器：定时器若同步触发（测试替身），flush 也能拿到这句话。
+    entry.timer = window.setTimeout(() => { if (pendingShort === entry) flushShortUtterance(); }, 3000);
     return;
   }
+  flushShortUtterance();
   setState({ partial: '' });
   await deliverUtterance(text,undefined,undefined,controller.signal);
+}
+
+/** 待确认的短句：partial 只负责显示，真正的文本存在这里。 */
+let pendingShort: { text: string; generation: number; timer: number } | null = null;
+function flushShortUtterance() {
+  const pending = pendingShort;
+  if (!pending) return;
+  pendingShort = null;
+  clearTimeout(pending.timer);
+  setState({ partial: '' });
+  // 采集代次变了说明会话已经重来，这句不该再进新会话。
+  if (pending.generation !== captureGeneration) return;
+  void deliverUtterance(pending.text);
 }
 
 /** 分句定稿：入列 + 自动作答 */
@@ -445,12 +468,19 @@ async function deliverUtterance(text: string,speaker?:SpeakerDecision,observatio
   msg.metadata!.questionId=speaker?.role==='candidate'?[...state.messages].reverse().find(m=>m.role==='INTERVIEWER'&&(!m.metadata?.speaker||m.metadata.speaker.role==='interviewer'))?.id:msg.id;
   const messages = [...state.messages, msg];
   setState({ messages });
-  await persistMessages(messages);
+  // 保存失败只影响落盘，不能阻断这一句的自动作答。
+  try { await persistMessages(messages); }
+  catch (error) {
+    if (state.sessionId === sessionId) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String((error as Error)?.message ?? error) }) });
+  }
   if(state.sessionId!==sessionId||signal?.aborted)return;
   void translateMessage(msg.id);
   if(speaker&&speaker.role!=='interviewer')return;
   if (getSetting('interview.autoAnswer', true)) {
     if (state.sessionId) {
+      // 面试官已经问到下一题时，上一题卡住的回答不应继续霸占队列。
+      const stale = state.turns.find(turn => turn.answerPending);
+      if (stale && Date.now() - stale.startedAt > STALE_ANSWER_MS) void interruptAnswer();
       if (answerQueue.length >= 8) {
         setState({ errorMessage: t('待回答的问题较多，已保留转写文字；请等当前回答结束后手动选择问题。') });
       } else {
@@ -471,7 +501,10 @@ async function drainAnswers() {
   try {
     while (answerQueue.length && ['listening', 'answering'].includes(state.status)) {
       const next = answerQueue.shift()!;
-      if (next.sessionId === state.sessionId && !state.messages.find(message=>message.id===next.messageId)?.metadata?.superseded) await answerQuestion(next.question,{questionMessageId:next.messageId});
+      if (next.sessionId !== state.sessionId || state.messages.find(message=>message.id===next.messageId)?.metadata?.superseded) continue;
+      const consumed = await answerQuestion(next.question,{questionMessageId:next.messageId});
+      // 没被消费（例如已有回答在跑）就放回队首，等下一次 drain 再试，避免问题被静默丢掉。
+      if (!consumed) { answerQueue.unshift(next); break; }
     }
   } finally { drainingAnswers = false; }
 }
@@ -494,7 +527,11 @@ export async function markTranscriptSpeaker(id:string,role:'candidate'|'intervie
  const existing=state.turns.filter(turn=>turn.questionId===id);for(const turn of existing)turn.abort?.abort();
  const corrected={...message,role:role==='candidate'?'ASSISTANT' as const:'INTERVIEWER' as const,metadata:{...message.metadata,origin:role==='candidate'?'candidate_response' as const:'audio_transcript' as const,speaker:{...message.metadata.speaker,role,source:'manual' as const,revision:message.metadata.speaker.revision+1}}};
  setState({turns:state.turns.map(x=>x.questionId===id?{...x,answerPending:false}:x),messages:state.messages.map(m=>m.id===id?corrected:m.metadata?.questionId===id&&m.metadata.origin==='model_generated'?{...m,pending:false,metadata:{...m.metadata,superseded:true}}:m)});
- await persistMessages(state.messages);if(role==='interviewer'&&state.sessionId===sessionId&&roleChanges.get(id)===revision)await answerQuestion(message.text,{questionMessageId:id});
+ await persistMessages(state.messages);if(role==='interviewer'&&state.sessionId===sessionId&&roleChanges.get(id)===revision){
+   const consumed=await answerQuestion(message.text,{questionMessageId:id});
+   // 已有回答在跑时 answerQuestion 不消费这次请求：放回队列，等当前回答结束后再答，别静默丢掉这个问题。
+   if(!consumed&&state.sessionId===sessionId){answerQueue.push({question:message.text,sessionId,messageId:id});void drainAnswers();}
+ }
 }
 
 /** Optional correction of assumed speech; never requires confirming every suggested answer. */
@@ -508,18 +545,19 @@ export async function recordCandidateResponse(text:string):Promise<void> {
   await persistMessages(state.messages);
 }
 
-export async function answerQuestion(question: string, opts?: { correction?: boolean; voiceAsk?: boolean;questionMessageId?:string;origin?:'screenshot' }) {
-  question=question.trim();if(!question)return;
+/** 返回是否真的消费了这次请求；队列据此决定是否把问题放回队首。 */
+export async function answerQuestion(question: string, opts?: { correction?: boolean; voiceAsk?: boolean;questionMessageId?:string;origin?:'screenshot' }): Promise<boolean> {
+  question=question.trim();if(!question)return false;
   if (state.turns.some((turn) => turn.answerPending) && !opts?.correction) {
     bus.emit('toast', { type: 'info', title: t('AI 正在回答，请等回答结束后再发送') });
-    return;
+    return false;
   }
   const sessionId = state.sessionId;
-  if (!sessionId || getInterviewEngineState().status==='ended') return;
+  if (!sessionId || getInterviewEngineState().status==='ended') return false;
   const returnStatus=state.status==='answering' || state.status==='listening'?'listening':state.status;
   const latestQuestion=[...state.messages].reverse().find(knownInterviewer);
   let source=opts?.questionMessageId?state.messages.find(message=>message.id===opts.questionMessageId):opts?.origin==='screenshot'?undefined:latestQuestion?.text===question?latestQuestion:undefined;
-  if(opts?.questionMessageId&&!source)return;
+  if(opts?.questionMessageId&&!source)return false;
   if(opts?.correction){
     source ??= [...state.messages].reverse().find(knownInterviewer);
     state.turns.forEach(turn=>turn.abort?.abort());
@@ -575,20 +613,13 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
         setState({messages:state.messages.map(message=>message.id===assistantMsg.id?{...message,metadata:{...message.metadata,request,completionStatus:request.completionStatus}}:message)});
       },
       onDelta: (delta) => {
-        if (turn.abort?.signal.aborted || state.sessionId !== sessionId || current!==answerGeneration) return;
-        const turnState = state.turns.find((x) => x.id === turn.id);
-        const m = state.messages.find((x) => x.id === assistantMsg.id);
-        if (m) {
+        if (turn.abort?.signal.aborted || state.sessionId !== sessionId || current!==answerGeneration) return false;
+        // 流式期间只更新消息正文：turns 里没有读者需要半截答案，
+        // 每个 token 再复制一遍 turns 会让长会话的开销随轮数线性上涨（答案在完成时一次性写回）。
+        if (state.messages.some((x) => x.id === assistantMsg.id)) {
           setState({
             messages: state.messages.map((x) =>
               x.id === assistantMsg.id ? { ...x, text: x.text + delta } : x,
-            ),
-          });
-        }
-        if (turnState) {
-          setState({
-            turns: state.turns.map((x) =>
-              x.id === turn.id ? { ...x, answer: x.answer + delta } : x,
             ),
           });
         }
@@ -601,47 +632,71 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
         },2000);
       },
     });
-    if (turn.abort?.signal.aborted || state.sessionId !== sessionId || current!==answerGeneration) return;
+    if (turn.abort?.signal.aborted || state.sessionId !== sessionId || current!==answerGeneration) return false;
     const finalMessages = state.messages.map((x) =>
       x.id === assistantMsg.id ? { ...x, text: answer || x.text, pending: false } : x,
     );
+    const stillAnswering = state.status === 'answering';
     setState({
       messages: finalMessages,
       turns: state.turns.map((x) => (x.id === turn.id ? { ...x, answer, answerPending: false } : x)),
-      status: state.status === 'answering' ? returnStatus : state.status,
+      status: stillAnswering ? returnStatus : state.status,
+      // 只有状态确实从「生成回答」回来才清提示；否则会把收音/转写错误的原因抹掉，
+      // 界面只剩「出错」却没有说明。
+      errorMessage: stillAnswering ? null : state.errorMessage,
     });
-    await persistMessages(finalMessages);
+    // 答案已生成；落盘失败只提示"暂未保存"，不能把它当成作答失败。
+    try { await persistMessages(finalMessages); }
+    catch (error) {
+      setState({ errorMessage: t('回答暂未保存：{msg}', { msg: String((error as Error)?.message ?? error) }) });
+    }
     void translateMessage(assistantMsg.id);
   } catch (e) {
-    if (state.sessionId !== sessionId || state.status === 'ended' || current!==answerGeneration) return;
+    if (state.sessionId !== sessionId || state.status === 'ended' || current!==answerGeneration) return false;
     const err = e as Error;
     const aborted = err?.name === 'AbortError';
+    const completionStatus=(err as {completionStatus?:string}).completionStatus;
+    // 截断不是连接故障：正文已保留，只提示预算用尽，不把状态标成 AI 掉线。
+    const truncated=completionStatus==='truncated';
     if (!aborted) {
       setState({
         status: state.status === 'answering' ? returnStatus : state.status,
-        aiDown: true,
-        errorMessage: t('AI 作答失败：{msg}', { msg: err.message || t('请检查对话服务配置后重试') }),
+        aiDown: !truncated,
+        errorMessage: truncated ? err.message : t('AI 作答失败：{msg}', { msg: err.message || t('请检查对话服务配置后重试') }),
       });
       const finalMessages = state.messages.map((x) =>
-        x.id === assistantMsg.id ? { ...x, pending: false, text: x.text || (err as {partialText?:string}).partialText || t('（生成失败）'),metadata:{...x.metadata,completionStatus:(err as {completionStatus?:string}).completionStatus || 'failed'} } : x,
+        x.id === assistantMsg.id ? { ...x, pending: false, text: x.text || (err as {partialText?:string}).partialText || (truncated ? err.message : t('（生成失败）')),metadata:{...x.metadata,completionStatus:completionStatus || 'failed'} } : x,
       );
       setState({ messages: finalMessages });
-      await persistMessages(finalMessages);
+      // 这里是失败路径：保存再失败也不能把异常抛回队列，否则 drainAnswers 会中断。
+      try { await persistMessages(finalMessages); } catch { /* errorMessage 已提示本次作答失败 */ }
     } else {
-      setState({ status: state.status === 'answering' ? returnStatus : state.status });
+      setState({
+        status: state.status === 'answering' ? returnStatus : state.status,
+        messages: state.messages.map((x) =>
+          x.id === assistantMsg.id ? { ...x, pending: false, metadata: { ...x.metadata, completionStatus: 'cancelled' } } : x,
+        ),
+      });
     }
   } finally {
     if(checkpointTimer !== null)window.clearTimeout(checkpointTimer);
     if (state.sessionId === sessionId) setState({ turns: state.turns.map(x => x.id === turn.id ? { ...x, answerPending: false } : x) });
     void drainAnswers();
   }
+  return true;
 }
 
 function interviewContextBudget(){
   const settings=getAiSettings(),route=settings.routes?.chat;
-  const contextWindow=settings.providers?.find(provider=>provider.id===route?.providerId)?.models.find(model=>model.id===route?.modelId)?.capabilities?.contextWindow;
-  return {history:contextWindow?Math.max(2000,Math.min(80000,Math.floor(contextWindow*0.6))):18000,
-    reference:contextWindow?Math.max(500,Math.min(12000,Math.floor(contextWindow/4))):12000};
+  const capabilities=settings.providers?.find(provider=>provider.id===route?.providerId)?.models.find(model=>model.id===route?.modelId)?.capabilities;
+  const contextWindow=capabilities?.contextWindow;
+  if(!contextWindow) return {history:18000, reference:12000};
+  // 从窗口里先扣掉输出预算和系统提示/格式余量，再把剩余额度按历史/资料分配，
+  // 避免「历史 0.6 + 资料 0.25 + 输出 1/3」相加直接越过窗口。
+  const output=Math.min(8192, capabilities?.maxOutputTokens || 8192);
+  const reserved=Math.max(1500, Math.floor(contextWindow*0.08));
+  const available=Math.max(2000, contextWindow - output - reserved);
+  return {history:Math.max(1500,Math.floor(available*0.7)), reference:Math.max(500,Math.floor(available*0.3))};
 }
 
 function buildSystemPromptForSession(question: string,throughMessageId:string): { prompt: string; sources: ContextSource[];referenceBlock:string } {
@@ -671,7 +726,7 @@ function buildSystemPromptForSession(question: string,throughMessageId:string): 
     lang: getSpeechProfile('interview').answerLanguage==='en-US'?'en-US':'zh-CN',
   });
   prompt+='\n'+languagePrompt(getSpeechProfile('interview'));
-  return { prompt, sources: context.sources,referenceBlock:[context.text,/(流程|第几轮|offer|面试结果)/i.test(question)?priorProgressBlock(goalId):'',solverMemoryBlock()].filter(Boolean).join('\n\n') };
+  return { prompt, sources: context.sources,referenceBlock:[context.text,/(流程|第几轮|offer|面试结果)/i.test(question)?priorProgressBlock(goalId):'',solverMemoryBlock(Math.max(2000,Math.floor(interviewContextBudget().reference/2)))].filter(Boolean).join('\n\n') };
 }
 
 /** 同岗位此前几轮的进度标记（本地版 jobProgress：标过结果的面试/笔试进入回答上下文） */
@@ -702,12 +757,12 @@ function priorProgressBlock(goalId: string | null): string {
 }
 
 /** 面试中截屏解过的题（原版 2026-10-28「interview-remembers-screen-solves」）：solver 答案进入语音回答上下文 */
-function solverMemoryBlock(): string {
+function solverMemoryBlock(maxChars = 20000): string {
   const solver=getSolverState();
   if(solver.interviewSessionId!==state.sessionId)return '';
   const target=solver.turns.find(turn=>turn.id===solver.selectedTurnId) || solver.turns[solver.turns.length-1];
   if(!target?.body.trim())return '';
-  try{return `【本场当前选中截图题的 AI 参考建议，非已确认个人事实】\n${assembleExamContext(solver.turns,target.id,20000)}\n相关追问自然沿用这些方案；明确纠正优先。`;}
+  try{return `【本场当前选中截图题的 AI 参考建议，非已确认个人事实】\n${assembleExamContext(solver.turns,target.id,maxChars)}\n相关追问自然沿用这些方案；明确纠正优先。`;}
   catch{return '【本场截图题】完整代码超过面试上下文预算，详细检查请切换笔试答题并选择该题；不要猜测被省略代码。';}
 }
 
@@ -722,6 +777,7 @@ export async function startInterview(opts: {
 }, signal?: AbortSignal): Promise<InterviewSession> {
   signal?.throwIfAborted();
   const generation = ++sessionGeneration;
+  resetRecovery();
   answerQueue.length = 0;
   const goals = readData<Goal[]>('goals', []);
   const goal = goals.find((g) => g.id === opts.goalId);
@@ -765,13 +821,21 @@ export function resumeInterviewSession(sessionId: string, goalId: string | null,
   const session = sessions.find((s) => s.id === sessionId);
   if (!session || session.type !== 'INTERVIEW' || session.status !== 'ACTIVE') return false;
   sessionGeneration++;
+  resetRecovery();
   sessionKnowledge=session.metadata?.knowledgeSnapshot as KnowledgeSnapshot|undefined;
   prepareExamRun(`interview:${session.id}`,goalId,session.id);
+  answerQueue.length = 0;
+  roleChanges.clear();
+  state.turns.forEach(turn => turn.abort?.abort());
   setState({
     ...state,
     sessionId,
     status: state.status === 'idle' || state.status === 'ended' ? 'connecting' : state.status,
     messages: session.messages ?? [],
+    // 上一次会话遗留的 turns/answerPending 会让 drainAnswers 永久 early-return。
+    turns: [],
+    partial: '',
+    aiDown: false,
     goalId,
     resumeId,
     materialIds: (session.metadata?.materialIds as string[] | undefined) ?? [],
@@ -787,9 +851,44 @@ let realtimeOpening: AbortController | null = null;
 let opening: Promise<void> | null = null;
 let openingGeneration = 0;
 
+/**
+ * 面试现场不能因为一次收音/网络故障就停到结束：捕获失败后按退避自动重连，
+ * 恢复成功即清零。用户手动暂停或结束时立即取消，避免自动恢复覆盖用户意图。
+ */
+const RECOVERY_BASE_MS = 2000;
+const RECOVERY_MAX_MS = 30000;
+const RECOVERY_MAX_ATTEMPTS = 10;
+/** 上一题回答卡太久时让新问题接管，避免一次慢请求拖住整场面试。 */
+const STALE_ANSWER_MS = 25000;
+let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let recoveryAttempt = 0;
+function cancelRecovery() {
+  if (recoveryTimer !== null) { clearTimeout(recoveryTimer); recoveryTimer = null; }
+}
+function resetRecovery() { cancelRecovery(); recoveryAttempt = 0; }
+function scheduleRecovery() {
+  if (!state.sessionId || state.status === 'ended' || state.status === 'paused') return;
+  if (recoveryTimer !== null || recoveryAttempt >= RECOVERY_MAX_ATTEMPTS) return;
+  const delay = Math.min(RECOVERY_MAX_MS, RECOVERY_BASE_MS * 2 ** Math.min(recoveryAttempt, 4));
+  recoveryAttempt++;
+  // 必须走异步定时器：失败回调里同步重入 beginListening 会自我递归。
+  const timer = setTimeout(() => {
+    recoveryTimer = null;
+    if (!state.sessionId || state.status === 'ended' || state.status === 'paused') return;
+    void beginListening(state.audio.source || 'SPEAKER', state.sessionId, true).catch(() => {});
+  }, delay);
+  (timer as unknown as { unref?: () => void }).unref?.();
+  recoveryTimer = timer;
+}
+
 async function stopCapture(invalidate = true) {
-  if (invalidate) captureGeneration++;
-  translations.forEach(controller=>controller.abort());translations.clear();
+  if (invalidate) {
+    // 暂停/结束前把待确认的短句先落下来，否则它只留在 partial 里，清空后就没了。
+    flushShortUtterance();
+    captureGeneration++;
+    // 重连/自动恢复（invalidate=false）不该掐掉在飞的翻译：那会让这条转写永远没有译文也没有失败标记。
+    translations.forEach(controller=>controller.abort()); translations.clear();
+  }
   const owner=speakerOwner;speakerOwner='';if(owner)await cmd('cmd_speaker_end',{owner}).catch(()=>{});
   audioTimeline.reset();realtimeOriginMs=0;
   realtimeOpening?.abort();realtimeOpening=null;
@@ -809,9 +908,12 @@ async function stopCapture(invalidate = true) {
   resetAudio();
 }
 
-export function beginListening(audioSource: AudioSource, expectedSessionId = state.sessionId): Promise<void> {
+export function beginListening(audioSource: AudioSource, expectedSessionId = state.sessionId, automatic = false): Promise<void> {
   if (!expectedSessionId || state.sessionId !== expectedSessionId || state.status === 'ended') return Promise.resolve();
   if (opening && openingGeneration === captureGeneration) return opening;
+  // 手动重试或自动恢复开始后，旧的恢复定时器不再需要；手动重试重新给满自动恢复次数。
+  cancelRecovery();
+  if (!automatic) recoveryAttempt = 0;
   const generation = ++captureGeneration;
   openingGeneration = generation;
   const task = (async () => {
@@ -821,7 +923,12 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
     const realtime = getAiSettings().speechInputMode === 'realtime';
     setState({ status: 'connecting', errorMessage: null, audio: { ...emptyAudio(), source: audioSource, recognitionMode: realtime ? 'realtime' : liveSpeechEnabled() ? 'segmented' : 'file' } });
     try {
-      resolveAiRoute(getAiSettings(), 'stt');
+      try { resolveAiRoute(getAiSettings(), 'stt'); }
+      catch (error) {
+        // 语音转写没配置好：自动重连也不会好，直接提示并留给用户处理。
+        if (generation === captureGeneration) reportInterviewError(error, false);
+        return;
+      }
       if(localSpeaker()){speakerOwner=crypto.randomUUID();await cmd('cmd_speaker_begin',{owner:speakerOwner});if(generation!==captureGeneration)return;}
       if (realtime) {
         const controller = new AbortController();realtimeOpening=controller;
@@ -849,7 +956,7 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         realtimeCapture = stream;
       }
       if (audioSource === 'SPEAKER') {
-        const { startSystemAudioCapture, setSystemAudioExcludedOutputs } = await import('./bridge');
+        const { startSystemAudioCapture, stopSystemAudioCapture, setSystemAudioExcludedOutputs } = await import('./bridge');
         const failCapture = (message: string) => {
           if (generation !== captureGeneration) return;
           reportInterviewError(new Error(message));
@@ -898,9 +1005,13 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         await setSystemAudioExcludedOutputs(getSetting<string[]>('audio.excludedOutputs', []));
         if (generation !== captureGeneration) return;
         const info = await startSystemAudioCapture();
-        if (generation !== captureGeneration) return;
+        // 采集已被新一轮 beginListening/结束取代：原生采集已经起来了，必须自己收掉，
+        // 否则后台继续录、设备一直被占用，而 captureId 已经没人持有。
+        if (generation !== captureGeneration) { await stopSystemAudioCapture().catch(() => {}); return; }
         if (!info || info.sampleRate !== 16000 || info.channels !== 1) {
-          throw new Error(t('系统收音组件版本不匹配，请完整重启更新后的桌面应用。'));
+          const failure = new Error(t('系统收音组件版本不匹配，请完整重启更新后的桌面应用。')) as Error & { code?: string };
+          failure.code = 'ComponentMismatch';
+          throw failure;
         }
         captureId = info.captureId || undefined;
         captureReady = true;
@@ -912,9 +1023,10 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         const capture = await openMicrophone({
           deviceId: getSetting('interview.microphoneId', ''),
           onPcm: (pcm, volume) => { if (generation === captureGeneration) pushPcm(pcm, volume); },
-          onError: message => {
+          onError: (message, code) => {
             if (generation !== captureGeneration) return;
-            reportInterviewError(new Error(message));
+            // 权限被拒这类错误重连也不会好，只保留手动重试。
+            reportInterviewError(new Error(message), code !== 'NotAllowedError' && code !== 'SecurityError');
             void stopCapture();
           },
         });
@@ -928,14 +1040,18 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
       if (generation !== captureGeneration) return;
       await stopCapture(false);
       if (generation !== captureGeneration) return;
-      reportInterviewError(error);
+      reportInterviewError(error, retryableCaptureError(error));
     }
-  })().finally(() => { if (opening === task) opening = null; });
+  })().finally(() => { if (opening === task) opening = null; if (state.status === 'listening') recoveryAttempt = 0; });
   opening = task;
   return task;
 }
 
 export async function pauseListening() {
+  // 用户主动暂停：取消自动恢复，避免刚暂停又被自动重连打开。
+  resetRecovery();
+  // 已经定稿的短句不是「未完成的识别」，暂停前先交上去，别跟着 partial 一起丢掉。
+  flushShortUtterance();
   // Discard the unfinished segment and cancel in-flight transcription on pause.
   const discarded = audioBuf.length > 0 || state.audio.pending > 0 || !!state.partial;
   captureGeneration++;
@@ -958,27 +1074,80 @@ export async function resumeListening() {
 export async function interruptAnswer() {
   const pending = state.turns.find((x) => x.answerPending);
   pending?.abort?.abort();
+  // 被中断的回答保留已有正文，但必须标成 cancelled，避免看起来像完整答案。
   setState({
-    messages: state.messages.map((m) => (m.pending ? { ...m, pending: false } : m)),
+    messages: state.messages.map((m) => (m.pending ? { ...m, pending: false, metadata: { ...m.metadata, completionStatus: 'cancelled' } } : m)),
     status: 'listening',
   });
 }
 
-export async function endInterview(complete = true) {
+/**
+ * 结束面试可能被两条路径同时触发（用户点「结束面试」+ 浮窗被收起后的兜底清理）。
+ * 重复进入会把收尾（停麦、写记录、完成会话）跑两遍，所以这里只允许一次在飞。
+ */
+let ending: Promise<void> | null = null;
+let endingComplete = false;
+let endingSessionId: string | null = null;
+export function endInterview(complete = true): Promise<void> {
+  if (ending) {
+    // 在飞的是「临时结束」（浮窗被收起）而这次要正式完成：不能直接把 complete 丢掉，
+    // 否则会话永远停在 ACTIVE、interview.sessionId 也不清。等它结束后补一次完成。
+    if (complete && !endingComplete) {
+      endingComplete = true;
+      const previous = ending;
+      const chained: Promise<void> = previous
+        .then(() => completeEndedSession())
+        .finally(() => { if (ending === chained) { ending = null; endingComplete = false; endingSessionId = null; } });
+      ending = chained;
+      return chained;
+    }
+    return ending;
+  }
+  // 已经结束且没有待补写的会话：无需再收尾。
+  if (!state.sessionId && state.status === 'ended') return Promise.resolve();
+  endingComplete = complete;
+  const task = runEndInterview(complete).finally(() => {
+    if (ending === task) { ending = null; endingComplete = false; endingSessionId = null; }
+  });
+  ending = task;
+  return task;
+}
+
+/** 等待正在进行的收尾结束（浮窗重挂载时用来避免和收尾抢状态）。 */
+export function waitForEnding(): Promise<void> {
+  return ending ?? Promise.resolve();
+}
+
+/** 补写「完成会话」：临时收尾已经清掉 state.sessionId，这里用记下来的 id。 */
+async function completeEndedSession() {
+  const sessionId = endingSessionId;
+  if (!sessionId) return;
+  await completeSession(sessionId);
+  if (getSetting('interview.sessionId', null) === sessionId) await setSetting('interview.sessionId', null);
+}
+
+async function runEndInterview(complete: boolean) {
   roleChanges.clear();
   answerQueue.length = 0;
   sessionGeneration++;
+  resetRecovery();
   const sessionId = state.sessionId;
+  endingSessionId = sessionId;
   setState({ status: 'ended' });
   state.turns.forEach(x => x.abort?.abort());
+  let finished = false;
   try {
     await Promise.all([stopCapture(),sessionId?finishInterviewExam(sessionId,complete):Promise.resolve()]);
     if (state.sessionId !== sessionId) return;
-    setState({ status:'ended', audio:{...emptyAudio(),source:state.audio.source}, messages:state.messages.map(message=>({...message,pending:false})) });
+    setState({ status:'ended', audio:{...emptyAudio(),source:state.audio.source},
+      messages:state.messages.map(message=>({...message,pending:false})),
+      turns:state.turns.map(turn=>({...turn,answerPending:false})) });
     await persistMessages(state.messages);
     if (complete && sessionId) await completeSession(sessionId);
+    finished = true;
   } finally {
-    if (state.sessionId === sessionId) {
+    // 落盘/完成失败时保留 sessionId，用户可以再次「结束面试」补写，记录不会停在 ACTIVE 又失去引用。
+    if (finished && state.sessionId === sessionId) {
       setState({ sessionId: null });
       if (complete && getSetting('interview.sessionId', null) === sessionId) await setSetting('interview.sessionId', null);
     }
@@ -1029,12 +1198,16 @@ const FILLER_SENTENCES =
   /^(好|好的|行|对|是的|明白|ok|okay|thanks|thank you|嗯嗯|好的好的|对的|没问题|可以)[。..！!？?\s]*$/i;
 
 export function cleanTranscript(text: string): string {
-  let trimmed = text.trim();
-  // 语气词剔除
-  let cleaned = '';
-  for (const ch of trimmed) {
-    if (FILLER_WORDS.includes(ch)) continue;
-    cleaned += ch;
+  const trimmed = text.trim();
+  // 只删除独立成词的语气词（前后是标点/空白/句首句尾），避免把「唔该」「干嘛」「呵斥」改坏。
+  const fillers = `[${FILLER_WORDS}]`;
+  const boundary = '[，。！？、,.!?\\s]';
+  const standalone = new RegExp(`(^|${boundary})${fillers}+(?=$|${boundary})`, 'g');
+  let cleaned = trimmed;
+  let previous = '';
+  while (cleaned !== previous) {
+    previous = cleaned;
+    cleaned = cleaned.replace(standalone, '$1');
   }
   // 相邻重复标点
   cleaned = cleaned.replace(/([。！？、，,.!?])\1+/g, '$1').trim();

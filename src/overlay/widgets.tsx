@@ -22,6 +22,7 @@ export function DwellButton({
   onTrigger,
   disabled,
   compact,
+  inline,
 }: {
   id: string;
   children: ReactNode;
@@ -32,8 +33,10 @@ export function DwellButton({
   onTrigger: () => void;
   disabled?: boolean;
   compact?: boolean;
+  /** 小号文字按钮：保持行内尺寸，但仍然注册悬停热区（穿透模式下可悬停触发） */
+  inline?: boolean;
 }) {
-  const { interactive, registerZone } = usePlatform();
+  const { interactive, registerZone, simulate } = usePlatform();
   const showHints = useSetting('interview.showHotkeyHints', true)[0];
   const progress = useDwell(id, hoverMs, onTrigger, { disabled: disabled || interactive });
   const [refEl, setRefEl] = useState<HTMLElement | null>(null);
@@ -54,11 +57,12 @@ export function DwellButton({
       ref={setRefEl as (el: HTMLButtonElement | null) => void}
       type="button"
       disabled={disabled}
-      onClick={interactive && !disabled ? onTrigger : undefined}
-      className={`relative flex min-h-9 min-w-[5rem] max-w-full flex-auto flex-col items-center justify-center gap-0.5 rounded-md border px-2 py-1 leading-snug transition-opacity ${variantClass} ${compact ? 'text-xs' : ''} ${disabled ? 'opacity-50' : 'hover:opacity-90'}`}
+      onClick={interactive && !simulate && !disabled ? onTrigger : undefined}
+      data-dwell-ms={hoverMs}
+      className={`relative flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border leading-snug transition-opacity ${inline ? 'min-h-6 min-w-0 flex-none px-1.5 py-0.5' : 'min-h-9 min-w-[5rem] flex-auto px-2 py-1'} ${variantClass} ${compact ? 'text-xs' : ''} ${disabled ? 'opacity-50' : 'hover:opacity-90'}`}
     >
       <span className="flex w-full min-w-0 flex-col items-center justify-center gap-0.5">
-        <span className="max-w-full whitespace-normal break-words text-center text-[12.5px] [overflow-wrap:anywhere]" data-overlay-action-label>{children}</span>
+        <span className={`max-w-full whitespace-normal break-words text-center [overflow-wrap:anywhere] ${inline ? 'text-[10.5px]' : 'text-[12.5px]'}`} data-overlay-action-label>{children}</span>
         {hotkey && showHints && (
           <span className="ov-text-3 shrink-0 whitespace-nowrap text-[9px] opacity-65">
             {hotkeyBadge(hotkey, isMac())}
@@ -70,6 +74,40 @@ export function DwellButton({
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-current opacity-25" />
       )}
     </button>
+  );
+}
+
+/**
+ * 可悬停展开的折叠区：穿透模式收不到鼠标事件，原生 <details> 点不开，
+ * 这里用驻留按钮同时兼容穿透（悬停）与窗口模式（点击）。
+ */
+export function DwellDisclosure({
+  id,
+  label,
+  children,
+  className,
+  hoverMs = 1200,
+}: {
+  id: string;
+  label: ReactNode;
+  children: ReactNode;
+  className?: string;
+  hoverMs?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={className}>
+      {/* flex 容器让按钮按内容收缩并左对齐，避免撑满整行后文字居中 */}
+      <div className="flex">
+        <DwellButton id={id} inline hoverMs={hoverMs} onTrigger={() => setOpen((value) => !value)}>
+          <span className="flex items-center gap-1">
+            <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+            {label}
+          </span>
+        </DwellButton>
+      </div>
+      {open && <div className="ov-text-3 mt-1 text-[10px]">{children}</div>}
+    </div>
   );
 }
 
@@ -93,7 +131,7 @@ export function DwellIconButton({
   variant?: 'primary' | 'muted' | 'destructive';
   disabled?: boolean;
 }) {
-  const { interactive, registerZone } = usePlatform();
+  const { interactive, registerZone, simulate } = usePlatform();
   const progress = useDwell(id, hoverMs, onTrigger, { disabled: disabled || interactive });
   const [refEl, setRefEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -113,7 +151,8 @@ export function DwellIconButton({
       title={label}
       aria-label={label}
       disabled={disabled}
-      onClick={interactive && !disabled ? onTrigger : undefined}
+      onClick={interactive && !simulate && !disabled ? onTrigger : undefined}
+      data-dwell-ms={hoverMs}
       className={`ov-text relative flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border ${variantClass} ${disabled ? 'opacity-50' : ''}`}
     >
       {icon}
@@ -127,7 +166,7 @@ export function DwellIconButton({
 /** 拖拽把手（穿透态悬停 0.9s/1s 进入原生拖动） */
 export function DragHandle({ id = 'drag', hoverMs = 900 }: { id?: string; hoverMs?: number }) {
   const { interactive, registerZone, setDragActive } = usePlatform();
-  const progress = useDwell(id, hoverMs, () => setDragActive(true), { disabled: interactive });
+  const progress = useDwell(id, hoverMs, () => setDragActive(true), { disabled: interactive, requireReentry: true });
   const [refEl, setRefEl] = useState<HTMLElement | null>(null);
   const [dragging, setDragging] = useState(false);
   useEffect(() => {
@@ -144,12 +183,33 @@ export function DragHandle({ id = 'drag', hoverMs = 900 }: { id?: string; hoverM
       }
     });
   }, [interactive]);
+  // 窗口模式下用原生 drag-region 拖动，不会触发 drag-mode-changed，改监听移动事件去抖保存。
+  useEffect(() => {
+    if (!interactive) return;
+    let timer: number | undefined;
+    let off: (() => void) | undefined;
+    let disposed = false;
+    void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+      if (disposed) return;
+      void getCurrentWindow().onMoved(() => {
+        if (timer) window.clearTimeout(timer);
+        timer = window.setTimeout(() => void persistPosition(), 400);
+      }).then(unlisten => { if (disposed) unlisten(); else off = unlisten; });
+    }).catch(() => {});
+    return () => {
+      disposed = true;
+      if (timer) window.clearTimeout(timer);
+      off?.();
+    };
+  }, [interactive]);
 
   return (
     <div
       ref={setRefEl as (el: HTMLDivElement | null) => void}
       data-tauri-drag-region={interactive || undefined}
       onPointerDown={undefined}
+      data-dwell-ms={hoverMs}
+      aria-label={t('抓住浮窗')}
       className="ov-chip relative flex size-6 cursor-grab items-center justify-center rounded-md border"
       title={dragging ? t('跟随中 · 静止 0.8s 释放') : t('悬停 {s}s 进入拖动', { s: hoverMs / 1000 })}
     >

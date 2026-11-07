@@ -337,6 +337,22 @@ pub fn cmd_ai_save_settings(
     let _ = app.emit("ai-settings-changed", ());
     Ok(())
 }
+/// 解密失败（换机/换账户/凭据损坏）时唯一的自救入口：直接删掉无法读取的配置。
+#[tauri::command]
+pub fn cmd_ai_reset_settings(
+    app: AppHandle,
+    lock: tauri::State<AiSettingsLock>,
+) -> Result<(), String> {
+    let _guard = lock.0.lock().map_err(|_| "AI 配置忙")?;
+    let store = app.store("store.json").map_err(|_| "无法打开设置文件")?;
+    store.delete(KEY);
+    store.delete("ai.provider");
+    store
+        .save()
+        .map_err(|_| "AI 配置重置失败，请检查磁盘和文件权限".to_string())?;
+    let _ = app.emit("ai-settings-changed", ());
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::*;

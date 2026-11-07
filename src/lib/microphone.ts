@@ -52,7 +52,7 @@ export interface MicrophoneCapture {
 export async function openMicrophone(options: {
   deviceId?: string;
   onPcm: (pcm: Int16Array, volume: number) => void;
-  onError: (message: string) => void;
+  onError: (message: string, code?: string) => void;
 }): Promise<MicrophoneCapture> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error(t('当前环境无法访问麦克风，请使用桌面客户端。'));
   let stream: MediaStream | undefined;
@@ -94,14 +94,33 @@ export async function openMicrophone(options: {
     if (context.state !== 'running') await withTimeout(context.resume(), 4000, t('音频尚未启动，请点击「重试收音」激活麦克风。'));
     const track = stream.getAudioTracks()[0];
     if (!track) throw new Error(t('所选设备没有可用的音频轨道。'));
-    track.onended = () => { if (!closed) options.onError(t('麦克风已断开，请连接设备后点击「重试收音」。')); };
-    track.onmute = () => { if (ready && !paused) options.onError(t('麦克风输入被系统静音或中断，请检查设备后重试。')); };
-    context.onstatechange = () => { if (ready && !paused && !closed && context?.state !== 'running') options.onError(t('音频采集已中断，请点击「重试收音」。')); };
+    // 先装事件再恢复：设备在启动窗口内拔出/静音时也能被发现。
+    track.onended = () => { if (!closed) options.onError(t('麦克风已断开，请连接设备后点击「重试收音」。'), 'DeviceEnded'); };
+    track.onmute = () => { if (ready && !paused) options.onError(t('麦克风输入被系统静音或中断，请检查设备后重试。'), 'DeviceMuted'); };
+    context.onstatechange = () => { if (ready && !paused && !closed && context?.state !== 'running') options.onError(t('音频采集已中断，请点击「重试收音」。'), 'ContextSuspended'); };
     ready = true;
+    // 启动前就已经断开/静音的设备不会再触发事件，这里补一次状态检查。
+    // 这种情况必须直接失败：返回一个“看起来在录、其实没声音”的句柄，
+    // 调用方（语音提问、试音）会拿不到可关闭的引用，麦克风要等到下次操作才释放。
+    if (track.readyState === 'ended') {
+      const failure = new Error(t('麦克风已断开，请连接设备后点击「重试收音」。'));
+      failure.name = 'DeviceEnded';
+      throw failure;
+    }
+    if (track.muted) {
+      const failure = new Error(t('麦克风输入被系统静音或中断，请检查设备后重试。'));
+      failure.name = 'DeviceMuted';
+      throw failure;
+    }
     return { label: track.label || t('默认麦克风'), close, async setPaused(value) {
       paused = value;
       stream?.getTracks().forEach(track => { track.enabled = !value; });
       if (!value && context?.state === 'suspended') await withTimeout(context.resume(), 4000, t('音频恢复失败，请点击「重试收音」。'));
     } };
-  } catch (error) { await close(); throw new Error(microphoneError(error)); }
+  } catch (error) {
+    await close();
+    const failure = new Error(microphoneError(error)) as Error & { code?: string };
+    failure.code = (error as { name?: string })?.name || 'MIC_FAILED';
+    throw failure;
+  }
 }

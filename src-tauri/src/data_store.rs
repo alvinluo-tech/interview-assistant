@@ -1,6 +1,34 @@
 use serde_json::{Map, Value, json};
-use std::{collections::BTreeSet, fs, io::Write, path::Path, sync::Mutex};
+use std::{collections::BTreeSet, fs, io::Write, path::Path, sync::Mutex, time::{Duration, Instant}};
 use tauri::{AppHandle, Emitter, Manager};
+
+/// 面试中每 2 秒就提交一次，整份文档重写两遍会放大成 MB/s 的写入；
+/// 回滚点最多每 30 秒刷新一次，data.json 本身仍是每次原子写。
+static LAST_PREVIOUS_BACKUP: Mutex<Option<Instant>> = Mutex::new(None);
+fn write_previous_backup(dir: &Path, current: &Map<String, Value>) {
+    let now = Instant::now();
+    let Ok(mut last) = LAST_PREVIOUS_BACKUP.lock() else { return; };
+    let due = last.as_ref().map(|at| now.duration_since(*at) >= Duration::from_secs(30)).unwrap_or(true);
+    if !due {
+        return;
+    }
+    if atomic_write(&dir.join("backups/data.previous.json"), current).is_ok() {
+        *last = Some(now);
+    }
+}
+/// 只保留最近 N 份恢复前快照，避免备份目录无限增长。
+fn prune_restore_snapshots(dir: &Path, keep: usize) {
+    let Ok(entries) = fs::read_dir(dir) else { return; };
+    let mut files: Vec<_> = entries
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with("data.before-restore-"))
+        .map(|entry| entry.path())
+        .collect();
+    files.sort();
+    while files.len() > keep {
+        let _ = fs::remove_file(files.remove(0));
+    }
+}
 
 const KEYS: &[&str] = &[
     "interviewSessions",
@@ -294,18 +322,39 @@ fn snapshot(data: &Map<String, Value>) -> Value {
 fn migrate_folder(legacy: &Path, path: &Path) -> Result<(), String> {
     fs::create_dir_all(path.join("backups")).map_err(|e| e.to_string())?;
     if !path.join("data.json").exists() && legacy.join("data.json").exists() {
-        let document = read_document(&legacy.join("data.json"))?;
-        for name in ["data.previous.json", "data.manual-backup.json"] {
-            if legacy.join(name).exists() && !path.join("backups").join(name).exists() {
-                match read_document(&legacy.join(name)) {
-                    Ok(backup) => atomic_write(&path.join("backups").join(name), &backup)?,
-                    Err(_) => log::warn!(
-                        "[storage] legacy backup {name} is invalid; original file preserved"
+        let legacy_data = legacy.join("data.json");
+        // 损坏或超限的旧文件不能阻塞启动：改名保留，让用户手动处理。
+        match read_document(&legacy_data) {
+            Ok(document) => {
+                for name in ["data.previous.json", "data.manual-backup.json"] {
+                    if legacy.join(name).exists() && !path.join("backups").join(name).exists() {
+                        match read_document(&legacy.join(name)) {
+                            Ok(backup) => atomic_write(&path.join("backups").join(name), &backup)?,
+                            Err(_) => log::warn!(
+                                "[storage] legacy backup {name} is invalid; original file preserved"
+                            ),
+                        }
+                    }
+                }
+                atomic_write(&path.join("data.json"), &document)?;
+            }
+            Err(error) => {
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let target = legacy.join(format!("data.corrupt-{stamp}.json"));
+                match fs::rename(&legacy_data, &target) {
+                    Ok(()) => log::warn!(
+                        "[storage] legacy data unreadable ({error}); moved to {}",
+                        target.display()
+                    ),
+                    Err(rename_error) => log::warn!(
+                        "[storage] legacy data unreadable ({error}); could not move it: {rename_error}"
                     ),
                 }
             }
         }
-        atomic_write(&path.join("data.json"), &document)?;
     }
     Ok(())
 }
@@ -356,18 +405,27 @@ mod migration_tests {
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
-    fn corrupt_legacy_data_is_not_marked_as_migrated() {
+    fn corrupt_legacy_data_is_quarantined_and_not_migrated() {
         let root = temporary();
         let legacy = root.join("legacy");
         let local = root.join("local");
         fs::create_dir_all(&legacy).unwrap();
         fs::write(legacy.join("data.json"), "broken").unwrap();
-        assert!(migrate_folder(&legacy, &local).is_err());
+        // 读不出来的旧文档不再阻塞启动：改名保留，本地不产生 data.json。
+        migrate_folder(&legacy, &local).unwrap();
         assert!(!local.join("data.json").exists());
-        assert_eq!(
-            fs::read_to_string(legacy.join("data.json")).unwrap(),
-            "broken"
-        );
+        assert!(!legacy.join("data.json").exists());
+        let quarantined = fs::read_dir(&legacy)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("data.corrupt-") && name.ends_with(".json"))
+            })
+            .expect("corrupt legacy data should be kept for manual recovery");
+        assert_eq!(fs::read_to_string(quarantined).unwrap(), "broken");
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
@@ -443,7 +501,7 @@ pub fn cmd_data_commit(
             + 1)
         .into(),
     );
-    atomic_write(&dir.join("backups/data.previous.json"), current)?;
+    write_previous_backup(&dir, current);
     atomic_write(&dir.join("data.json"), &next)?;
     let result = snapshot(&next);
     *state = Some(next);
@@ -478,9 +536,15 @@ pub fn cmd_data_backup(
             .into(),
         );
         // Keep the pre-restore file, including a corrupt file, for manual recovery.
+        // 用时间戳轮换，连续恢复两次也不会覆盖唯一的回退点。
         if dir.join("data.json").exists() {
-            fs::copy(dir.join("data.json"), dir.join("data.before-restore.json"))
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            fs::copy(dir.join("data.json"), dir.join(format!("data.before-restore-{stamp}.json")))
                 .map_err(|e| e.to_string())?;
+            prune_restore_snapshots(&dir, 3);
         }
         atomic_write(&dir.join("data.json"), &restored)?;
         *state = Some(restored);

@@ -14,6 +14,7 @@ function visibility({deferRegistration=false}={}){
     '@/lib/bridge':{onEvent:(name,fn)=>{events[name]=fn;return ()=>delete events[name];},listenEvent:register,overlayShowSeq:()=>{queries++;return pending.promise;}},
     '@/lib/store':{useSetting:()=>[{}],getSetting:()=> 'exam'},'@/lib/overlayStyle':{normalizeStyle:value=>value},
     './ExamOverlay':{},'./InterviewOverlay':{},'./platform':{},'./widgets':{},'@/lib/interviewLifecycle':{},'@/ui/primitives':{},
+    '@/lib/overlayPalette':{applyOverlayPalette:async()=>{},restoreOverlayPalette:async()=>{}},
   },{window:{}});
   api.OverlayApp();const close=effects[2]();return {pending,state,events,close,registrations,get queries(){return queries;}};
 }
@@ -60,6 +61,7 @@ function interview({deferSetting=true,createGate,storedSession=false}={}){
     '@/lib/overlayStyle':{normalizeStyle:value=>value,computeSkin:()=>({})},
     '@/lib/store':{...settings,useSetting:()=>[{}],setSetting:async()=>{writing=true;if(deferSetting)await pending.promise;}},
     '@/lib/ai':{},'@/lib/microphone':{},'@/lib/bridge':{},'@/lib/hotkeys':{},'@/ui/primitives':{},'./Md':{},'./widgets':{},'./platform':{},'@/lib/speechPreferences':{},
+    '@/lib/overlayPalette':{applyOverlayPalette:async()=>{},restoreOverlayPalette:async()=>{}},'@/lib/events':{bus:{on:()=>()=>{},emit:()=>{}}},
   },{window:{__ml_pendingConfig:{goalId:null,resumeId:null,materialIds:[],audioSource:'MICROPHONE'}}});
   const mount=()=>{effects.length=0;ui.InterviewOverlay({preview:false});return effects[1]();};
   return {engine,pending,mount,get writing(){return writing;},get micStarts(){return micStarts;},get micCloses(){return micCloses;},get sessionsCreated(){return sessionsCreated;}};

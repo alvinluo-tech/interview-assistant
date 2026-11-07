@@ -6,7 +6,7 @@ import {
   AI_ROLES, PROVIDER_PRESETS, ROLE_LABELS, bailianConnection, createProvider, mergeDiscoveredModels,
   normalizeBaseUrl, removeProvider, validateModelId, isSpeechRecognitionModel, isUnsupportedBailianSpeechModel, type AiProvider, type AiRole, type AiSettings,
 } from '@/lib/aiConfig';
-import { getAiLoadError, getAiSettings, reloadAiSettings, saveAiSettings, useAiSettings } from '@/lib/aiSettings';
+import { getAiLoadError, getAiSettings, reloadAiSettings, resetAiSettings, saveAiSettings, useAiSettings } from '@/lib/aiSettings';
 import { discoverModels, testChatModel } from '@/lib/aiProtocol';
 import { aiFetch } from '@/lib/aiTransport';
 import { questionSpeaker } from '@/lib/questionSpeech';
@@ -210,6 +210,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
       {loadError && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
         {t('配置读取失败，已阻止覆盖已有设置：{error}', { error: loadError })}
         <Button size="sm" variant="outline" className="ml-2" onClick={() => void reloadAiSettings().then(() => { setDraft(structuredClone(getAiSettings())); setSelectedId(getAiSettings().providers[0]?.id ?? ''); })}>{t('重新读取')}</Button>
+        <Button size="sm" variant="destructive" className="ml-2" onClick={() => { if (!window.confirm(t('将删除本机保存的 AI 连接和密钥，需要重新填写。确定继续？'))) return; void resetAiSettings().then(() => { setDraft(structuredClone(getAiSettings())); setSelectedId(''); }).catch(error => setError(String((error as Error)?.message || error))); }}>{t('清除无法读取的配置')}</Button>
       </div>}
       {error && <p role="alert" className="rounded-md border border-destructive/30 p-3 text-xs text-destructive">{error}</p>}
       {externalConflict && <p role="alert" className="rounded-md border p-3 text-xs text-muted-foreground">{t('其他窗口已更新 AI 配置。请点击「撤销更改」载入最新设置后再编辑，以免覆盖新配置。')}</p>}

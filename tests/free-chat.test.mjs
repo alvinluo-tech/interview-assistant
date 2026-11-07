@@ -171,7 +171,7 @@ test('voice answers request concise spoken language without applying it to text 
   const h=harness(),options={signal:new AbortController().signal,allowLocal:false,onTool:()=>{},onDelta:()=>{}};
   await h.api.askFreeChat([{role:'user',content:'解释一下'}],{...options,voice:true});
   await h.api.askFreeChat([{role:'user',content:'解释一下'}],options);
-  assert.match(h.chatCalls[0].messages[0].content,/语音对话/);assert.equal(h.chatCalls[0].maxTokens,700);
+  assert.match(h.chatCalls[0].messages[0].content,/语音对话/);assert.equal(h.chatCalls[0].maxTokens,2048);
   assert.doesNotMatch(h.chatCalls[1].messages[0].content,/语音对话/);
 });
 

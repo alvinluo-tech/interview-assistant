@@ -31,7 +31,8 @@ import {
   stripMarkdown,
   type SolverState,
 } from '@/lib/examEngine';
-import { setOverlaySize, setSessionActive, captureScreen, isTauri } from '@/lib/bridge';
+import { setOverlaySize, setSessionActive, isTauri } from '@/lib/bridge';
+import { applyOverlayPalette } from '@/lib/overlayPalette';
 import { effectiveHotkeys, hotkeyBadge, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
 import { isMac, BRAND } from '@/lib/env';
 import { t } from '@/lib/i18n';
@@ -402,7 +403,7 @@ function DwellChip({
   hoverMs: number;
   onTrigger: () => void;
 }) {
-  const { interactive, registerZone } = usePlatform();
+  const { interactive, registerZone, simulate } = usePlatform();
   const progress = useDwell(id, hoverMs, onTrigger, { disabled: interactive });
   const [refEl, setRefEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -413,7 +414,7 @@ function DwellChip({
     <button
       ref={setRefEl as (el: HTMLButtonElement | null) => void}
       type="button"
-      onClick={interactive ? onTrigger : undefined}
+      onClick={interactive && !simulate ? onTrigger : undefined}
       className={`ov-chip ov-text relative flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium ${interactive ? '' : ''}`}
     >
       {icon}
@@ -427,57 +428,7 @@ function DwellChip({
 
 /** 一键配色：截屏采样背景色 → 推导主题（本地版 overlay.suggestPalette） */
 function PaletteButton() {
-  return <ConfirmPaletteButton id="auto-palette" onApply={applyPalette} />;
-}
-
-async function applyPalette() {
-  const doc = document.documentElement;
-  try {
-    doc.classList.add('ov-palette-capturing');
-    await new Promise((r) => setTimeout(r, 150));
-    const shot = await captureScreen({ protectedOnTop: true });
-    doc.classList.remove('ov-palette-capturing');
-    doc.classList.add('ov-palette-fade');
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = reject;
-      img.src = shot;
-    });
-    const canvas = document.createElement('canvas');
-    const scale = Math.min(1, 64 / Math.max(img.width, img.height));
-    canvas.width = Math.max(1, Math.round(img.width * scale));
-    canvas.height = Math.max(1, Math.round(img.height * scale));
-    const ctx = canvas.getContext('2d');
-    ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const data = ctx?.getImageData(0, 0, canvas.width, canvas.height).data;
-    if (data) {
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let n = 0;
-      for (let i = 0; i < data.length; i += 4 * 37) {
-        r += data[i];
-        g += data[i + 1];
-        b += data[i + 2];
-        n++;
-      }
-      r = Math.round(r / n);
-      g = Math.round(g / n);
-      b = Math.round(b / n);
-      const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-      const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-      const { applyPaletteLook } = await import('@/lib/dualCamera');
-      await applyPaletteLook('exam', {
-        bg: hex,
-        fg: lum > 0.4 ? '#0f172a' : '#f8fafc',
-        theme: lum > 0.4 ? 'light' : 'dark',
-      });
-    }
-    window.setTimeout(() => doc.classList.remove('ov-palette-fade'), 1500);
-  } catch {
-    doc.classList.remove('ov-palette-capturing');
-  }
+  return <ConfirmPaletteButton id="auto-palette" onApply={() => applyOverlayPalette('exam')} />;
 }
 
 /** ScrollEdgePill 包装（保持 JSX 顺序清晰） */

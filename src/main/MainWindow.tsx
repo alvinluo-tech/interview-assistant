@@ -25,7 +25,7 @@ import { BRAND, isMac } from '@/lib/env';
 import { t } from '@/lib/i18n';
 import { getSetting, setSetting, useSetting } from '@/lib/store';
 import { readData, useDataError } from '@/lib/backend';
-import { setPanicHotkey, setActionHotkeys, onEvent, hideOverlay, showOverlay, setSessionActive } from '@/lib/bridge';
+import { setPanicHotkey, setActionHotkeys, onEvent, hideOverlay, showMain, showOverlay, setSessionActive } from '@/lib/bridge';
 import { DEFAULT_PANIC_HOTKEY, effectiveHotkeys, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
 import { InterviewWorkbench } from './sections/InterviewWorkbench';
 import { ExamWorkbench } from './sections/ExamWorkbench';
@@ -111,9 +111,17 @@ export function MainWindow() {
     if (!('__TAURI_INTERNALS__' in window)) return;
     void initializeStartupHotkeys();
     const offDead = onEvent('overlay-webview-dead', () => {
-      import('@/ui/primitives').then(({ showToast }) =>
-        showToast({ type: 'error', title: t('悬浮窗出现异常已自动收起，重新开始面试即可继续。') }),
-      );
+      // 主窗口在面试时是隐藏的；先把用户带回工作台，再提示，否则 toast 看不见。
+      void (async () => {
+        try {
+          const bridge = await import('@/lib/bridge');
+          await bridge.setSessionActive(false).catch(() => {});
+          await bridge.showMain().catch(() => {});
+        } finally {
+          const { showToast } = await import('@/ui/primitives');
+          showToast({ type: 'error', title: t('悬浮窗出现异常已自动收起，重新开始面试即可继续。') });
+        }
+      })();
     });
     const offIdle = onEvent('panic-hotkey-idle', () => {
       import('@/ui/primitives').then(({ showToast }) =>
@@ -405,9 +413,9 @@ export async function startOverlayFlow(mode: 'exam' | 'interview', goalId: strin
 /** 浮窗退出后恢复工作台（panic/退出共用） */
 export async function recallWorkbench() {
   await setSessionActive(false);
+  // 先亮主窗口再收浮窗：主窗口没起来时，用户至少还有浮窗可用。
+  await showMain().catch(() => {});
   await hideOverlay();
-  await getCurrentWindow().show();
-  await getCurrentWindow().setFocus();
 }
 
 void Card;

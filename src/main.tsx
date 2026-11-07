@@ -34,7 +34,7 @@ async function start() {
     if (scene === 'main') refreshDesktopAppearance();
     await hydrateData();
     if (!dataSynced) {await initDataSync();dataSynced = true;}
-    if(!getDataError())await ensureDefaultData();
+    if(scene === 'main' && !getDataError())await ensureDefaultData();
   }
   const { App } = await import('./App');
   root.render(

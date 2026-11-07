@@ -6,7 +6,7 @@ import ts from 'typescript';
 import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 import {randomUUID} from 'node:crypto';
 
-function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand, deadlineTimers } = {}) {
+function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand, deadlineTimers, persistFails = false, deferWindowTimers = false } = {}) {
   let now = 1000;
   let processor;
   let resumed = 0;
@@ -15,8 +15,11 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   let permissionRequests = 0;
   const wavs = [];
   const saved = [];
+  const completed = [];
   let context;
   const timers = new Map();
+  const windowTimers = new Map();
+  let windowTimerId = 0;
   const nativeListeners = new Map();
   const nativeCallbacks = [];
   let nativeStops = 0;
@@ -43,7 +46,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
       startSystemAudioCapture: nativeStart ?? (async () => ({ devices: [{ id: 'speaker-a', name: '测试耳机', is_default: true }], sampleRate: 16000, channels: 1 })),
       stopSystemAudioCapture: async () => { nativeStops++; }, setSystemAudioExcludedOutputs: async () => {} },
     './ai': { liveSpeechEnabled: () => live, buildInterviewSystemPrompt: () => '', chatStream: chat ?? (async () => '测试回答'), transcribeAudio: async (wav, options) => { requests++; wavs.push(wav); return transcribe ? transcribe(wav, options) : '请介绍一下你的项目经历'; } },
-    './backend': { readData: (key, fallback) => key === 'interviewSessions' ? sessions : fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async (_id,patch) => {saved.push(patch);}, completeSession: async () => { if(completionFails) throw new Error('Disk unavailable'); } },
+    './backend': { readData: (key, fallback) => key === 'interviewSessions' ? sessions : fallback, createSession: async () => ({ id: 'test-session' }), updateSession: async (_id,patch) => { if(persistFails) throw new Error('Disk full'); saved.push(patch); }, completeSession: async (id) => { if(completionFails) throw new Error('Disk unavailable'); completed.push(id); } },
     './examEngine': { getSolverState: () => ({ turns: [] }), prepareExamRun: () => {}, finishInterviewExam: async () => {} },
     './store': { getSetting: (key, fallback) => settings[key] ?? fallback, setSetting: async (key,value) => { settings[key] = value; } },
     './events': { bus: { emit() {} } },
@@ -51,7 +54,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   };
   const sandbox = {
     exports: {}, require: name => { if (!(name in mocks)) throw new Error(`Unmocked dependency: ${name}`); return mocks[name]; },
-    window: { setInterval: fn => { const id = timers.size + 1; timers.set(id, fn); return id; }, clearInterval: id => timers.delete(id), setTimeout: fn => { fn(); return 1; }, clearTimeout() {} },
+    window: { setInterval: fn => { const id = timers.size + 1; timers.set(id, fn); return id; }, clearInterval: id => timers.delete(id), setTimeout: fn => { if (deferWindowTimers) { const id = --windowTimerId; windowTimers.set(id, fn); return id; } fn(); return 1; }, clearTimeout: id => { windowTimers.delete(id); } },
     navigator: { mediaDevices: { getUserMedia: async () => { permissionRequests++; if (permission) await permission; if (denied) throw new DOMException('Permission denied', 'NotAllowedError'); return { getTracks: () => [track], getAudioTracks: () => [track] }; }, addEventListener() {}, removeEventListener() {} } },
     AudioContext: class {
       constructor() { this.sampleRate = sampleRate; this.state = suspended ? 'suspended' : 'running'; context = this; }
@@ -93,7 +96,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
   vm.runInContext(code, sandbox);
   const engine = sandbox.exports;
   engine.exposeEngineDebug();
-  return { engine, sandbox, saved, settings, wavs, track, get permissionRequests() { return permissionRequests; }, get resumed() { return resumed; }, get stopped() { return stopped; }, get requests() { return requests; },
+  return { engine, sandbox, saved, settings, wavs, track, get completed() { return completed; }, get permissionRequests() { return permissionRequests; }, get resumed() { return resumed; }, get stopped() { return stopped; }, get requests() { return requests; },
     async start(source = 'MICROPHONE') { await engine.startInterview({ goalId: null, resumeId: null, materialIds: [], audioSource: source }); await engine.beginListening(source); },
     get nativeStops() { return nativeStops; },
     get realtimeFrames() { return realtimeFrames; },
@@ -109,6 +112,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     },
     feed(amplitude = 0.1) { now += 2048 / sampleRate * 1000; if (context.state === 'running') processor.onaudioprocess?.({ inputBuffer: { getChannelData: () => new Float32Array(2048).fill(amplitude) } }); },
     async silence() { now += 1000; for (const tick of timers.values()) tick(); await new Promise(resolve=>setImmediate(resolve)); },
+    runWindowTimers() { const pending=[...windowTimers.values()]; windowTimers.clear(); for (const tick of pending) tick(); },
     get timerCount() { return timers.size; },
   };
 }
@@ -222,6 +226,34 @@ test('system capture failures stop listening and become visible instead of fabri
   assert.match(h.engine.getInterviewEngineState().errorMessage, /播放设备已断开/);
   assert.equal(h.nativeListenerCount, 0);
   assert.equal(h.requests, 0);
+});
+
+test('a capture failure schedules an automatic reconnect instead of ending the interview', async () => {
+  const timers = [];
+  const h = harness({ deadlineTimers: { setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {} } });
+  await h.start('SPEAKER');
+  h.emitNative('system-audio-error', { error: '播放设备已断开，请重新连接耳机' });
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.equal(h.engine.getInterviewEngineState().status, 'error');
+  const retry = timers.find(timer => timer.ms >= 2000);
+  assert.ok(retry, 'a recovery timer is scheduled after a capture failure');
+  retry.fn();
+  for (let i = 0; i < 100; i++) await Promise.resolve();
+  assert.equal(h.engine.getInterviewEngineState().status, 'listening');
+  assert.ok(h.nativeListenerCount > 0, 'capture is reopened without user action');
+  await h.engine.endInterview(false);
+});
+
+test('a failed save keeps the session listening instead of stopping recognition', async () => {
+  const h = harness({ persistFails: true });
+  await h.start('PHONE');
+  for (let i = 0; i < 60; i++) h.feed();
+  await h.silence();
+  for (let i = 0; i < 40; i++) await Promise.resolve();
+  const state = h.engine.getInterviewEngineState();
+  assert.equal(state.status, 'listening');
+  assert.match(state.errorMessage, /保存失败/);
+  await h.engine.endInterview(false).catch(() => {});
 });
 
 test('queued system audio from an old capture cannot enter the resumed session', async () => {
@@ -472,10 +504,11 @@ test('completed or mock records cannot be resumed as an active interview (B1/B13
   assert.equal(h.engine.resumeInterviewSession('active',null,null),true);
 });
 
-test('completion failure releases the interview engine and capture (B9)', async () => {
+test('completion failure releases capture but keeps the session for a retry (B9)', async () => {
   const h = harness({completionFails:true}); await h.start();
   await assert.rejects(h.engine.endInterview(true), /Disk unavailable/);
-  assert.equal(h.engine.getInterviewEngineState().sessionId, null);
+  // 保留 sessionId：用户可以再点一次「结束面试」补写；录音与麦克风已经释放。
+  assert.equal(h.engine.getInterviewEngineState().sessionId, 'test-session');
   assert.equal(h.engine.getInterviewEngineState().status, 'ended');
   assert.equal(h.track.enabled, true);
   assert.ok(h.stopped > 0);
@@ -498,6 +531,48 @@ test('temporary overlay hide keeps the active recovery id for panic restore',asy
   const h=harness();await h.start();h.settings['interview.sessionId']='test-session';
   await h.engine.endInterview(false);
   assert.equal(h.settings['interview.sessionId'],'test-session');
+});
+
+
+test('a formal end queued behind a temporary hide still completes the session',async()=>{
+  const h=harness();await h.start();h.settings['interview.sessionId']='test-session';
+  // 浮窗被收起（临时收尾）还没跑完时，用户在工作台点了「结束面试」（正式完成）。
+  const temporary=h.engine.endInterview(false);
+  const formal=h.engine.endInterview(true);
+  await Promise.all([temporary,formal]);
+  // complete=true 不能被在飞的临时收尾吞掉：会话必须真的完成，恢复标记也要清掉。
+  assert.deepEqual(h.completed,['test-session']);
+  assert.equal(h.settings['interview.sessionId'],null);
+  assert.equal(h.engine.getInterviewEngineState().sessionId,null);
+});
+
+
+test('a short final transcript is delivered instead of being dropped with the partial',async()=>{
+  const h=harness({transcribe:()=> '你继续说'});
+  await h.start('SPEAKER');
+  for(let i=0;i<25;i++)h.systemFeed();
+  await h.silence();
+  const messages=h.engine.getInterviewEngineState().messages;
+  assert.equal(messages.length,1);
+  assert.equal(messages[0].text,'你继续说');
+  assert.equal(h.engine.getInterviewEngineState().partial,'');
+  await h.engine.endInterview(false);
+});
+
+
+test('a pending short transcript is flushed when the next sentence is finalised',async()=>{
+  let call=0;
+  const h=harness({deferWindowTimers:true,transcribe:()=> (++call===1?'你继续说':'那再讲讲项目架构吧')});
+  await h.start('SPEAKER');
+  for(let i=0;i<25;i++)h.systemFeed();
+  await h.silence();
+  // 短句先挂起等 3 秒：partial 只负责显示，文本不能被下一句覆盖。
+  assert.equal(h.engine.getInterviewEngineState().messages.length,0);
+  assert.equal(h.engine.getInterviewEngineState().partial,'你继续说');
+  for(let i=0;i<25;i++)h.systemFeed();
+  await h.silence();
+  assert.equal(h.engine.getInterviewEngineState().messages.map(message=>message.text).join('|'),'你继续说|那再讲讲项目架构吧');
+  await h.engine.endInterview(false);
 });
 
 

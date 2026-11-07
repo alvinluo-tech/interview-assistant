@@ -146,6 +146,7 @@ pub fn run() {
             speaker::cmd_speaker_clear,
             attachments::cmd_exam_store_images,
             attachments::cmd_exam_read_image,
+            attachments::cmd_exam_delete_images,
             attachments::cmd_storage_layout,
             attachments::cmd_storage_open,
             overlay::cmd_open_mock,
@@ -156,6 +157,7 @@ pub fn run() {
             updater::cmd_updater_restore_original,
             ai_settings::cmd_ai_load_settings,
             ai_settings::cmd_ai_save_settings,
+            ai_settings::cmd_ai_reset_settings,
             data_store::cmd_data_read,
             data_store::cmd_data_commit,
             data_store::cmd_data_backup,
@@ -237,6 +239,15 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // store.json 保存全部设置与加密后的密钥；启动时留一份可解析的副本，写坏时可手动恢复。
+            if let Ok(dir) = app.path().app_data_dir() {
+                let store = dir.join("store.json");
+                if let Ok(bytes) = std::fs::read(&store) {
+                    if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok() {
+                        let _ = std::fs::copy(&store, dir.join("store.json.bak"));
+                    }
+                }
+            }
             if let Err(error) = protection::initialize(app.handle()) {
                 log::error!("[capture] initialization: {error}");
             }

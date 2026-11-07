@@ -82,6 +82,7 @@ function examOverlay(body, clipboardFails=false) {
     '@/lib/examEngine':{getSolverState:()=>state,subscribeSolver:()=>()=>{},extractLastCodeBlock:()=>null,stripMarkdown:text=>text,examModeInfo:()=>({shortLabel:'quick',maxScreenshotPages:4})},
     '@/lib/bridge':{setOverlaySize:async()=>{},setSessionActive:async()=>{}},
     '@/lib/env':{isMac:()=>false,BRAND:'fixture'},'@/lib/hotkeys':{effectiveHotkeys:()=>({})},
+    '@/lib/overlayPalette':{applyOverlayPalette:async()=>{},restoreOverlayPalette:async()=>{}},
     './widgets':new Proxy({registerOverlayList(){}},{get:(target,key)=>key in target?target[key]:String(key)}),
     './platform':{usePlatform:()=>({bindHotkey:(name,fn)=>{bindings.set(name,fn);return()=>{};}})},
     '@tauri-apps/plugin-clipboard-manager':{writeText:async()=>{if(clipboardFails)throw new Error('clipboard unavailable');}},

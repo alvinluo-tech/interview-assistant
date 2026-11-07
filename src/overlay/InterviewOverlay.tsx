@@ -30,6 +30,7 @@ import {
   answerQuestion,
   flushUtterance,
   reportInterviewError,
+  waitForEnding,
   type EngineState,
 } from '@/lib/interviewEngine';
 import {
@@ -53,6 +54,7 @@ import { Md, mdToPlain } from './Md';
 import {
   DwellButton,
   DwellIconButton,
+  DwellDisclosure,
   ConfirmPaletteButton,
   DragHandle,
   HOVER_MS,
@@ -61,6 +63,40 @@ import {
 } from './widgets';
 import { useDwell, usePlatform } from './platform';
 import {getSpeechProfile,useSpeechProfile} from '@/lib/speechPreferences';
+import { applyOverlayPalette } from '@/lib/overlayPalette';
+import { bus } from '@/lib/events';
+
+/** 收尾最多等这么久，超时就先回主窗口，剩下的写盘在后台继续。 */
+const END_WAIT_MS = 6000;
+
+/**
+ * 结束面试并回到主窗口。
+ * 窗口切换不能依赖收尾是否顺利：停麦、写记录、完成会话任何一步卡住或失败，
+ * 都不能把用户关在一个已经结束的浮窗里，所以超时后照样切窗口。
+ */
+async function endInterviewAndReturn() {
+  const bridge = await import('@/lib/bridge');
+  let timer: number | undefined;
+  try {
+    await Promise.race([
+      endInterview(true).catch(error => {
+        showToast({ type: 'error', title: t('面试已停止，但结束状态尚未保存'), description: String((error as Error).message || error) });
+      }),
+      new Promise<void>(resolve => { timer = window.setTimeout(resolve, END_WAIT_MS); }),
+    ]);
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer);
+  }
+  await bridge.setSessionActive(false).catch(() => {});
+  try {
+    // 先亮主窗口再收浮窗：主窗口万一没起来，用户手里至少还有浮窗可以再点一次。
+    await bridge.showMain();
+  } catch (error) {
+    showToast({ type: 'error', title: t('没能切回主窗口，请再点一次「结束面试」'), description: String((error as Error).message || error) });
+    return;
+  }
+  await bridge.hideOverlay().catch(() => {});
+}
 
 export function InterviewOverlay({ preview }: { preview?: boolean }) {
   exposeEngineDebug();
@@ -77,52 +113,62 @@ export function InterviewOverlay({ preview }: { preview?: boolean }) {
   useEffect(() => {
     if (preview) return;
     const controller = new AbortController();
-    const cfg = (
-      window as unknown as { __ml_pendingConfig?: { goalId: string | null; resumeId: string | null; materialIds: string[]; audioSource: 'SPEAKER' | 'PHONE' | 'MICROPHONE' } }
-    ).__ml_pendingConfig;
-    void (async () => {
-      const { getSetting } = await import('@/lib/store');
-      if (controller.signal.aborted) return;
-      type PendingCfg = {
-        goalId: string | null;
-        resumeId: string | null;
-        materialIds: string[];
-        audioSource: 'SPEAKER' | 'PHONE' | 'MICROPHONE';
-      };
-      const pending: PendingCfg | null =
-        cfg ?? (getSetting<PendingCfg | null>('interview.pendingConfig', null) ?? null);
-      if (!pending) return;
-      const current = getInterviewEngineState();
-      if (current.sessionId) {
-        if (current.status === 'connecting') await beginListening(current.audio.source,current.sessionId);
-        return;
-      }
-      // 已有进行中的会话（浮窗重载/重新显示）→ 恢复历史，不新建
-      const storedId = getSetting<string | null>('interview.sessionId', null);
-      if (storedId && resumeInterviewSession(storedId, pending.goalId, pending.resumeId)) {
-        await beginListening(pending.audioSource ?? 'SPEAKER',storedId);
-        return;
-      }
-      const session = await startInterview({
-        goalId: pending.goalId,
-        resumeId: pending.resumeId,
-        materialIds: pending.materialIds ?? [],
-        audioSource: pending.audioSource ?? 'SPEAKER',
-      },controller.signal);
-      const ownsSession = () => !controller.signal.aborted && getInterviewEngineState().sessionId === session.id && getInterviewEngineState().status !== 'ended';
-      if (!ownsSession()) return;
-      const { setSetting } = await import('@/lib/store');
-      if (!ownsSession()) return;
-      await setSetting('interview.sessionId', session.id);
-      if (!ownsSession()) return;
-      await beginListening(pending.audioSource ?? 'SPEAKER',session.id);
-    })().catch((e) => {
+    void bootInterviewSession(controller.signal).catch((e) => {
       if (!controller.signal.aborted) reportInterviewError(e);
     });
     return () => controller.abort();
   }, [preview]);
 
   return <InterviewShell skin={skin} preview={preview} />;
+}
+
+/**
+ * 建立/恢复会话并开始收音。启动失败后「重试收音」也走这里，
+ * 避免 sessionId 为空时重试按钮只是空转。
+ */
+async function bootInterviewSession(signal?: AbortSignal, retried = false): Promise<void> {
+  const cfg = (
+    window as unknown as { __ml_pendingConfig?: { goalId: string | null; resumeId: string | null; materialIds: string[]; audioSource: 'SPEAKER' | 'PHONE' | 'MICROPHONE' } }
+  ).__ml_pendingConfig;
+  const { getSetting, setSetting } = await import('@/lib/store');
+  if (signal?.aborted) return;
+  type PendingCfg = {
+    goalId: string | null;
+    resumeId: string | null;
+    materialIds: string[];
+    audioSource: 'SPEAKER' | 'PHONE' | 'MICROPHONE';
+  };
+  const pending: PendingCfg | null =
+    cfg ?? (getSetting<PendingCfg | null>('interview.pendingConfig', null) ?? null);
+  if (!pending) return;
+  const current = getInterviewEngineState();
+  if (current.sessionId) {
+    if (current.status === 'connecting') await beginListening(current.audio.source, current.sessionId);
+    // 浮窗刚被收起又重新显示时，上一场的收尾可能还在跑（状态已是 ended）。
+    // 直接 return 会让引擎停在「已结束、无会话」，用户得再点一次开始；这里等收尾结束再按恢复流程走一遍。
+    else if (current.status === 'ended' && !retried) {
+      await waitForEnding();
+      if (!signal?.aborted) await bootInterviewSession(signal, true);
+    }
+    return;
+  }
+  // 已有进行中的会话（浮窗重载/重新显示）→ 恢复历史，不新建
+  const storedId = getSetting<string | null>('interview.sessionId', null);
+  if (storedId && resumeInterviewSession(storedId, pending.goalId, pending.resumeId)) {
+    await beginListening(pending.audioSource ?? 'SPEAKER', storedId);
+    return;
+  }
+  const session = await startInterview({
+    goalId: pending.goalId,
+    resumeId: pending.resumeId,
+    materialIds: pending.materialIds ?? [],
+    audioSource: pending.audioSource ?? 'SPEAKER',
+  }, signal);
+  const ownsSession = () => !signal?.aborted && getInterviewEngineState().sessionId === session.id && getInterviewEngineState().status !== 'ended';
+  if (!ownsSession()) return;
+  await setSetting('interview.sessionId', session.id);
+  if (!ownsSession()) return;
+  await beginListening(pending.audioSource ?? 'SPEAKER', session.id);
 }
 
 function useEngineState(): EngineState {
@@ -175,9 +221,11 @@ function InterviewShell({
     const offCapture = bindHotkey('capture', () => {
       captureQuestion();
     });
+    const offVoice = bindHotkey('voice-ask', () => bus.emit('voice-ask:toggle', null));
     return () => {
       offAnswer();
       offCapture();
+      offVoice();
     };
   }, [bindHotkey, tab, engine.messages, preview,interactive,engine.sessionId]);
 
@@ -201,7 +249,6 @@ function InterviewShell({
         <span className={`ov-dot size-1.5 rounded-full ${started ? '' : 'opacity-40'}`} />
         <span className="ov-text-2 truncate text-[11px] font-semibold">{statusInfo.text}</span>
         <div className="flex-1" />
-        <DwellIconButton id="chat-solver" hoverMs={HOVER_MS.action} label={t('笔试答题')} icon={<Columns2 size={13}/>} onTrigger={()=>setTab('solver')}/>
         {/* 穿透/窗口切换 */}
         <DwellIconButton id="iv-mode" hoverMs={HOVER_MS.switchInteractive}
           label={interactive ? t('切回穿透模式') : t('悬停切到窗口模式')}
@@ -210,26 +257,19 @@ function InterviewShell({
         {/* 一键配色 */}
         <PaletteBtn />
         {/* 结束面试 */}
-        <EndButton
-          onEnd={async () => {
-            const { setSessionActive, hideOverlay, showMain } = await import('@/lib/bridge');
-            try {await endInterview(true);}
-            catch(error){showToast({type:'error',title:t('面试已停止，但结束状态尚未保存'),description:String((error as Error).message||error)});}
-            finally {
-              try {await setSessionActive(false);}
-              finally {try {await hideOverlay();} finally {await showMain();}}
-            }
-          }}
-        />
+        <EndButton onEnd={() => { void endInterviewAndReturn(); }} />
       </div>
 
       <AudioInputFeedback engine={engine} />
-      {engine.contextSources.length > 0 && <details className="ov-panel rounded-md px-2 py-1 text-[10px]">
-        <summary className="cursor-pointer">{t('本次回答参考 {n} 段简历 / JD / 资料', { n: engine.contextSources.length })}</summary>
-        <div className="mt-1 max-h-32 overflow-y-auto space-y-2">{engine.contextSources.map(source => <div key={source.id}>
+      {engine.contextSources.length > 0 && <DwellDisclosure
+        id="context-sources"
+        label={t('本次回答参考 {n} 段简历 / JD / 资料', { n: engine.contextSources.length })}
+        className="ov-panel rounded-md px-2 py-1 text-[10px]"
+      >
+        <div className="max-h-32 overflow-y-auto space-y-2">{engine.contextSources.map(source => <div key={source.id}>
           <div className="font-medium">{source.title} · {source.location}</div><p className="whitespace-pre-wrap opacity-75">{source.excerpt}</p>
         </div>)}</div>
-      </details>}
+      </DwellDisclosure>}
       {engine.errorMessage && (
         <div role="alert" className="ov-text rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px]">
           {engine.errorMessage}
@@ -258,7 +298,9 @@ function InterviewShell({
                 hoverMs={HOVER_MS.action}
                 onTrigger={() => {
                   if (!started || engine.status === 'error') {
-                    void beginListening(configuredSource);
+                    // 会话没建起来时（如创建失败/被清理）先补建，再开始收音。
+                    if (!engine.sessionId) void bootInterviewSession().catch(error => reportInterviewError(error));
+                    else void beginListening(configuredSource);
                   } else if (engine.status === 'paused') {
                     void resumeListening();
                   } else {
@@ -454,7 +496,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
                         {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
                         {!m.pending && <GenerationDetails status={m.metadata?.completionStatus} request={m.metadata?.request}/>}
-                        {!!m.metadata?.sources?.length && <details className="ov-text-3 mt-1 text-[10px]"><summary className="cursor-pointer">{t('本轮参考资料')}</summary>{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</details>}
+                        {!!m.metadata?.sources?.length && <DwellDisclosure id={`sources-${m.id}`} label={t('本轮参考资料')} className="ov-text-3 mt-1 text-[10px]">{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</DwellDisclosure>}
                         {m.pending && (
                           <span className="ov-text-3 mt-0.5 inline-block size-3 animate-spin rounded-full border border-current border-t-transparent" />
                         )}
@@ -494,7 +536,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
 function SolverView({
   solver,
   onBack,
-  hotkeys: _hotkeys,
+  hotkeys,
 }: {
   solver: SolverState;
   onBack: () => void;
@@ -507,7 +549,9 @@ function SolverView({
   }, []);
   const last = solver.turns.find(turn=>turn.id===solver.selectedTurnId) || solver.turns[solver.turns.length - 1];
   return (
-    <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1">
+    <>
+      <ScrollEdgePillProxy id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1">
       {solver.turns.length === 0 ? (
         <div className="ov-text-2 flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
           <div className="ov-text text-[13px] font-medium">{t('面试里的笔试助手')}</div>
@@ -533,16 +577,16 @@ function SolverView({
           id={`iv-suggested-${index}`} compact hoverMs={HOVER_MS.followUp} onTrigger={() => void followUp({message:option})}>{option}</DwellButton>)}
       </div>}
       <div className="mt-2 flex gap-1.5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="ov-chip ov-text-2 flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px]"
-        >
-          <ArrowLeft size={11} />
-          {t('返回对话')}
-        </button>
+        <DwellButton id="sv-back" inline hoverMs={HOVER_MS.action} onTrigger={onBack}>
+          <span className="flex items-center gap-1">
+            <ArrowLeft size={11} />
+            {t('返回对话')}
+          </span>
+        </DwellButton>
       </div>
-    </div>
+      </div>
+      <ScrollEdgePillProxy id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
+    </>
   );
 }
 
@@ -563,13 +607,13 @@ function SolverActions({
   return (
     <>
       <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="ov-chip ov-text-2 flex h-9 items-center rounded-md border px-2 text-[12px]"
-        >
-          <ArrowLeft size={12} />
-        </button>
+        <DwellIconButton
+          id="sv-back-bar"
+          hoverMs={HOVER_MS.action}
+          label={t('返回对话')}
+          icon={<ArrowLeft size={12} />}
+          onTrigger={onBack}
+        />
         <DwellButton
           id="sv-resolve"
           variant="primary"
@@ -670,6 +714,9 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
   const alive = useRef(true);
   const resumeSession = useRef<string | null>(null);
   const request = useRef<AbortController | null>(null);
+  const toggleRef = useRef<() => void>(() => {});
+  // 热键与按钮共用同一套开始/结束逻辑。
+  useEffect(() => bus.on('voice-ask:toggle', () => toggleRef.current()), []);
   const restore = () => {
     const state = getInterviewEngineState();
     const sessionId = resumeSession.current;
@@ -740,10 +787,12 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
     finally { busy.current = false; request.current = null; if (alive.current) setTranscribing(false); }
   };
 
+  toggleRef.current = () => { if (busy.current) return; if (recording) void stop(); else void start(); };
+
   return (
     <div className="flex flex-col gap-1">
       <DwellButton id={`voice-ask-${kind}`} variant={recording ? 'primary' : 'muted'} hoverMs={HOVER_MS.voiceAsk} hotkey={hotkey}
-        onTrigger={() => { if (busy.current) return; if (recording) void stop(); else void start(); }} disabled={opening || transcribing}>
+        onTrigger={() => toggleRef.current()} disabled={opening || transcribing}>
         <span className="flex items-center gap-1">
           {recording ? <Square size={10} /> : <Mic size={11} />}
           {opening ? t('正在打开麦克风…') : transcribing ? t('识别中…') : recording ? t('结束并提问') : t('语音提问')}
@@ -756,55 +805,7 @@ function VoiceAskRow({ kind, hotkey }: { kind: 'chat' | 'solver'; hotkey: string
 }
 
 function PaletteBtn() {
-  return <ConfirmPaletteButton id="iv-auto-palette" onApply={applyIvPalette} />;
-}
-
-async function applyIvPalette() {
-  const { captureScreen } = await import('@/lib/bridge');
-  const doc = document.documentElement;
-  try {
-    doc.classList.add('ov-palette-capturing');
-    await new Promise((r) => setTimeout(r, 150));
-    const shot = await captureScreen({ protectedOnTop: true });
-    doc.classList.remove('ov-palette-capturing');
-    doc.classList.add('ov-palette-fade');
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = reject;
-      img.src = shot;
-    });
-    const canvas = document.createElement('canvas');
-    const scale = Math.min(1, 64 / Math.max(img.width, img.height));
-    canvas.width = Math.max(1, Math.round(img.width * scale));
-    canvas.height = Math.max(1, Math.round(img.height * scale));
-    const ctx = canvas.getContext('2d');
-    ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const data = ctx?.getImageData(0, 0, canvas.width, canvas.height).data;
-    if (data) {
-      let r = 0, g = 0, b = 0, n = 0;
-      for (let i = 0; i < data.length; i += 4 * 37) {
-        r += data[i];
-        g += data[i + 1];
-        b += data[i + 2];
-        n++;
-      }
-      r = Math.round(r / n);
-      g = Math.round(g / n);
-      b = Math.round(b / n);
-      const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-      const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-      const { applyPaletteLook } = await import('@/lib/dualCamera');
-      await applyPaletteLook('interview', {
-        bg: hex,
-        fg: lum > 0.4 ? '#0f172a' : '#f8fafc',
-        theme: lum > 0.4 ? 'light' : 'dark',
-      });
-    }
-    window.setTimeout(() => doc.classList.remove('ov-palette-fade'), 1500);
-  } catch {
-    doc.classList.remove('ov-palette-capturing');
-  }
+  return <ConfirmPaletteButton id="iv-auto-palette" onApply={() => applyOverlayPalette('interview')} />;
 }
 
 function SpeakerIdentity({message}:{message:EngineState['messages'][number]}){
@@ -814,7 +815,7 @@ function SpeakerIdentity({message}:{message:EngineState['messages'][number]}){
 }
 
 function EndButton({ onEnd }: { onEnd: () => void }) {
-  const { interactive, registerZone } = usePlatform();
+  const { interactive, registerZone, simulate } = usePlatform();
   const progress = useDwell('iv-end', HOVER_MS.endInterview, onEnd, { disabled: interactive });
   const [refEl, setRefEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -826,7 +827,9 @@ function EndButton({ onEnd }: { onEnd: () => void }) {
       ref={setRefEl as (el: HTMLButtonElement | null) => void}
       type="button"
       title={t('结束面试')}
-      onClick={interactive ? onEnd : undefined}
+      aria-label={t('结束面试')}
+      data-dwell-ms={HOVER_MS.endInterview}
+      onClick={interactive && !simulate ? onEnd : undefined}
       className="ov-text-2 relative flex h-6 w-6 items-center justify-center rounded-md border border-dashed"
     >
       <Square size={11} />

@@ -232,6 +232,23 @@ pub fn cmd_storage_layout(app: AppHandle) -> Result<StorageLayout, String> {
 }
 
 #[tauri::command]
+pub fn cmd_exam_delete_images(app: AppHandle, session_id: String) -> Result<(), String> {
+    if !segment(&session_id) {
+        return Err("笔试记录 ID 无效。".into());
+    }
+    let root = root(&app)?;
+    let target = root.join(&session_id);
+    if !target.starts_with(&root) {
+        return Err("附件路径无效。".into());
+    }
+    match fs::remove_dir_all(&target) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("删除截图附件失败：{error}")),
+    }
+}
+
+#[tauri::command]
 pub fn cmd_storage_open(app: AppHandle, kind: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     let layout = cmd_storage_layout(app.clone())?;
