@@ -30,9 +30,12 @@ function boot(): Promise<PyodideApi> {
   if (ready) return ready;
   ready = (async () => {
     // 只允许同源加载 Pyodide 自身的资源；加载完成后立即封掉出网能力。
-    const moduleUrl = '/pyodide/pyodide.mjs';
+    // 运行时拼路径：public/ 下的文件不能被 Vite 当成源码 import（会直接报错），
+    // 拼成变量后 import() 才不会被静态分析。
+    const base = ['', 'pyodide', ''].join('/');
+    const moduleUrl = [base, 'pyodide.mjs'].join('');
     const module = await import(/* @vite-ignore */ moduleUrl) as { loadPyodide: (options: { indexURL: string }) => Promise<PyodideApi> };
-    const pyodide = await module.loadPyodide({ indexURL: '/pyodide/' });
+    const pyodide = await module.loadPyodide({ indexURL: base });
     const globals = globalThis as unknown as Record<string, unknown>;
     globals.fetch = undefined;
     globals.XMLHttpRequest = undefined;
