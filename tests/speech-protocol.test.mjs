@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+// 这些断言比对的是中文文案；CI 运行在英文系统上，固定界面语言，避免断言跟随宿主语言。
+globalThis.localStorage ??= { getItem: key => (key === 'desktop.locale' ? 'zh-cn' : null), setItem() {}, removeItem() {} };
 import { recognizeSpeech, joinTranscript } from '../artifacts/byok-tests/speechProtocol.js';
 import { usesLiveSpeech } from '../artifacts/byok-tests/aiConfig.js';
 const provider = { id: 'mimo', name: 'MiMo', baseUrl: 'https://speech.example/v1', authMode: 'bearer', apiKey: 'test-credential', models: [], lastFetchedAt: null };

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+// 这些断言比对的是中文文案；CI 运行在英文系统上，固定界面语言，避免断言跟随宿主语言。
+globalThis.localStorage ??= { getItem: key => (key === 'desktop.locale' ? 'zh-cn' : null), setItem() {}, removeItem() {} };
 import { createProvider, defaultAiSettings, normalizeBaseUrl, validateAiSettings, resolveAiRoute, isRoleConfigured, mergeDiscoveredModels, removeProvider } from '../artifacts/byok-tests/aiConfig.js';
 import * as configApi from '../artifacts/byok-tests/aiConfig.js';
 import { aiHeaders, consumeChat, discoverModels, withAiRequest, testChatModel, transcriptionLanguage } from '../artifacts/byok-tests/aiProtocol.js';
