@@ -303,10 +303,13 @@ test('current tagged audio arriving before the start reply is buffered until ide
 test('speech captured while the realtime channel connects is replayed instead of dropped', async () => {
   let open;
   const handshake = new Promise(resolve => { open = resolve; });
-  const h = harness({ realtime: true, asrOpen: () => handshake, nativeStart: async () => ({ captureId: 'live', sampleRate: 16000, channels: 1, devices: [] }) });
+  const h = harness({ realtime: true, asrOpen: () => handshake, nativeStart: async () => ({ captureId: 'live', sampleRate: 16000, channels: 1, devices: [{ id: 'speaker-a', name: '测试耳机' }] }) });
   const start = h.start('SPEAKER');
   for (let i = 0; i < 400 && !h.asrOpened; i++) await Promise.resolve();
-  assert.ok(h.asrOpened, 'capture must finish before the realtime channel opens');
+  assert.ok(h.asrOpened, 'the realtime channel starts opening first');
+  // 并行启动：握手还没完成时原生采集必须已经就绪，恢复空窗取较慢者而不是两者相加。
+  for (let i = 0; i < 400 && !h.engine.getInterviewEngineState().audio.deviceLabel; i++) await Promise.resolve();
+  assert.equal(h.engine.getInterviewEngineState().audio.deviceLabel, '测试耳机', 'capture runs while the channel is still handshaking');
   const pcmBase64 = Buffer.from(new Int16Array(1600).fill(3277).buffer).toString('base64');
   h.emitNative('system-audio-chunk', { captureId: 'live', pcmBase64, volume: 80 });
   h.emitNative('system-audio-chunk', { captureId: 'live', pcmBase64, volume: 80 });

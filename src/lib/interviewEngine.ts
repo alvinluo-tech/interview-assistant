@@ -959,6 +959,36 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
       if(localSpeaker()){speakerOwner=crypto.randomUUID();await cmd('cmd_speaker_begin',{owner:speakerOwner});if(generation!==captureGeneration)return;}
       // 采集先起来：识别通道握手要几百毫秒到一两秒，这段语音先攒进 preroll，不能丢开场白。
       startupPreroll = []; startupPrerollSamples = 0;
+      // 识别通道握手（WebSocket 建连 + 等 task-started，约 0.5–1s）和原生采集互不依赖：
+      // 并行启动，恢复空窗等于两者中较慢的那个，而不是两者相加。
+      let asrOpening: Promise<RealtimeCapture> | null = null;
+      const asrController = new AbortController();
+      if (realtime) {
+        realtimeOpening = asrController;
+        asrOpening = (async () => {
+          const { openConfiguredRealtimeAsr } = await import('./realtimeAsr');
+          return openConfiguredRealtimeAsr({
+            onResult: result => {
+              if (generation !== captureGeneration) return;
+              if (!result.isFinal) { setState({ partial: result.text }); return; }
+              const text = cleanTranscript(result.text);
+              setState({ partial: '', audio: { ...state.audio, lastTranscriptAt: Date.now() } });
+              if (text && !isFillerSentence(text)) void (audioSource==='SPEAKER'?deliverUtterance(text):deliverPhoneSpeech(text,result.beginMs!==undefined&&result.endMs!==undefined?audioTimeline.range(realtimeOriginMs+result.beginMs,realtimeOriginMs+result.endMs):null,generation)).catch(error => {
+                if (generation === captureGeneration) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String(error.message || error) }) });
+              });
+            },
+            onState: realtimeState => {
+              if (generation !== captureGeneration) return;
+              if(realtimeState==='ready')realtimeOriginMs=audioTimeline.samples/16;
+              setState({ ...(realtimeState === 'reconnecting' ? { partial: '', errorMessage: t('实时语音连接中断，正在重新连接；中断期间的语音请稍后重说。') } : realtimeState === 'ready' ? { errorMessage: null } : {}),
+                audio: { ...state.audio, realtimeState } });
+            },
+            onError: error => { if (generation === captureGeneration) { reportInterviewError(error); void stopCapture(); } },
+          }, { signal: asrController.signal, language: interviewLang(), silenceMs: getSetting('interview.silenceGateMs', 1600) });
+        })();
+        // 采集阶段先失败时，这里不能留下未处理的 rejection。
+        asrOpening.catch(() => {});
+      }
       if (audioSource === 'SPEAKER') {
         const { startSystemAudioCapture, stopSystemAudioCapture, setSystemAudioExcludedOutputs } = await import('./bridge');
         const failCapture = (message: string) => {
@@ -1037,28 +1067,9 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         microphone = capture;
         setState({ audio: { ...state.audio, deviceLabel: capture.label } });
       }
-      if (realtime) {
-        const controller = new AbortController();realtimeOpening=controller;
-        const { openConfiguredRealtimeAsr } = await import('./realtimeAsr');
-        const stream = await openConfiguredRealtimeAsr({
-          onResult: result => {
-            if (generation !== captureGeneration) return;
-            if (!result.isFinal) { setState({ partial: result.text }); return; }
-            const text = cleanTranscript(result.text);
-            setState({ partial: '', audio: { ...state.audio, lastTranscriptAt: Date.now() } });
-            if (text && !isFillerSentence(text)) void (audioSource==='SPEAKER'?deliverUtterance(text):deliverPhoneSpeech(text,result.beginMs!==undefined&&result.endMs!==undefined?audioTimeline.range(realtimeOriginMs+result.beginMs,realtimeOriginMs+result.endMs):null,generation)).catch(error => {
-              if (generation === captureGeneration) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String(error.message || error) }) });
-            });
-          },
-          onState: realtimeState => {
-            if (generation !== captureGeneration) return;
-            if(realtimeState==='ready')realtimeOriginMs=audioTimeline.samples/16;
-            setState({ ...(realtimeState === 'reconnecting' ? { partial: '', errorMessage: t('实时语音连接中断，正在重新连接；中断期间的语音请稍后重说。') } : realtimeState === 'ready' ? { errorMessage: null } : {}),
-              audio: { ...state.audio, realtimeState } });
-          },
-          onError: error => { if (generation === captureGeneration) { reportInterviewError(error); void stopCapture(); } },
-        }, { signal:controller.signal, language: interviewLang(), silenceMs: getSetting('interview.silenceGateMs', 1600) });
-        if(realtimeOpening===controller)realtimeOpening=null;
+      if (asrOpening) {
+        const stream = await asrOpening;
+        if (realtimeOpening === asrController) realtimeOpening = null;
         if (generation !== captureGeneration) { await stream.close(); return; }
         realtimeCapture = stream;
       }
