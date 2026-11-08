@@ -422,6 +422,8 @@ export const es419: Record<string, string> = {
   "回答未保存，请重试": "Respuesta sin guardar; inténtalo de nuevo",
   "回答已保存，下一题生成失败": "Respuesta guardada, pero la siguiente pregunta no se generó",
   "回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。": "La respuesta se cortó por el límite de salida. Lo generado se conserva; continúa con seguimientos o sube el límite de salida.",
+  "继续生成": "Continuar",
+  "继续生成中…": "Continuando…",
   "思考过程占满了输出预算，没有生成正文；可以直接重试。": "El proceso de razonamiento consumió todo el presupuesto de salida y no se generó la respuesta. Vuelve a intentarlo.",
   " · 思考 {n} tokens": " · Razonamiento {n} tokens",
   "回答语言": "Idioma de la respuesta",

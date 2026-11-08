@@ -555,6 +555,87 @@ export async function followUp(opts: {
   } finally { if (current === generation) { if(checkpointTimer!==null){window.clearTimeout(checkpointTimer);checkpointTimer=null;} requestController = null; } }
 }
 
+/** 续写只回传正文尾部，够模型接上语义即可，避免把整篇回答重新计费。 */
+const CONTINUE_CONTEXT_CHARS = 1600;
+
+/**
+ * 续写时模型常把断点前的一小段重新打一遍：取「已生成内容的结尾」与
+ * 「续写开头」的最长重叠，重叠部分直接丢弃，避免同一句话出现两次。
+ */
+function mergeContinuation(existing: string, addition: string): string {
+  const max = Math.min(400, existing.length, addition.length);
+  for (let size = max; size >= 24; size -= 1) {
+    if (existing.endsWith(addition.slice(0, size))) return existing + addition.slice(size);
+  }
+  return existing + addition;
+}
+
+/**
+ * 续写：答案因输出长度限制被截断（且已有正文）时，从断点接着写，
+ * 结果追加到同一条回答，不新建追问轮次。失败时保留已经流出的内容。
+ */
+export async function continueTurn(targetId?: string): Promise<void> {
+  if (startingSolve || requestController || ['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) return;
+  const target = state.turns.find(turn => turn.id === (targetId || state.selectedTurnId)) || state.turns[state.turns.length - 1];
+  if (!target || !target.body.trim()) return;
+  const current = ++generation;
+  const controller = new AbortController();
+  requestController = controller;
+  const base = target.body;
+  const question = (target.questionText || '').trim();
+  const prompt = `${question ? `原题：\n${question}\n\n` : ''}下面这条回答在末尾被输出长度限制截断了：\n\n${base.slice(-CONTINUE_CONTEXT_CHARS)}\n\n请从中断处接着写完剩余内容，只输出接下来的部分。`;
+  setState({ activeTurnId: target.id, phase: 'streaming', statusText: t('继续生成中…'), errorMessage: null });
+  ensureTicker();
+  let addition = '';
+  try {
+    const answer = await chatWithImages(prompt, [], {
+      task: 'exam-followup',
+      signal: controller.signal,
+      system: `${EXAM_SYSTEM_PROMPT}\n这是续写任务：直接从断点继续写，不重复已有内容，不重新开头，不解释这是续写。`,
+      onTrace: request => {
+        if (current === generation) setState({ turns: state.turns.map(t => t.id === target.id ? { ...t, request, completionStatus: request.completionStatus } : t) });
+      },
+      onDelta: (delta) => {
+        if (current !== generation) return;
+        addition += delta;
+        setState({ turns: state.turns.map(t => t.id === target.id ? { ...t, body: mergeContinuation(base, addition) } : t) });
+        scheduleTurnCheckpoint(current);
+      },
+    });
+    if (current !== generation) return;
+    const merged = mergeContinuation(base, (answer || addition).replace(/^\s*\n+/, ''));
+    setState({
+      phase: 'done',
+      statusText: '',
+      activeTurnId: null,
+      turns: state.turns.map(t => t.id === target.id ? { ...t, body: merged, completionStatus: 'complete', reasoningDone: true } : t),
+    });
+    await persistTurns();
+  } catch (e) {
+    if (current !== generation) return;
+    const err = e as Error & { completionStatus?: string };
+    if (err?.name === 'AbortError') {
+      setState({ phase: 'idle', statusText: '', activeTurnId: null });
+      return;
+    }
+    setState({
+      phase: 'error',
+      statusText: '',
+      errorMessage: String(err?.message ?? e),
+      activeTurnId: null,
+      turns: state.turns.map(t => t.id === target.id
+        ? { ...t, body: mergeContinuation(base, addition), completionStatus: addition.trim() ? (err?.completionStatus || 'truncated') : (t.completionStatus || 'failed') }
+        : t),
+    });
+    await persistRecovery(current);
+  } finally {
+    if (current === generation) {
+      if (checkpointTimer !== null) { window.clearTimeout(checkpointTimer); checkpointTimer = null; }
+      requestController = null;
+    }
+  }
+}
+
 /** 多页收集态：发送 */
 export function hasPendingPages(): boolean {
   return state.pendingScreenshots.length > 0;

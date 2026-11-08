@@ -422,6 +422,8 @@ export const tr: Record<string, string> = {
   "回答未保存，请重试": "Cevap kaydedilmedi — tekrar dene",
   "回答已保存，下一题生成失败": "Cevap kaydedildi ama sonraki soru oluşturulamadı",
   "回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。": "Cevap çıktı sınırı nedeniyle kesildi. Oluşturulan içerik korundu — takip sorularıyla devam et veya çıktı sınırını yükselt.",
+  "继续生成": "Devam et",
+  "继续生成中…": "Devam ediyor…",
   "思考过程占满了输出预算，没有生成正文；可以直接重试。": "Düşünme süreci çıktı bütçesinin tamamını tüketti ve yanıt metni oluşmadı. Yeniden deneyin.",
   " · 思考 {n} tokens": " · Düşünme {n} tokens",
   "回答语言": "Cevap dili",

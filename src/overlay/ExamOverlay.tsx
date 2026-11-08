@@ -26,6 +26,7 @@ import {
   abortSolve,
   endExamSession,
   followUp,
+  continueTurn,
   prepareExamRun,
   extractLastCodeBlock,
   scaffoldForTurn,
@@ -168,6 +169,8 @@ function ExamShell({
     solver.phase === 'uploading';
 
   const selected=solver.turns.find(turn=>turn.id===solver.selectedTurnId) || solver.turns[solver.turns.length-1];
+  // 被输出上限截断且已有正文：给「继续生成」把剩下的写完，而不是让用户自己追问。
+  const truncated = selected?.completionStatus === 'truncated' && Boolean(selected?.body.trim());
   const copy = () => copyAnswerToClipboard(selected?.body ?? '');
 
   const doSolve = async () => {
@@ -269,6 +272,14 @@ function ExamShell({
           {[...new Set(selected?.followUpOptions ?? [])].slice(0,3).map((option,index)=><DwellChip
             key={option} id={`suggested-${index}`} hoverMs={HOVER_MS.followUp} label={option}
             onTrigger={() => void followUp({message:option})} />)}
+          {truncated && (
+            <DwellChip
+              id="continue-answer"
+              hoverMs={HOVER_MS.followUp}
+              onTrigger={() => void continueTurn(selected?.id)}
+              label={t('继续生成')}
+            />
+          )}
           {showCopyCode && (
             <DwellChip
               id="copy-code"

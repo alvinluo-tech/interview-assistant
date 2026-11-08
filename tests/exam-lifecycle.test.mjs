@@ -252,3 +252,29 @@ test('embedded exam restores only the owning interview and stops when that inter
   assert.ok(!h.api.getSolverState().turns.some(turn=>turn.body.includes('迟到文本')));assert.ok(h.calls.includes('complete'));
   h.api.prepareExamRun('interview:interview-B',null,'interview-B');assert.equal(h.api.getSolverState().turns.length,0);
 });
+
+test('a truncated answer is continued inside the same turn without resending screenshots',async()=>{
+  const h=engine();
+  const solving=h.api.solve({screenshots:['synthetic-page']});await flush();
+  const solveOptions=h.options();
+  solveOptions.onDelta('<exam-question>题干</exam-question><exam-answer>第一段');
+  h.reject(Object.assign(new Error('truncated'),{completionStatus:'truncated'}));
+  await solving;
+  const truncated=h.api.getSolverState();
+  assert.equal(truncated.turns.length,1);
+  assert.equal(truncated.turns[0].completionStatus,'truncated');
+  assert.equal(truncated.turns[0].body,'第一段');
+
+  const continuing=h.api.continueTurn();await flush();
+  assert.equal(h.requests(),2);
+  assert.deepEqual(Array.from(h.sentImages[1]),[],'continuation is text-only');
+  assert.match(h.prompts[1],/第一段/);
+  h.options().onDelta('，第二段');
+  h.resolve('，第二段');
+  await continuing;
+  const done=h.api.getSolverState();
+  assert.equal(done.turns.length,1,'continuation appends instead of starting a new turn');
+  assert.equal(done.turns[0].body,'第一段，第二段');
+  assert.equal(done.turns[0].completionStatus,'complete');
+  assert.equal(done.phase,'done');
+});

@@ -422,6 +422,8 @@ export const ptBr: Record<string, string> = {
   "回答未保存，请重试": "A resposta não foi salva; tente de novo",
   "回答已保存，下一题生成失败": "Resposta salva, mas a próxima pergunta não foi gerada",
   "回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。": "A resposta foi cortada pelo limite de saída; o conteúdo gerado foi mantido. Continue perguntando ou ajuste o limite de saída.",
+  "继续生成": "Continuar",
+  "继续生成中…": "Continuando…",
   "思考过程占满了输出预算，没有生成正文；可以直接重试。": "O processo de raciocínio consumiu todo o limite de saída e nenhuma resposta foi gerada. Tente novamente.",
   " · 思考 {n} tokens": " · Raciocínio {n} tokens",
   "回答语言": "Idioma da resposta",

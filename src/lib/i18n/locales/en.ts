@@ -422,6 +422,8 @@ export const en: Record<string, string> = {
   "回答未保存，请重试": "Answer not saved — try again",
   "回答已保存，下一题生成失败": "Answer saved, but the next question failed to generate",
   "回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。": "The answer was cut off by the output limit. What was generated is kept — continue with follow-ups or raise the output cap.",
+  "继续生成": "Continue",
+  "继续生成中…": "Continuing…",
   "思考过程占满了输出预算，没有生成正文；可以直接重试。": "The thinking process used up the whole output budget before any answer was written. Try again.",
   " · 思考 {n} tokens": " · {n} thinking tokens",
   "回答语言": "Answer language",

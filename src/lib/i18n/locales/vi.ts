@@ -422,6 +422,8 @@ export const vi: Record<string, string> = {
   "回答未保存，请重试": "Câu trả lời chưa lưu, hãy thử lại",
   "回答已保存，下一题生成失败": "Đã lưu câu trả lời nhưng tạo câu tiếp theo thất bại",
   "回答因输出长度限制被截断，已保留生成内容，可继续追问或调整输出上限。": "Câu trả lời bị cắt do giới hạn độ dài đầu ra; phần đã tạo được giữ lại, bạn có thể hỏi tiếp hoặc điều chỉnh giới hạn đầu ra.",
+  "继续生成": "Tiếp tục",
+  "继续生成中…": "Đang tiếp tục…",
   "思考过程占满了输出预算，没有生成正文；可以直接重试。": "Quá trình suy luận đã dùng hết hạn mức đầu ra nên chưa tạo được nội dung trả lời. Hãy thử lại.",
   " · 思考 {n} tokens": " · Suy luận {n} tokens",
   "回答语言": "Ngôn ngữ trả lời",

@@ -160,8 +160,8 @@ test('a model that rejects the output cap is retried once with a smaller cap ins
   const h=requestHarness(undefined,n=>n===1?new Response(JSON.stringify({error:{message:'max_tokens is too large for this model'}}),{status:400}):undefined);
   assert.equal(await h.request({task:'interview-answer'}),'OK');
   assert.equal(h.calls.length,2);
-  assert.equal(h.calls[0].max_tokens,8192);
-  assert.equal(h.calls[1].max_tokens,4096);
+  assert.equal(h.calls[0].max_tokens,16384);
+  assert.equal(h.calls[1].max_tokens,8192);
   assert.equal(h.traces[0].completionStatus,'complete');
 });
 
@@ -170,8 +170,8 @@ test('thinking that exhausts the output budget is retried with a larger cap inst
   const h=requestHarness({maxOutputTokens:32768},n=>n===1?thinkingOnly:undefined);
   assert.equal(await h.request({task:'exam-solve'}),'OK');
   assert.equal(h.calls.length,2);
-  assert.equal(h.calls[0].max_tokens,8192);
-  assert.equal(h.calls[1].max_tokens,16384);
+  assert.equal(h.calls[0].max_tokens,16384);
+  assert.equal(h.calls[1].max_tokens,32768);
   assert.equal(h.traces.length,1);
   assert.equal(h.traces[0].completionStatus,'complete');
 });

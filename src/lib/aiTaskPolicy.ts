@@ -6,12 +6,14 @@ export const PROMPT_VERSION = '2026-10-30.1';
  * 思维链与正文共用 max_tokens；上限过小会把预算全部消耗在思考上并以
  * finish_reason=length 结束，表现为「回答因输出长度限制被截断」。
  * 这里的值仍是成本/延迟护栏，用户可在「模型输出上限」里进一步收紧。
+ * 答题类给到 16384：草稿（3–8K）+ 正文（1–2K）的常见峰值能一次装下，
+ * 不必每次都走抬预算重试；未用完的额度不计费，所以放宽没有成本代价。
  */
 export const TASK_OUTPUT_LIMIT: Record<AiTask, number> = {
     'free-chat': 4096,
     translation: 4096,
-    'interview-answer': 8192, 'exam-solve': 8192, 'exam-followup': 8192, 'mock-question': 4096,
-    'mock-hint': 4096, 'mock-report': 6144, 'question-bank': 8192, 'document-extract': 12000,
+    'interview-answer': 16384, 'exam-solve': 16384, 'exam-followup': 16384, 'mock-question': 4096,
+    'mock-hint': 4096, 'mock-report': 6144, 'question-bank': 16384, 'document-extract': 12000,
 };
 export interface ModelCapabilities {
     contextWindow?: number;
