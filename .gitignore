@@ -51,3 +51,6 @@ src-tauri/gen/schemas
 /docs/macos-next-steps.md
 /docs/macos-rust-vs-swift.md
 /docs/audit/official-macos-fullscreen-space.md
+
+# Local promo material (not part of the product)
+/promo-mianxu/
