@@ -1,7 +1,7 @@
 import { getAiSettings, getAiLoadError } from './aiSettings';
 import { resolveAiRoute, usesLiveSpeech, type AiRole } from './aiConfig';
 import { aiFetch } from './aiTransport';
-import { aiHeaders, consumeChatResult, withAiRequest } from './aiProtocol';
+import { AiCompletionError, aiHeaders, consumeChatResult, withAiRequest } from './aiProtocol';
 import {PROMPT_VERSION,outputLimit,checkInputBudget,retryDelay,type AiTask,type AiRequestTrace} from './aiTaskPolicy';
 import {applyTaskInstructions,type TaskPreferences} from './taskPrompts';
 import {getSetting} from './store';
@@ -68,6 +68,13 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
   }, aiFetch, opts.signal);
   } catch(error){
     const message=String((error as Error)?.message || error);
+    // 思考模型把整份预算花在思维链上：finish_reason=length 但正文一个字都没有。
+    // 原样重发只会再撞一次上限，必须抬高预算；上限受模型能力与上下文窗口双重约束。
+    if(error instanceof AiCompletionError && error.completionStatus==='truncated' && !error.partialText && attempt<2){
+      const ceiling=Math.min(capabilities?.maxOutputTokens || 32768, capabilities?.contextWindow ? Math.max(1024,Math.floor(capabilities.contextWindow/3)) : 32768);
+      const raised=Math.min(ceiling, Math.max(limit+2048, limit*2));
+      if(raised>limit){ limit=raised; continue; }
+    }
     if(!emitted && attempt===0 && limit>1024 && /max_(?:completion_)?tokens/i.test(message)){
       limit=Math.max(1024,Math.floor(limit/2));
       continue;

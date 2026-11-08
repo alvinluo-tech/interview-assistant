@@ -165,6 +165,24 @@ test('a model that rejects the output cap is retried once with a smaller cap ins
   assert.equal(h.traces[0].completionStatus,'complete');
 });
 
+test('thinking that exhausts the output budget is retried with a larger cap instead of failing the turn',async()=>{
+  const thinkingOnly=new Response('data: '+JSON.stringify({choices:[{delta:{reasoning_content:'先分析题意'}}]})+'\n\ndata: '+JSON.stringify({choices:[{delta:{},finish_reason:'length'}]})+'\n\ndata: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
+  const h=requestHarness({maxOutputTokens:32768},n=>n===1?thinkingOnly:undefined);
+  assert.equal(await h.request({task:'exam-solve'}),'OK');
+  assert.equal(h.calls.length,2);
+  assert.equal(h.calls[0].max_tokens,8192);
+  assert.equal(h.calls[1].max_tokens,16384);
+  assert.equal(h.traces.length,1);
+  assert.equal(h.traces[0].completionStatus,'complete');
+});
+
+test('a truncated answer that already showed text is not retried',async()=>{
+  const partial=new Response('data: '+JSON.stringify({choices:[{delta:{content:'已有半段'}}]})+'\n\ndata: '+JSON.stringify({choices:[{delta:{},finish_reason:'length'}]})+'\n\ndata: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
+  const h=requestHarness({maxOutputTokens:32768},()=>partial);
+  await assert.rejects(h.request({task:'exam-solve'}),error=>error.completionStatus==='truncated');
+  assert.equal(h.calls.length,1);
+});
+
 test('cancelling during a transient retry delay sends no replacement request',async()=>{
   const controller=new AbortController(),h=requestHarness(undefined,()=>new Response('{}',{status:503}));
   const result=h.request({task:'interview-answer',signal:controller.signal});setTimeout(()=>controller.abort(),20);
