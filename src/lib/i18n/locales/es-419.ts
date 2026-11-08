@@ -504,7 +504,7 @@ export const es419: Record<string, string> = {
   "进程文件名": "Nombre del archivo de proceso",
   "进行中": "En curso",
   "经验": "Experiencia",
-  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 1000 / 适中 1600 / 稳妥 2200。": "Responde tras {ms} ms de silencio. Súbelo si el entrevistador habla despacio. Predefinidos: Sensible 1000 / Equilibrado 1600 / Tranquilo 2200.",
+  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 600 / 适中 900 / 稳妥 1600。": "Responde tras {ms} ms de silencio. Súbelo si el entrevistador habla despacio. Predefinidos: Sensible 600 / Equilibrado 900 / Tranquilo 1600.",
   "旧版记录会自动迁入本机资料目录，原文件保留。设置与受保护的密钥沿用原位置。": "Los registros antiguos migran automáticamente al directorio local de materiales; los archivos originales se conservan. Los ajustes y las claves protegidas permanecen donde están.",
   "旧记录未保存题干。": "El registro antiguo no guardó el enunciado.",
   "决定浮窗里参考回答的格式。": "Define el formato de las respuestas sugeridas en la ventana flotante.",

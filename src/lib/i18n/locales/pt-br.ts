@@ -504,7 +504,7 @@ export const ptBr: Record<string, string> = {
   "进程文件名": "Nome do arquivo de processo",
   "进行中": "Em andamento",
   "经验": "Experiência",
-  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 1000 / 适中 1600 / 稳妥 2200。": "Responde após {ms} ms de silêncio. Se o entrevistador falar devagar, aumente; predefinições: sensível 1000 / equilibrado 1600 / seguro 2200.",
+  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 600 / 适中 900 / 稳妥 1600。": "Responde após {ms} ms de silêncio. Se o entrevistador falar devagar, aumente; predefinições: sensível 600 / equilibrado 900 / seguro 1600.",
   "旧版记录会自动迁入本机资料目录，原文件保留。设置与受保护的密钥沿用原位置。": "Registros de versões antigas migram automaticamente para a pasta de materiais local; os arquivos originais ficam. Configurações e chaves protegidas continuam no lugar de antes.",
   "旧记录未保存题干。": "O registro antigo não guardou o enunciado.",
   "决定浮窗里参考回答的格式。": "Define o formato da resposta sugerida na janela flutuante.",

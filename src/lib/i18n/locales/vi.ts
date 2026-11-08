@@ -504,7 +504,7 @@ export const vi: Record<string, string> = {
   "进程文件名": "Tên tệp tiến trình",
   "进行中": "Đang diễn ra",
   "经验": "Kinh nghiệm",
-  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 1000 / 适中 1600 / 稳妥 2200。": "Xuất câu trả lời sau {ms}ms im lặng. Người phỏng vấn nói chậm thì tăng lên; preset: Nhạy 1000 / Vừa phải 1600 / Chắc chắn 2200.",
+  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 600 / 适中 900 / 稳妥 1600。": "Xuất câu trả lời sau {ms}ms im lặng. Người phỏng vấn nói chậm thì tăng lên; preset: Nhạy 600 / Vừa phải 900 / Chắc chắn 1600.",
   "旧版记录会自动迁入本机资料目录，原文件保留。设置与受保护的密钥沿用原位置。": "Bản ghi phiên bản cũ sẽ tự chuyển vào thư mục tài liệu trên máy, tệp gốc được giữ lại. Cài đặt và khóa được bảo vệ vẫn dùng vị trí cũ.",
   "旧记录未保存题干。": "Bản ghi cũ không lưu đề bài.",
   "决定浮窗里参考回答的格式。": "Quyết định định dạng câu trả lời tham khảo trong cửa sổ nổi.",

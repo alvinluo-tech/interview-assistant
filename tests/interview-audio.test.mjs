@@ -182,6 +182,34 @@ test('answer language is independent of ASR and auxiliary translation never dela
  h.settings['interview.speechProfile']={inputLanguage:'auto',answerLanguage:'en-US',translationLanguage:'zh-CN'};await h.start('SPEAKER');for(let i=0;i<25;i++)h.systemFeed();await h.silence();assert.equal(transcriptionOptions.lang,'auto');assert.match(answerOptions.messages[0].content,/English|英语/);assert.ok(signals.length);await h.engine.endInterview(false);assert.ok(signals.every(signal=>signal.aborted));
 });
 
+test('a sentence cut in half by a pause is merged into one question instead of answered twice', async () => {
+  const prompts = [];
+  const h = harness({ realtime: true, autoAnswer: true, chat: async options => { prompts.push(options.messages.at(-1).content); return '回答'; } });
+  await h.start();
+  h.realtimeResult({ id: 'sentence-1', text: '请说说订单系统怎么保证幂等，', isFinal: true });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  h.realtimeResult({ id: 'sentence-2', text: '用了哪些具体方案？', isFinal: true });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  const state = h.engine.getInterviewEngineState();
+  const questions = state.messages.filter(message => message.role === 'INTERVIEWER' && !message.metadata?.superseded);
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].text, '请说说订单系统怎么保证幂等，用了哪些具体方案？');
+  assert.equal(prompts.at(-1), '请说说订单系统怎么保证幂等，用了哪些具体方案？');
+  await h.engine.endInterview(false);
+});
+
+test('a follow-up after a finished question stays a separate question', async () => {
+  const h = harness({ realtime: true, autoAnswer: true });
+  await h.start();
+  h.realtimeResult({ id: 'sentence-1', text: '你们订单系统怎么保证幂等？', isFinal: true });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  h.realtimeResult({ id: 'sentence-2', text: '用了哪些具体方案？', isFinal: true });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  const questions = h.engine.getInterviewEngineState().messages.filter(message => message.role === 'INTERVIEWER' && !message.metadata?.superseded);
+  assert.equal(questions.length, 2);
+  await h.engine.endInterview(false);
+});
+
 test('continuous ASR sends live PCM, displays partial text and answers only finalized sentences', async () => {
   const h = harness({ realtime: true, autoAnswer: true }); await h.start();
   for (let i = 0; i < 10; i++) h.feed();

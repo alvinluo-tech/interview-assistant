@@ -504,7 +504,7 @@ export const tr: Record<string, string> = {
   "进程文件名": "İşlem dosya adı",
   "进行中": "Sürüyor",
   "经验": "Deneyim",
-  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 1000 / 适中 1600 / 稳妥 2200。": "{ms} ms sessizlikten sonra cevap verir. Mülakatçı yavaş konuşuyorsa büyüt. Hazır ayarlar: Hassas 1000 / Dengeli 1600 / Güvenli 2200.",
+  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 600 / 适中 900 / 稳妥 1600。": "{ms} ms sessizlikten sonra cevap verir. Mülakatçı yavaş konuşuyorsa büyüt. Hazır ayarlar: Hassas 600 / Dengeli 900 / Güvenli 1600.",
   "旧版记录会自动迁入本机资料目录，原文件保留。设置与受保护的密钥沿用原位置。": "Eski kayıtlar otomatik olarak yerel materyal dizinine taşınır; orijinal dosyalar korunur. Ayarlar ve korunan anahtarlar eski yerlerinde kalır.",
   "旧记录未保存题干。": "Eski kayıt soru metnini kaydetmemiş.",
   "决定浮窗里参考回答的格式。": "Yüzen penceredeki örnek cevapların biçimini belirler.",

@@ -49,7 +49,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
   );
   // The former microphone practice card is a legacy phone-mode selection, not the AI mock room.
   const audioSource = savedAudioSource === 'SPEAKER' ? 'SPEAKER' : 'PHONE';
-  const [silenceGateMs, setSilenceGateMs] = useSetting<number>('interview.silenceGateMs', 1600);
+  const [silenceGateMs, setSilenceGateMs] = useSetting<number>('interview.silenceGateMs', 900);
   const [autoAnswer, setAutoAnswer] = useSetting<boolean>('interview.autoAnswer', true);
   const [prefsState, setPrefsState] = useSetting<Record<string, unknown>>('interviewPreference', {});
   const answerStyle = (prefsState.answerStyle as AnswerStyle) ?? 'natural';
@@ -258,7 +258,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
         </SettingRow>
         <SettingRow
           title={t('等面试官说完的时间')}
-          desc={t('静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 1000 / 适中 1600 / 稳妥 2200。', { ms: silenceGateMs })}
+          desc={t('静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 600 / 适中 900 / 稳妥 1600。', { ms: silenceGateMs })}
         >
           <div className="w-40">
             <Slider min={300} max={6000} step={100} value={silenceGateMs} onChange={setSilenceGateMs} />

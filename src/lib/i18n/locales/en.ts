@@ -504,7 +504,7 @@ export const en: Record<string, string> = {
   "进程文件名": "Process file name",
   "进行中": "In progress",
   "经验": "Experience",
-  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 1000 / 适中 1600 / 稳妥 2200。": "Answers after {ms}ms of silence. Raise it if the interviewer speaks slowly. Presets: Sensitive 1000 / Balanced 1600 / Relaxed 2200.",
+  "静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 600 / 适中 900 / 稳妥 1600。": "Answers after {ms}ms of silence. Raise it if the interviewer speaks slowly. Presets: Sensitive 600 / Balanced 900 / Relaxed 1600.",
   "旧版记录会自动迁入本机资料目录，原文件保留。设置与受保护的密钥沿用原位置。": "Legacy records migrate automatically into the local materials directory; original files are kept. Settings and protected keys stay where they are.",
   "旧记录未保存题干。": "The old record didn't save the question text.",
   "决定浮窗里参考回答的格式。": "Sets the format of suggested answers in the overlay.",
