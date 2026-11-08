@@ -365,15 +365,19 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   const startedAt = Date.now();
   let raw = '', answerCompleted=false;
   try {
-    try {
-      const refs = await cmd<string[]>('cmd_exam_store_images', {sessionId: state.sessionId, turnId: turn.id, images: shots});
-      if (current !== generation) return;
-      setState({turns: state.turns.map(t => t.id === turn.id ? {...t, screenshotRefs: refs || []} : t)});
-    } catch (error) {
-      if (current !== generation) return;
-      setState({turns: state.turns.map(t => t.id === turn.id ? {...t, imageSaveError: String((error as Error).message || error)} : t)});
-      setState({errorMessage:t('原题截图未能保存，仍将尝试解答；请保留题目以备重新截图。')});
-    }
+    // 截图落盘与请求并行：请求只用内存里的 dataURL，等落盘只会白等几百毫秒。
+    void cmd<string[]>('cmd_exam_store_images', {sessionId: state.sessionId, turnId: turn.id, images: shots})
+      .then((refs) => {
+        if (current !== generation) return;
+        setState({turns: state.turns.map(t => t.id === turn.id ? {...t, screenshotRefs: refs || []} : t)});
+        void persistTurns().catch(() => {});
+      })
+      .catch((error) => {
+        if (current !== generation) return;
+        setState({turns: state.turns.map(t => t.id === turn.id ? {...t, imageSaveError: String((error as Error).message || error)} : t)});
+        setState({errorMessage:t('原题截图未能保存，仍将尝试解答；请保留题目以备重新截图。')});
+      });
+    // 回合记录必须先落盘再发请求：写不进去就不该花掉这次请求，也才能保住已收集的页面重试。
     await persistTurns();
     if (current !== generation) return;
     const c = customization();

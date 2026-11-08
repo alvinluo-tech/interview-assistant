@@ -1,6 +1,5 @@
 //! Exam images are bounded, compressed attachments, never base64 inside the record index.
 use base64::{Engine, engine::general_purpose::STANDARD};
-use image::ImageEncoder;
 use serde::Serialize;
 use std::{
     fs,
@@ -23,6 +22,8 @@ fn root(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())?
         .join("attachments/exams"))
 }
+/// 截图落盘不再解码重编码：原图已经是我们自己编码的 JPEG（或旧版 PNG），
+/// 再解一遍、再按 Best 压一遍，只会把 200–500ms 加在「截图→作答」的关键路径上。
 fn encode(source: &[u8]) -> Result<(Vec<u8>, &'static str), String> {
     if source.len() > 20 * 1024 * 1024 {
         return Err("单张截图超过 20MB。".into());
@@ -30,52 +31,15 @@ fn encode(source: &[u8]) -> Result<(Vec<u8>, &'static str), String> {
     let reader = image::ImageReader::new(Cursor::new(source))
         .with_guessed_format()
         .map_err(|e| e.to_string())?;
+    let format = reader.format();
     let (width, height) = reader.into_dimensions().map_err(|e| e.to_string())?;
     if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 40_000_000 {
         return Err("截图像素过大。".into());
     }
-    let picture = image::load_from_memory(source).map_err(|e| e.to_string())?;
-    if picture.color().has_alpha() {
-        let rgba = picture.to_rgba8();
-        if rgba.pixels().any(|pixel| pixel[3] != 255) {
-            let mut png = Vec::new();
-            image::codecs::png::PngEncoder::new_with_quality(
-                &mut png,
-                image::codecs::png::CompressionType::Best,
-                image::codecs::png::FilterType::Adaptive,
-            )
-            .write_image(
-                rgba.as_raw(),
-                rgba.width(),
-                rgba.height(),
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|e| e.to_string())?;
-            return Ok((png, "png"));
-        }
-    }
-    let rgb = picture.to_rgb8();
-    let mut png = Vec::new();
-    image::codecs::png::PngEncoder::new_with_quality(
-        &mut png,
-        image::codecs::png::CompressionType::Best,
-        image::codecs::png::FilterType::Adaptive,
-    )
-    .write_image(
-        rgb.as_raw(),
-        rgb.width(),
-        rgb.height(),
-        image::ExtendedColorType::Rgb8,
-    )
-    .map_err(|e| e.to_string())?;
-    let mut jpeg = Vec::new();
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 92)
-        .encode_image(&picture)
-        .map_err(|e| e.to_string())?;
-    if png.len() <= jpeg.len() {
-        Ok((png, "png"))
-    } else {
-        Ok((jpeg, "jpg"))
+    match format {
+        Some(image::ImageFormat::Jpeg) => Ok((source.to_vec(), "jpg")),
+        Some(image::ImageFormat::Png) => Ok((source.to_vec(), "png")),
+        _ => Err("仅支持 PNG/JPEG 截图。".into()),
     }
 }
 fn resolved(root: &Path, reference: &str) -> Result<PathBuf, String> {
@@ -159,9 +123,8 @@ pub async fn cmd_exam_store_images(
                 .open(folder.join(&name))
                 .map_err(|e| e.to_string())?;
             pending.paths.push(folder.join(&name));
-            file.write_all(&bytes)
-                .and_then(|_| file.sync_all())
-                .map_err(|e| e.to_string())?;
+            // 热路径上不做 fsync：截图是附属数据，掉电丢一张比每次多等几十毫秒划算。
+            file.write_all(&bytes).map_err(|e| e.to_string())?;
             result.push(format!("{session_id}/{turn_id}/{name}"));
         }
         pending.committed = true;
