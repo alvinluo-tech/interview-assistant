@@ -6,7 +6,7 @@ import ts from 'typescript';
 import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 import {randomUUID} from 'node:crypto';
 
-function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand, deadlineTimers, persistFails = false, deferWindowTimers = false } = {}) {
+function harness({ sampleRate = 48000, suspended = false, denied = false, stt = true, speechRouteError, transcribe, permission, live = false, autoAnswer = false, chat, nativeStart, realtime = false, sessions = [], completionFails = false,speakerRole='interviewer',speakerMode='local',identify,translation,nativeCommand, deadlineTimers, persistFails = false, deferWindowTimers = false, asrOpen } = {}) {
   let now = 1000;
   let processor;
   let resumed = 0;
@@ -39,7 +39,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     './speakerClient':{identifySpeaker:identify || (async()=>({role:speakerRole,score:0.9,revision:1}))},
     './speechTranslation':{translateSpeechText:translation || (async()=> '辅助译文')},
     './aiSettings': { getAiSettings: () => realtime ? ({ speechInputMode: 'realtime' }) : ({}) },
-    './realtimeAsr': { openConfiguredRealtimeAsr: async callbacks => { realtimeCallbacks = callbacks; return { push: () => { realtimeFrames++; }, close: async () => { realtimeCloses++; } }; } },
+    './realtimeAsr': { openConfiguredRealtimeAsr: async callbacks => { realtimeCallbacks = callbacks; if (asrOpen) await asrOpen(); return { push: () => { realtimeFrames++; }, close: async () => { realtimeCloses++; } }; } },
     './aiConfig': { isRoleConfigured: (_s, role) => role !== 'stt' || stt,
       resolveAiRoute() { if (speechRouteError) throw new Error(speechRouteError); if (!stt) throw new Error('尚未配置语音转写模型'); return {}; } },
     './bridge': {cmd:nativeCommand || (async()=>{}), onEvent: registerNative, listenEvent: async (event, handler) => registerNative(event, handler),
@@ -100,6 +100,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     async start(source = 'MICROPHONE') { await engine.startInterview({ goalId: null, resumeId: null, materialIds: [], audioSource: source }); await engine.beginListening(source); },
     get nativeStops() { return nativeStops; },
     get realtimeFrames() { return realtimeFrames; },
+    get asrOpened() { return !!realtimeCallbacks; },
     get realtimeCloses() { return realtimeCloses; },
     realtimeResult(result) { realtimeCallbacks?.onResult(result); },
     get nativeListenerCount() { return nativeListeners.size; },
@@ -296,6 +297,24 @@ test('current tagged audio arriving before the start reply is buffered until ide
   ready({ captureId: 'current', sampleRate: 16000, channels: 1, devices: [] });
   await start;
   assert.equal(h.sandbox.window.__ml_audio().buffered, 1600);
+  await h.engine.endInterview(false);
+});
+
+test('speech captured while the realtime channel connects is replayed instead of dropped', async () => {
+  let open;
+  const handshake = new Promise(resolve => { open = resolve; });
+  const h = harness({ realtime: true, asrOpen: () => handshake, nativeStart: async () => ({ captureId: 'live', sampleRate: 16000, channels: 1, devices: [] }) });
+  const start = h.start('SPEAKER');
+  for (let i = 0; i < 400 && !h.asrOpened; i++) await Promise.resolve();
+  assert.ok(h.asrOpened, 'capture must finish before the realtime channel opens');
+  const pcmBase64 = Buffer.from(new Int16Array(1600).fill(3277).buffer).toString('base64');
+  h.emitNative('system-audio-chunk', { captureId: 'live', pcmBase64, volume: 80 });
+  h.emitNative('system-audio-chunk', { captureId: 'live', pcmBase64, volume: 80 });
+  assert.equal(h.realtimeFrames, 0, 'frames wait locally while the channel handshakes');
+  open();
+  await start;
+  assert.equal(h.realtimeFrames, 2, 'opening speech reaches the recognizer instead of being dropped');
+  assert.equal(h.engine.getInterviewEngineState().status, 'listening');
   await h.engine.endInterview(false);
 });
 

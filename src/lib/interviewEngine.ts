@@ -195,6 +195,12 @@ function removeLive(id: number) {
   setState({ liveTranscripts: state.liveTranscripts.filter(draft => draft.id !== id) });
 }
 
+function flushPreroll() {
+  const buffered = startupPreroll; startupPreroll = null; startupPrerollSamples = 0;
+  if (!buffered) return;
+  for (const chunk of buffered) pushPcm(chunk, volumeOf(chunk));
+}
+
 function resetAudio() {
   audioBuf = { samples: new Int16Array(16000 * 30), length: 0 };
   lastVoiceAt = 0;
@@ -209,6 +215,11 @@ function resetAudio() {
 }
 
 function pushPcm(pcm: Int16Array, volume: number) {
+  if (startupPreroll) {
+    // 采集已开始、识别通道还没就绪：先攒着，就绪后按顺序补发，不丢开场白。
+    if (startupPrerollSamples + pcm.length <= PREROLL_SAMPLES) { startupPreroll.push(pcm.slice()); startupPrerollSamples += pcm.length; }
+    return;
+  }
   if (state.status !== 'listening' && state.status !== 'answering') return;
   if(localSpeaker())audioTimeline.push(pcm);
   const now = performance.now();
@@ -850,6 +861,21 @@ let realtimeCapture: RealtimeCapture | null = null;
 let realtimeOpening: AbortController | null = null;
 let opening: Promise<void> | null = null;
 let openingGeneration = 0;
+/**
+ * 采集先启动、识别通道后接通，中间那段语音先留在本地：面试官在「继续收音」后
+ * 开口的前一两秒是提问最关键的部分，握手慢不能吃掉它。
+ * 只留 1.5 秒，够覆盖一次握手，又不会撞上实时通道「发送积压超过两秒」的保护阈值
+ * （realtimeAsrProtocol 按字节算，1.5 秒 = 48000 字节，低于 64000）。
+ * 满了就丢最新的、保留最早那几句——开场白才是最容易丢、也最要紧的部分。
+ */
+const PREROLL_SAMPLES = 24000;
+let startupPreroll: Int16Array[] | null = null;
+let startupPrerollSamples = 0;
+function volumeOf(pcm: Int16Array): number {
+  let sum = 0;
+  for (const sample of pcm) sum += Math.abs(sample / 32767);
+  return pcm.length ? sum / pcm.length * 800 : 0;
+}
 
 /**
  * 面试现场不能因为一次收音/网络故障就停到结束：捕获失败后按退避自动重连，
@@ -890,6 +916,7 @@ async function stopCapture(invalidate = true) {
     translations.forEach(controller=>controller.abort()); translations.clear();
   }
   const owner=speakerOwner;speakerOwner='';if(owner)await cmd('cmd_speaker_end',{owner}).catch(()=>{});
+  startupPreroll = null; startupPrerollSamples = 0;
   audioTimeline.reset();realtimeOriginMs=0;
   realtimeOpening?.abort();realtimeOpening=null;
   transcriptionControllers.forEach(controller => controller.abort());
@@ -930,31 +957,8 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         return;
       }
       if(localSpeaker()){speakerOwner=crypto.randomUUID();await cmd('cmd_speaker_begin',{owner:speakerOwner});if(generation!==captureGeneration)return;}
-      if (realtime) {
-        const controller = new AbortController();realtimeOpening=controller;
-        const { openConfiguredRealtimeAsr } = await import('./realtimeAsr');
-        const stream = await openConfiguredRealtimeAsr({
-          onResult: result => {
-            if (generation !== captureGeneration) return;
-            if (!result.isFinal) { setState({ partial: result.text }); return; }
-            const text = cleanTranscript(result.text);
-            setState({ partial: '', audio: { ...state.audio, lastTranscriptAt: Date.now() } });
-            if (text && !isFillerSentence(text)) void (audioSource==='SPEAKER'?deliverUtterance(text):deliverPhoneSpeech(text,result.beginMs!==undefined&&result.endMs!==undefined?audioTimeline.range(realtimeOriginMs+result.beginMs,realtimeOriginMs+result.endMs):null,generation)).catch(error => {
-              if (generation === captureGeneration) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String(error.message || error) }) });
-            });
-          },
-          onState: realtimeState => {
-            if (generation !== captureGeneration) return;
-            if(realtimeState==='ready')realtimeOriginMs=audioTimeline.samples/16;
-            setState({ ...(realtimeState === 'reconnecting' ? { partial: '', errorMessage: t('实时语音连接中断，正在重新连接；中断期间的语音请稍后重说。') } : realtimeState === 'ready' ? { errorMessage: null } : {}),
-              audio: { ...state.audio, realtimeState } });
-          },
-          onError: error => { if (generation === captureGeneration) { reportInterviewError(error); void stopCapture(); } },
-        }, { signal:controller.signal, language: interviewLang(), silenceMs: getSetting('interview.silenceGateMs', 1600) });
-        if(realtimeOpening===controller)realtimeOpening=null;
-        if (generation !== captureGeneration) { await stream.close(); return; }
-        realtimeCapture = stream;
-      }
+      // 采集先起来：识别通道握手要几百毫秒到一两秒，这段语音先攒进 preroll，不能丢开场白。
+      startupPreroll = []; startupPrerollSamples = 0;
       if (audioSource === 'SPEAKER') {
         const { startSystemAudioCapture, stopSystemAudioCapture, setSystemAudioExcludedOutputs } = await import('./bridge');
         const failCapture = (message: string) => {
@@ -1015,7 +1019,6 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         }
         captureId = info.captureId || undefined;
         captureReady = true;
-        setState({ status: 'listening' });
         for (const input of pending.splice(0)) consume(input);
         if (generation !== captureGeneration) return;
         setState({ audio: { ...state.audio, deviceLabel: info.devices.map(device => device.name).join(' / ') || t('系统播放声音') } });
@@ -1034,7 +1037,34 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
         microphone = capture;
         setState({ audio: { ...state.audio, deviceLabel: capture.label } });
       }
+      if (realtime) {
+        const controller = new AbortController();realtimeOpening=controller;
+        const { openConfiguredRealtimeAsr } = await import('./realtimeAsr');
+        const stream = await openConfiguredRealtimeAsr({
+          onResult: result => {
+            if (generation !== captureGeneration) return;
+            if (!result.isFinal) { setState({ partial: result.text }); return; }
+            const text = cleanTranscript(result.text);
+            setState({ partial: '', audio: { ...state.audio, lastTranscriptAt: Date.now() } });
+            if (text && !isFillerSentence(text)) void (audioSource==='SPEAKER'?deliverUtterance(text):deliverPhoneSpeech(text,result.beginMs!==undefined&&result.endMs!==undefined?audioTimeline.range(realtimeOriginMs+result.beginMs,realtimeOriginMs+result.endMs):null,generation)).catch(error => {
+              if (generation === captureGeneration) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String(error.message || error) }) });
+            });
+          },
+          onState: realtimeState => {
+            if (generation !== captureGeneration) return;
+            if(realtimeState==='ready')realtimeOriginMs=audioTimeline.samples/16;
+            setState({ ...(realtimeState === 'reconnecting' ? { partial: '', errorMessage: t('实时语音连接中断，正在重新连接；中断期间的语音请稍后重说。') } : realtimeState === 'ready' ? { errorMessage: null } : {}),
+              audio: { ...state.audio, realtimeState } });
+          },
+          onError: error => { if (generation === captureGeneration) { reportInterviewError(error); void stopCapture(); } },
+        }, { signal:controller.signal, language: interviewLang(), silenceMs: getSetting('interview.silenceGateMs', 1600) });
+        if(realtimeOpening===controller)realtimeOpening=null;
+        if (generation !== captureGeneration) { await stream.close(); return; }
+        realtimeCapture = stream;
+      }
       setState({ status: 'listening' });
+      // 识别通道就绪，把握手期间攒下的开场白按顺序补发。
+      flushPreroll();
       void drainAnswers();
     } catch (error) {
       if (generation !== captureGeneration) return;
