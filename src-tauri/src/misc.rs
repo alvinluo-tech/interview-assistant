@@ -32,31 +32,6 @@ pub fn cmd_read_recent_logs(app: AppHandle, limit: Option<usize>) -> Result<Vec<
     Ok(lines[start..].to_vec())
 }
 
-// ---------- 崩溃存根（本复刻不做崩溃恢复引导） ----------
-
-#[tauri::command]
-pub fn cmd_read_native_crash() -> Option<String> {
-    None
-}
-
-#[tauri::command]
-pub fn cmd_clear_native_crash() {}
-
-#[tauri::command]
-pub fn cmd_take_webview_crashes() -> Vec<String> {
-    Vec::new()
-}
-
-#[tauri::command]
-pub fn cmd_is_crash_recovery() -> bool {
-    false
-}
-
-#[tauri::command]
-pub fn cmd_is_recovered_boot() -> bool {
-    false
-}
-
 #[tauri::command]
 pub fn cmd_exit_app(app: AppHandle) {
     app.exit(0);

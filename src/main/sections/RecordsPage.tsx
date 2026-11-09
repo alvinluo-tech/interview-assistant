@@ -63,6 +63,15 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
   const [deleting, setDeleting] = useState<InterviewSession | null>(null);
   const [reportViewingId, setReportViewingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  // 重命名遮罩是手写的，补上 Esc 关闭：键盘用户不该被困在里面。
+  useEffect(() => {
+    if (!renaming) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRenaming(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [renaming]);
   const sessions = allSessions.filter(s => kind === 'mock' ? s.type === 'MOCK_INTERVIEW' : s.type !== 'MOCK_INTERVIEW');
   const aiReady = useAiReady('chat');
   const reportViewing = sessions.find((s) => s.id === reportViewingId) ?? null;
@@ -221,7 +230,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
       })}
 
       {renaming && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+        <div role="dialog" aria-modal="true" aria-label={t('重命名')} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
           <div className="w-full max-w-sm rounded-lg border bg-card p-4">
             <div className="mb-2 text-sm font-semibold">{t('重命名')}</div>
             <Input

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 const p = 'src/lib/i18n.ts';
 let c = readFileSync(p, 'utf8');
 const start = c.indexOf('const zhTw');
@@ -93,5 +93,13 @@ const dictionaries: Partial<Record<Locale, Record<string, string>>> = {
 
 `;
 c = c.slice(0, start) + replacement + c.slice(end);
-writeFileSync(p, c);
+// 写坏 i18n.ts 会让整个界面失去文案：先写临时文件再整体替换。
+const temp = p + '.tmp';
+try {
+  writeFileSync(temp, c);
+  renameSync(temp, p);
+} catch (error) {
+  rmSync(temp, { force: true });
+  throw error;
+}
 console.log('ok, new length', c.length);

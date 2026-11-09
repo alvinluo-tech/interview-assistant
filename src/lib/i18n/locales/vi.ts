@@ -1582,5 +1582,18 @@ export const vi: Record<string, string> = {
   "未识别到问题文字，请重新截图或手动输入。": "Không tìm thấy câu hỏi. Chụp lại hoặc nhập thủ công.",
   "截图识别失败": "Nhận dạng ảnh chụp thất bại",
   "屏幕题目": "Câu hỏi trên màn hình",
+  "请检查对话服务配置后重试": "Hãy kiểm tra cấu hình dịch vụ trò chuyện rồi thử lại",
+  "语音连接已断开，本次识别可能不完整，请重说。": "Kết nối giọng nói đã bị ngắt. Bản ghi lần này có thể không đầy đủ, vui lòng nói lại.",
+  "连接待修复": "Kết nối cần được sửa",
+  "正在处理…{progress}": "Đang xử lý… {progress}",
+  "未填写": "Chưa điền",
+  "有未保存的改动，确定放弃？": "Có thay đổi chưa lưu. Bỏ các thay đổi này?",
+  "已复制 {name}（含题面样例）": "Đã sao chép {name} (kèm ví dụ trong đề bài)",
+  "已复制代码与样例，需自行补 main": "Đã sao chép mã và ví dụ; bạn cần tự thêm main",
+  " · 当前追问对象": " · đối tượng hỏi tiếp hiện tại",
+  " · 选择此题追问": " · hỏi tiếp về câu này",
+  "没能切回主窗口，请再点一次「结束面试」": "Không quay lại được cửa sổ chính. Hãy bấm 「Kết thúc phỏng vấn」 lần nữa",
+  "跟随": "Theo dõi",
+  "代码": "Mã",
 };
 

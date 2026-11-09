@@ -34,7 +34,6 @@ export const setOverlayInteractive = (interactive: boolean) =>
   cmd<void>('cmd_set_overlay_interactive', { interactive });
 export const setDragActive = (active: boolean) =>
   cmd<void>('cmd_set_drag_active', { active });
-export const getCursorPos = () => cmd<{ 0: number; 1: number }>('cmd_get_cursor_pos');
 export const setCursorPointFeed = (on: boolean) =>
   cmd<void>('cmd_set_cursor_point_feed', { on });
 export const overlayHeartbeat = () => cmd<void>('cmd_overlay_heartbeat');

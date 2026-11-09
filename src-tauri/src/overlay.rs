@@ -450,21 +450,6 @@ pub fn cmd_apply_overlay_styles(
     Ok(())
 }
 
-/// 诊断：返回 overlay 原生状态（zones 数量、穿透状态、命中 zone 等）
-#[tauri::command]
-pub fn cmd_overlay_debug(state: State<'_, OverlayState>) -> serde_json::Value {
-    serde_json::json!({
-        "zones": state.zones.lock().unwrap().len(),
-        "interactive": state.interactive.load(Ordering::SeqCst),
-        "visible": state.overlay_visible.load(Ordering::SeqCst),
-        "dragActive": state.drag_active.load(Ordering::SeqCst),
-        "lastHit": state.last_hit.lock().unwrap().clone(),
-        "showSeq": state.show_seq.load(Ordering::SeqCst),
-        "readySeq": state.ready_seq.load(Ordering::SeqCst),
-        "zoneIds": state.zones.lock().unwrap().iter().map(|z| z.id.clone()).collect::<Vec<_>>(),
-    })
-}
-
 // ---------- 主窗口 ----------
 
 #[tauri::command]

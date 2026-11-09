@@ -303,7 +303,7 @@ export function startDualTakeover(): () => void {
           void release();
           break;
         case 'ping':
-          void dualSend({ t: 'pong', id: m.id });
+          void dualSend({ t: 'pong', id: m.id }).catch(() => {});
           break;
         default:
           break;

@@ -213,11 +213,7 @@ function ExamShell({
   const copy = () => copyAnswerToClipboard(selected?.body ?? '');
 
   const doSolve = async () => {
-    if (multiPage) {
-      await solve();
-    } else {
-      await solve();
-    }
+    await solve();
   };
 
   const empty = solver.turns.length === 0 && !multiPage && !solving && !solver.errorMessage;

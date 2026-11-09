@@ -3,7 +3,7 @@ import ts from 'typescript';
 const origin = new URL(process.argv[2] || 'http://localhost:1430').origin;
 const seen = new Set(), failures = [];
 async function check(url) {
-  if (seen.has(url) || seen.size >= 200 || new URL(url).origin !== origin) return;
+  if (seen.has(url) || seen.size >= 5000 || new URL(url).origin !== origin) return;
   seen.add(url);
   let response;
   try { response = await fetch(url, { signal: AbortSignal.timeout(10000) }); }
@@ -21,5 +21,5 @@ async function check(url) {
   await Promise.all(imports.map(check));
 }
 await check(`${origin}/src/lib/realtimeAsr.ts`);
-console.log(JSON.stringify({ checked: seen.size, failures }, null, 2));
+console.log(JSON.stringify({ checked: seen.size, possiblyTruncated: seen.size >= 5000, failures }, null, 2));
 if (failures.length) process.exitCode = 1;

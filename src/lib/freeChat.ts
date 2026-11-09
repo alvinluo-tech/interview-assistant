@@ -141,7 +141,10 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
       assertActive();
       if(hasInternalToolMarkup(pending))throw new Error(t('模型接口返回了内部工具标记而非有效回答，请更换支持标准工具调用的模型或服务后重试。'));
       const marker=pending.lastIndexOf('<');
-      const end=done?pending.length:marker>=0?marker:pending.length;
+      // 流结束时若残留半截标签（"<tool" 之类），丢掉它；正文里的 "<" 后面跟着文字，不受影响。
+      const partial=done?/<\/?[A-Za-z][\w-]*$/.exec(pending):null;
+      if(partial&&partial.index===0)return;
+      const end=done?(partial?partial.index:pending.length):marker>=0?marker:pending.length;
       const delta=pending.slice(0,end);pending=pending.slice(end);
       if(delta){const part=(emitted?'':prefix)+delta;emitted+=part;options.onDelta(part);}
     };

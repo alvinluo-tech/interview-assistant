@@ -180,7 +180,6 @@ pub fn run() {
             overlay::cmd_set_session_active,
             overlay::cmd_release_session_if_not_ready,
             overlay::cmd_apply_overlay_styles,
-            overlay::cmd_overlay_debug,
             // 主窗口
             overlay::cmd_show_main,
             overlay::cmd_hide_main,
@@ -215,11 +214,6 @@ pub fn run() {
             overlay::cmd_get_overlay_rect,
             // 杂项
             misc::cmd_read_recent_logs,
-            misc::cmd_read_native_crash,
-            misc::cmd_clear_native_crash,
-            misc::cmd_take_webview_crashes,
-            misc::cmd_is_crash_recovery,
-            misc::cmd_is_recovered_boot,
             misc::cmd_exit_app,
             misc::cmd_pending_newer_version,
             misc::cmd_os_version,
@@ -259,7 +253,7 @@ pub fn run() {
                 *app.state::<disguise::DisguiseState>()
                     .startup_error
                     .lock()
-                    .unwrap() = Some(error);
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(error);
             }
             if let Some(main) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
@@ -276,7 +270,10 @@ pub fn run() {
             Ok(())
         })
         .build(context)
-        .expect("error while building tauri application")
+        .unwrap_or_else(|error| {
+            log::error!("[app] failed to build the tauri application: {error}");
+            std::process::exit(1);
+        })
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {speech::cancel_all(app);}
             #[cfg(target_os = "macos")]
