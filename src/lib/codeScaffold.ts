@@ -181,11 +181,63 @@ export function buildScaffold({ language, code, mode, samples }: ScaffoldInput):
   };
 }
 
-/** 比对单组样例：JSON 结构相等或文本归一化后相等都算通过。 */
+/**
+ * 平台把字符串答案印成带引号的字面量（`输出："bab"`），程序 stdout 却不带引号。
+ * 只有「整段就是一个字符串字面量」时才取值，避免把 `"a" + "b"` 这类误当成字符串。
+ */
+function literalValue(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length < 2) return null;
+  const quote = trimmed[0];
+  if ((quote !== '"' && quote !== "'") || trimmed[trimmed.length - 1] !== quote) return null;
+  if (quote === '"') {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === 'string' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  // Python 的 '...' 不是合法 JSON：只还原常见转义。
+  // 正则用 RegExp 构造：字面量里的引号会让 i18n 源码扫描的注释剥离状态机误判。
+  const ESCAPED_QUOTE = new RegExp("\\\\([\"'\\\\])", 'g');
+  return trimmed
+    .slice(1, -1)
+    .replace(ESCAPED_QUOTE, '$1')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t');
+}
+
+function numericValue(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * 比对单组样例。依次放宽：
+ * 1. 归一化文本完全相等；
+ * 2. 期望值是带引号的字符串字面量（LeetCode 的 `输出："bab"`）；
+ * 3. 布尔值大小写（Python 的 True / 平台的 true）；
+ * 4. 期望值是浮点数且带小数（`输出：3.00000` 而程序打印 `3`）；
+ * 5. 两边都是 JSON 时按结构比（忽略空格与键序）。
+ * 字符串比较仍然严格：`007` 不等于 `7`，`bab` 不等于 `aba`。
+ */
 export function matchesExpected(actual: string, expected: string): boolean {
   const left = normalizeOutput(actual);
   const right = normalizeOutput(expected);
   if (left === right) return true;
+  const literal = literalValue(right);
+  if (literal !== null && left === normalizeOutput(literal)) return true;
+  if (/^(true|false)$/i.test(left) && left.toLowerCase() === right.toLowerCase()) return true;
+  if (/[.eE]/.test(right)) {
+    const expectedNumber = numericValue(right);
+    const actualNumber = numericValue(left);
+    if (expectedNumber !== null && actualNumber !== null) {
+      return Math.abs(actualNumber - expectedNumber) <= 1e-6 * Math.max(1, Math.abs(expectedNumber));
+    }
+  }
   const looksJson = /^[[{]/.test(right) && /^[[{]/.test(left);
   if (!looksJson) return false;
   try {

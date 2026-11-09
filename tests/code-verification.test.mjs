@@ -124,3 +124,30 @@ test('expected output matching tolerates JSON spacing but not different values',
   assert.equal(matchesExpected('[0,2]', '[0,1]'), false);
   assert.equal(matchesExpected('abc', 'abd'), false);
 });
+
+test('expected output matching accepts LeetCode quoted string answers', () => {
+  const { matchesExpected } = scaffold();
+  // LeetCode 把字符串答案印成带引号的字面量，程序 stdout 不带引号
+  assert.equal(matchesExpected('bab\n', '"bab"'), true);
+  assert.equal(matchesExpected('bb\n', '"bb"'), true);
+  assert.equal(matchesExpected('line1\nline2\n', '"line1\\nline2"'), true);
+  assert.equal(matchesExpected('it\'s', "'it\\'s'"), true);
+  // 值不同仍然不通过
+  assert.equal(matchesExpected('aba', '"bab"'), false);
+  assert.equal(matchesExpected('', '"bab"'), false);
+  // 不是「整段一个字面量」时不做去引号
+  assert.equal(matchesExpected('ab', '"a" + "b"'), false);
+});
+
+test('expected output matching normalizes booleans and decimal floats only', () => {
+  const { matchesExpected } = scaffold();
+  assert.equal(matchesExpected('True', 'true'), true);
+  assert.equal(matchesExpected('false', 'False'), true);
+  assert.equal(matchesExpected('3', '3.00000'), true);
+  assert.equal(matchesExpected('2.9999999', '3.00000'), true);
+  assert.equal(matchesExpected('3.5', '3.00000'), false);
+  // 没有小数点的期望值按字符串严格比，避免把 007 当成 7
+  assert.equal(matchesExpected('7', '007'), false);
+  assert.equal(matchesExpected('1e3', '1000'), false);
+  assert.equal(matchesExpected('1e3', '1.000e3'), true);
+});
