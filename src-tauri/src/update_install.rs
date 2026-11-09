@@ -16,6 +16,33 @@ pub fn windows_mode(debug: bool, installed: bool, disguised: bool) -> InstallMod
     else { InstallMode::Installer }
 }
 
+/// 安装包按随机目录缓存，成功启动向导后无法立刻删除（Windows 仍锁着 exe）。
+/// 超过一小时的旧目录会在下次更新时回收，避免缓存里越积越多。
+#[cfg(any(windows, test))]
+pub fn prune_stale_installers(cache: &std::path::Path, keep: &str, now: std::time::SystemTime) {
+    use std::time::Duration;
+    let Ok(entries) = std::fs::read_dir(cache) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy() == keep {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        let stale = meta.is_dir()
+            && meta
+                .modified()
+                .ok()
+                .and_then(|at| now.duration_since(at).ok())
+                .is_some_and(|age| age >= Duration::from_secs(3600));
+        if stale {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
 #[cfg(any(windows, test))]
 pub fn stage_verified_installer(
     cache: &std::path::Path,
@@ -28,6 +55,7 @@ pub fn stage_verified_installer(
         return Err(Error::new(ErrorKind::InvalidInput, "Invalid verified installer staging request"));
     }
     fs::create_dir_all(cache)?;
+    prune_stale_installers(cache, nonce, std::time::SystemTime::now());
     let directory = cache.join(nonce);
     fs::create_dir(&directory)?; // Never reuse a path or overwrite another task's file.
     let file = directory.join("Mianxu-setup.exe");

@@ -109,6 +109,11 @@ export async function initDataSync() {
   try {
     const { listen } = await import('@tauri-apps/api/event');
     if (nativeData()) {
+      // 普通保存只广播改动的集合；整份重读留给恢复备份这类全局变更。
+      await listen<{ key: string; value: unknown }>('ml-data-changed', (e) => {
+        cache.set(e.payload.key, e.payload.value);
+        listeners.forEach(listener => listener());
+      });
       await listen('ml-data-revision', () => { void refreshData().catch(error => { dataError = String(error); listeners.forEach(listener => listener()); }); });
       return;
     }

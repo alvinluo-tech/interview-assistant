@@ -285,7 +285,16 @@ async fn install_ready(app: &AppHandle) -> Result<Snapshot, String> {
     crate::dual_screen::cmd_dual_stop(app.clone(), app.state());
     set_phase(app, "installing");
     let install = tauri::async_runtime::spawn_blocking(move || update.install(bytes)).await.map_err(|e| e.to_string())?;
-    if let Err(error) = install { return Ok(fail(app, error_text(error))); }
+    if let Err(error) = install {
+        // 安装没成功：撤掉升级标记，否则下次启动会把一次失败的升级误判成已完成。
+        if let Ok(store) = app.store("store.json") {
+            store.delete("updates.pending");
+            if let Err(error) = store.save() {
+                log::warn!("[updater] 无法清理待升级标记：{error}");
+            }
+        }
+        return Ok(fail(app, error_text(error)));
+    }
     #[cfg(not(windows))] app.restart();
     #[cfg(windows)] { Ok(snapshot(app)) }
 }

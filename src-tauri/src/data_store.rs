@@ -26,7 +26,10 @@ fn prune_restore_snapshots(dir: &Path, keep: usize) {
         .collect();
     files.sort();
     while files.len() > keep {
-        let _ = fs::remove_file(files.remove(0));
+        let path = files.remove(0);
+        if let Err(error) = fs::remove_file(&path) {
+            log::warn!("[data_store] 无法删除旧快照 {}：{error}", path.display());
+        }
     }
 }
 
@@ -316,6 +319,16 @@ fn atomic_write(path: &Path, value: &Map<String, Value>) -> Result<(), String> {
     }
     Ok(())
 }
+/// 连续两次恢复常常落在同一秒里：撞名就加序号，绝不覆盖唯一的回退点。
+fn unique_snapshot_path(dir: &Path, stamp: u64) -> std::path::PathBuf {
+    let mut path = dir.join(format!("data.before-restore-{stamp}.json"));
+    let mut suffix = 1;
+    while path.exists() {
+        path = dir.join(format!("data.before-restore-{stamp}-{suffix}.json"));
+        suffix += 1;
+    }
+    path
+}
 fn snapshot(data: &Map<String, Value>) -> Value {
     json!({"revision":data.get("__revision").and_then(Value::as_u64).unwrap_or(0), "data":data})
 }
@@ -490,6 +503,7 @@ pub fn cmd_data_commit(
     };
     let updated = merge_value(base, current.get(&key).unwrap_or(&empty), &value)?;
     let mut next = current.clone();
+    let changed_key = key.clone();
     next.insert(key, updated);
     let mut next = normalize_document(next)?;
     next.insert(
@@ -504,8 +518,11 @@ pub fn cmd_data_commit(
     write_previous_backup(&dir, current);
     atomic_write(&dir.join("data.json"), &next)?;
     let result = snapshot(&next);
+    // 只广播改动的集合：其它窗口重读整份 data.json，会把每 2 秒一次的面试保存放大成 MB 级复制。
+    if let Some(value) = next.get(&changed_key) {
+        let _ = app.emit("ml-data-changed", json!({"key": changed_key, "value": value}));
+    }
     *state = Some(next);
-    let _ = app.emit("ml-data-revision", &result["revision"]);
     Ok(result)
 }
 #[tauri::command]
@@ -542,7 +559,7 @@ pub fn cmd_data_backup(
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            fs::copy(dir.join("data.json"), dir.join(format!("data.before-restore-{stamp}.json")))
+            fs::copy(dir.join("data.json"), unique_snapshot_path(&dir, stamp))
                 .map_err(|e| e.to_string())?;
             prune_restore_snapshots(&dir, 3);
         }
@@ -562,6 +579,27 @@ pub fn cmd_data_backup(
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn two_restores_within_one_second_keep_both_recovery_points() {
+        let root = std::env::temp_dir().join(format!(
+            "mianxu-restore-slots-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let first = unique_snapshot_path(&root, 7);
+        fs::write(&first, "first").unwrap();
+        let second = unique_snapshot_path(&root, 7);
+        assert_ne!(first, second);
+        fs::write(&second, "second").unwrap();
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second");
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn stale_windows_merge_separate_records_and_separate_fields() {
         let base = json!([{ "id":"a", "title":"old", "content":"body" }]);

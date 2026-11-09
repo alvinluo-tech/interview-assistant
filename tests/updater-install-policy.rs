@@ -26,6 +26,24 @@ fn development_and_portable_windows_builds_use_installer_handoff() {
 }
 
 #[test]
+fn stale_staged_installers_do_not_pile_up_in_the_cache() {
+    let root = fixture();
+    let old = root.join("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    let fresh = root.join("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    fs::create_dir(&old).unwrap();
+    fs::write(old.join("Mianxu-setup.exe"), b"old").unwrap();
+    fs::create_dir(&fresh).unwrap();
+    policy::prune_stale_installers(
+        &root,
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        SystemTime::now() + std::time::Duration::from_secs(7200),
+    );
+    assert!(!old.exists(), "hour-old staging directories must be reclaimed");
+    assert!(fresh.exists(), "the staging directory in use must survive");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn only_an_explicit_install_call_stages_and_hands_off_verified_bytes() {
     let root = fixture();
     let bytes = b"already verified by the signed updater download";
