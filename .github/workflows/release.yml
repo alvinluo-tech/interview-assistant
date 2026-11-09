@@ -24,8 +24,32 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  preflight:
+    name: Check reviewed draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Draft releases are only visible with write access; this job never modifies one.
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Require an unpublished draft with reviewed notes
+        run: |
+          set -euo pipefail
+          if ! status=$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' 2>/dev/null); then
+            echo "Create the reviewed draft release for $RELEASE_TAG before pushing the tag; see docs/releases.md." >&2
+            exit 1
+          fi
+          if [ "$status" != "true" ]; then
+            echo "Release $RELEASE_TAG is already public; publish a new version instead of rebuilding it." >&2
+            exit 1
+          fi
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: preflight
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:

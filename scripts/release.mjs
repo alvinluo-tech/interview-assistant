@@ -1,4 +1,4 @@
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -51,11 +51,19 @@ export function prepareRelease(root, tag) {
   if ([...lock.matchAll(ownPackage)].length !== 1) throw new Error('Expected exactly one local package in Cargo.lock');
   lock = lock.replace(ownPackage, `$1${release.version}$2`);
   pkg.version = config.version = release.version;
-  for (const [file, value] of [
+  const staged = [
     ['package.json', JSON.stringify(pkg, null, 2) + '\n'],
     ['src-tauri/tauri.conf.json', JSON.stringify(config, null, 2) + '\n'],
     ['src-tauri/Cargo.toml', manifest], ['src-tauri/Cargo.lock', lock],
-  ]) writeFileSync(path.join(root, file), value);
+  ].map(([file, value]) => [path.join(root, file), path.join(root, file + '.release-tmp'), value]);
+  try {
+    // 四个文件要么一起换成新版本，要么都不动：先写暂存，再逐个 rename。
+    for (const [, temp, value] of staged) writeFileSync(temp, value);
+    for (const [file, temp] of staged) renameSync(temp, file);
+  } catch (error) {
+    for (const [, temp] of staged) rmSync(temp, { force: true });
+    throw error;
+  }
   return release;
 }
 
