@@ -220,7 +220,12 @@ function InterviewShell({
       }
     });
     const offCapture = bindHotkey('capture', () => {
-      captureQuestion();
+      // 与独立的笔试浮窗保持一致：chat 页这个键是「截图提问」（截一张就直接作答），
+      // solver 页是「加页」——只截不发，发送交给 answer 键。之前两页都走 solve()，
+      // 「加页」按钮上的徽标写着只截，按下去却直接发送。
+      if (tab === 'chat') { captureQuestion(); return; }
+      if (!engine.sessionId || engine.status === 'ended') return;
+      void capturePage();
     });
     const offVoice = bindHotkey('voice-ask', () => bus.emit('voice-ask:toggle', null));
     return () => {
@@ -635,35 +640,36 @@ function SolverActions({
           icon={<ArrowLeft size={12} />}
           onTrigger={onBack}
         />
-        <DwellButton
-          id="sv-resolve"
-          variant="primary"
-          hoverMs={HOVER_MS.answer}
-          hotkey={hotkeys.answer}
-          onTrigger={() => void solve()}
-        >
-          {t('重新截屏')}
-        </DwellButton>
         {multiPage ? (
           <DwellButton
             id="sv-send"
             variant="primary"
             hoverMs={HOVER_MS.sendPages}
+            hotkey={hotkeys.answer}
             onTrigger={() => void solve()}
           >
             {t('发送 {n} 页', { n: solver.pendingScreenshots.length })}
           </DwellButton>
         ) : (
           <DwellButton
-            id="sv-addpage"
-            variant="muted"
-            hoverMs={HOVER_MS.addPage}
-            hotkey={hotkeys.capture}
-            onTrigger={() => void capturePage()}
+            id="sv-resolve"
+            variant="primary"
+            hoverMs={HOVER_MS.answer}
+            hotkey={hotkeys.answer}
+            onTrigger={() => void solve()}
           >
-            {t('加页')}
+            {t('重新截屏')}
           </DwellButton>
         )}
+        <DwellButton
+          id="sv-addpage"
+          variant="muted"
+          hoverMs={HOVER_MS.addPage}
+          hotkey={hotkeys.capture}
+          onTrigger={() => void capturePage()}
+        >
+          {t('加页')}
+        </DwellButton>
         <DwellButton
           id="sv-hold"
           variant="muted"
