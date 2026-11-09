@@ -273,6 +273,19 @@ test('a capture failure schedules an automatic reconnect instead of ending the i
   await h.engine.endInterview(false);
 });
 
+test('a denied key keeps the error visible instead of retrying forever', async () => {
+  const timers = [];
+  const h = harness({ deadlineTimers: { setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {} } });
+  await h.start('SPEAKER');
+  // 欠费/未开通是账号状态问题，重连一百次也是同一个 403，只会让横幅一隐一现。
+  h.emitNative('system-audio-error', { error: 'Access to model denied. Please make sure you are eligible for using the model.' });
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.equal(h.engine.getInterviewEngineState().status, 'error');
+  assert.equal(timers.filter(timer => timer.ms >= 2000).length, 0, 'a denied key must not be retried on a timer');
+  assert.match(h.engine.getInterviewEngineState().errorMessage, /Access to model denied/);
+  await h.engine.endInterview(false);
+});
+
 test('a failed save keeps the session listening instead of stopping recognition', async () => {
   const h = harness({ persistFails: true });
   await h.start('PHONE');

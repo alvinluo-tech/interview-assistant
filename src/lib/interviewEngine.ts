@@ -301,9 +301,14 @@ async function previewUtterance(utterance: LiveUtterance) {
   }
 }
 
+/** 欠费、未开通、密钥无权限这类错误重连一百次也是同一个结果，只会让横幅反复闪。 */
+const PERMANENT_CAPTURE_ERROR = /Access to model denied|AccessDenied|Model\.AccessDenied|InvalidApiKey|invalid api key|AllocationQuota|欠费|未开通|无权限/i;
+function permanentCaptureError(error: unknown): boolean {
+  return PERMANENT_CAPTURE_ERROR.test(String((error as Error)?.message ?? error));
+}
 export function reportInterviewError(error: unknown, retry = true) {
   setState({ status: 'error', errorMessage: String((error as Error)?.message ?? error), audio: { ...state.audio, level: 0, speaking: false } });
-  if (retry) scheduleRecovery();
+  if (retry && !permanentCaptureError(error)) scheduleRecovery();
 }
 
 /** 权限被拒、组件版本不匹配这类错误自动重连也不会好，只保留手动重试。 */
@@ -982,7 +987,8 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
     if (generation !== captureGeneration) return;
     lastMeterAt = 0;
     const realtime = getAiSettings().speechInputMode === 'realtime';
-    setState({ status: 'connecting', errorMessage: null, audio: { ...emptyAudio(), source: audioSource, recognitionMode: realtime ? 'realtime' : liveSpeechEnabled() ? 'segmented' : 'file' } });
+    // 自动重连时不要把错误横幅清掉：清掉再失败会让横幅一隐一现，读起来一直闪。
+    setState({ status: 'connecting', errorMessage: automatic ? state.errorMessage : null, audio: { ...emptyAudio(), source: audioSource, recognitionMode: realtime ? 'realtime' : liveSpeechEnabled() ? 'segmented' : 'file' } });
     try {
       try { resolveAiRoute(getAiSettings(), 'stt'); }
       catch (error) {
