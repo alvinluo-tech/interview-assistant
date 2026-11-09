@@ -8,6 +8,35 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
+/// 截图只增不减时附件目录会悄悄吃掉整个磁盘；到上限先让用户清理，而不是等磁盘写满后连 data.json 都存不下。
+const MAX_ATTACHMENT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+fn used_bytes(dir: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| {
+            let Ok(meta) = entry.metadata() else {
+                return 0;
+            };
+            if meta.is_dir() {
+                used_bytes(&entry.path())
+            } else {
+                meta.len()
+            }
+        })
+        .sum()
+}
+fn budget_error(used: u64, extra: u64) -> Option<String> {
+    (used.saturating_add(extra) > MAX_ATTACHMENT_BYTES).then(|| {
+        format!(
+            "截图附件已占用 {:.1}GB（上限 2GB），请删除旧笔试记录，或在设置中打开附件目录清理后再截图。",
+            used as f64 / (1024.0 * 1024.0 * 1024.0)
+        )
+    })
+}
+
 fn segment(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -100,6 +129,7 @@ pub async fn cmd_exam_store_images(
         }
         let mut pending = PendingFiles::default();
         let mut result = Vec::new();
+        let mut used = used_bytes(&base);
         for image in images {
             if image.len() > 28 * 1024 * 1024 {
                 return Err("截图文件过大。".into());
@@ -113,6 +143,10 @@ pub async fn cmd_exam_store_images(
             if bytes.len() > 20 * 1024 * 1024 {
                 return Err("压缩后的截图仍超过 20MB，请使用窗口截图。".into());
             }
+            if let Some(error) = budget_error(used, bytes.len() as u64) {
+                return Err(error);
+            }
+            used += bytes.len() as u64;
             let mut nonce = [0u8; 16];
             getrandom::fill(&mut nonce).map_err(|e| e.to_string())?;
             let name = nonce.iter().map(|v| format!("{v:02x}")).collect::<String>();
@@ -267,6 +301,25 @@ mod tests {
         assert_eq!(format, "png");
         assert_eq!(image::load_from_memory(&bytes).unwrap().to_rgba8(), pixels);
     }
+    #[test]
+    fn attachment_budget_counts_nested_files_and_stops_at_the_cap() {
+        let mut random = [0u8; 8];
+        getrandom::fill(&mut random).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "mianxu-image-budget-{:x}",
+            u64::from_le_bytes(random)
+        ));
+        let nested = root.join("session/turn");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(root.join("a.png"), vec![0u8; 1024]).unwrap();
+        fs::write(nested.join("b.jpg"), vec![0u8; 2048]).unwrap();
+        assert_eq!(used_bytes(&root), 3072);
+        assert!(budget_error(0, 20 * 1024 * 1024).is_none());
+        assert!(budget_error(MAX_ATTACHMENT_BYTES, 1).is_some());
+        assert!(budget_error(MAX_ATTACHMENT_BYTES - 1, 1).is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn an_incomplete_image_batch_removes_only_its_own_staged_files() {
         let mut random = [0u8; 8];
