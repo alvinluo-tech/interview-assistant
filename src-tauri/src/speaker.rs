@@ -15,7 +15,6 @@ const MODEL_SHA: &str = "f682b514c05d947ee3fa91cd6ec6c5c7543479a128373fa29b1faed
 const MAX_MODEL: usize = 40 * 1024 * 1024;
 #[derive(Default)]
 struct Inner {
-    extractor: Option<SpeakerEmbeddingExtractor>,
     my_voice: Option<Vec<f32>>,
     peer: Option<Vec<f32>>,
     owner: String,
@@ -25,6 +24,8 @@ struct Inner {
 #[derive(Default, Clone)]
 pub struct SpeakerState {
     inner: Arc<Mutex<Inner>>,
+    // 推理要跑几百毫秒，单独一把锁，避免 status/bind 等轻量命令排在 ONNX 后面。
+    extractor: Arc<Mutex<Option<SpeakerEmbeddingExtractor>>>,
     preparing: Arc<AtomicBool>,
 }
 #[derive(Serialize)]
@@ -121,7 +122,11 @@ pub fn cmd_speaker_status(app: AppHandle, window: WebviewWindow) -> Result<Statu
     let state = app.state::<SpeakerState>();
     let inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
     Ok(Status {
-        ready: inner.extractor.is_some(),
+        ready: state
+            .extractor
+            .lock()
+            .map(|extractor| extractor.is_some())
+            .unwrap_or(false),
         enrolled: inner.my_voice.is_some(),
         saved: profile_path(&app)?.is_file(),
         preparing: state.preparing.load(Ordering::SeqCst),
@@ -205,8 +210,8 @@ pub async fn cmd_speaker_prepare(
             ..Default::default()
         })
         .ok_or("本地声纹模型加载失败")?;
+        *state.extractor.lock().map_err(|_| "声纹状态不可用")? = Some(extractor);
         let mut inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
-        inner.extractor = Some(extractor);
         if inner.my_voice.is_none() {
             let profile = profile_path(&app)?;
             if std::fs::metadata(&profile).is_ok_and(|m| m.len() > 1024 * 1024) {
@@ -238,12 +243,15 @@ pub async fn cmd_speaker_enroll(
     }
     let state = app.state::<SpeakerState>().inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
-        let extractor = inner.extractor.as_ref().ok_or("请先准备声纹模型")?;
-        let vector = embedding(extractor, &pcm)?;
-        let middle = pcm.len() / 2;
-        let first = embedding(extractor, &pcm[..middle])?;
-        let last = embedding(extractor, &pcm[middle..])?;
+        let (vector, first, last) = {
+            let guard = state.extractor.lock().map_err(|_| "声纹状态不可用")?;
+            let extractor = guard.as_ref().ok_or("请先准备声纹模型")?;
+            (
+                embedding(extractor, &pcm)?,
+                embedding(extractor, &pcm[..pcm.len() / 2])?,
+                embedding(extractor, &pcm[pcm.len() / 2..])?,
+            )
+        };
         if similarity(&first, &last) < 0.50 {
             return Err("试音前后声音差异较大，请保持单人说话并重新录制。".into());
         }
@@ -258,6 +266,7 @@ pub async fn cmd_speaker_enroll(
         } else if path.exists() {
             std::fs::remove_file(path).map_err(|e| e.to_string())?;
         }
+        let mut inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
         inner.my_voice = Some(vector);
         inner.peer = None;
         inner.segments.clear();
@@ -277,8 +286,13 @@ pub fn cmd_speaker_begin(
         return Err("会话标识无效".into());
     }
     let state = app.state::<SpeakerState>();
+    let ready = state
+        .extractor
+        .lock()
+        .map(|extractor| extractor.is_some())
+        .unwrap_or(false);
     let mut inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
-    if inner.extractor.is_none() || inner.my_voice.is_none() {
+    if !ready || inner.my_voice.is_none() {
         return Err("请先在电话面试设置中完成自己的试音。".into());
     }
     inner.owner = owner;
@@ -300,50 +314,50 @@ pub async fn cmd_speaker_identify(
     }
     let state = app.state::<SpeakerState>().inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
-        if inner.owner != owner || owner.is_empty() {
-            return Err("声纹会话已结束".into());
-        }
-        inner.revision += 1;
-        let voice = embedding(inner.extractor.as_ref().ok_or("模型未就绪")?, &pcm);
-        let (mut role, score) = if let Ok(ref vector) = voice {
-            decide(
-                inner.my_voice.as_ref().ok_or("尚未试音")?,
-                inner.peer.as_deref(),
-                vector,
+        let (my_voice, peer, revision) = {
+            let mut inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
+            if inner.owner != owner || owner.is_empty() {
+                return Err("声纹会话已结束".into());
+            }
+            inner.revision += 1;
+            (
+                inner.my_voice.clone().ok_or("尚未试音")?,
+                inner.peer.clone(),
+                inner.revision,
             )
-        } else {
-            ("unknown", 0.0)
         };
-        // A long ASR sentence may straddle a turn change. Disagreement between
-        // independent head/tail windows is not valid single-speaker evidence.
-        if pcm.len() >= 16000 * 4 {
-            let extractor = inner.extractor.as_ref().unwrap();
-            if let (Ok(head), Ok(tail)) = (
-                embedding(extractor, &pcm[..32000]),
-                embedding(extractor, &pcm[pcm.len() - 32000..]),
-            ) {
-                let a = decide(
-                    inner.my_voice.as_ref().unwrap(),
-                    inner.peer.as_deref(),
-                    &head,
-                )
-                .0;
-                let b = decide(
-                    inner.my_voice.as_ref().unwrap(),
-                    inner.peer.as_deref(),
-                    &tail,
-                )
-                .0;
-                if a != b {
-                    role = if a != "unknown" && b != "unknown" {
-                        "overlap"
-                    } else {
-                        "unknown"
-                    };
+        let (voice, head_role, tail_role) = {
+            let guard = state.extractor.lock().map_err(|_| "声纹状态不可用")?;
+            let extractor = guard.as_ref().ok_or("模型未就绪")?;
+            let mut head = None;
+            let mut tail = None;
+            // A long ASR sentence may straddle a turn change. Disagreement between
+            // independent head/tail windows is not valid single-speaker evidence.
+            if pcm.len() >= 16000 * 4 {
+                if let (Ok(head_vector), Ok(tail_vector)) = (
+                    embedding(extractor, &pcm[..32000]),
+                    embedding(extractor, &pcm[pcm.len() - 32000..]),
+                ) {
+                    head = Some(decide(&my_voice, peer.as_deref(), &head_vector).0);
+                    tail = Some(decide(&my_voice, peer.as_deref(), &tail_vector).0);
                 }
             }
+            (embedding(extractor, &pcm), head, tail)
+        };
+        let (mut role, score) = match &voice {
+            Ok(vector) => decide(&my_voice, peer.as_deref(), vector),
+            Err(_) => ("unknown", 0.0),
+        };
+        if let (Some(a), Some(b)) = (head_role, tail_role) {
+            if a != b {
+                role = if a != "unknown" && b != "unknown" {
+                    "overlap"
+                } else {
+                    "unknown"
+                };
+            }
         }
+        let mut inner = state.inner.lock().map_err(|_| "声纹状态不可用")?;
         if let (Ok(vector), true) = (voice, role != "overlap") {
             inner.segments.push_back((segment_id.clone(), vector));
             while inner.segments.len() > 32 {
@@ -353,7 +367,7 @@ pub async fn cmd_speaker_identify(
         Ok(Decision {
             role: role.into(),
             score,
-            revision: inner.revision,
+            revision,
             cluster_id: segment_id,
             source: "local-match",
         })

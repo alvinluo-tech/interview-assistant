@@ -92,11 +92,25 @@ fn process(args: &[String], input: &str, timeout: Duration) -> Result<RunResult,
     let mut stdin = child.stdin.take().unwrap();
     let read = |stream: Box<dyn Read + Send>| {
         std::thread::spawn(move || {
+            // 超出上限的部分仍然读掉，否则子进程写满管道后会卡到超时。
+            let mut reader = stream;
             let mut bytes = Vec::new();
-            let _ = stream.take(65537).read_to_end(&mut bytes);
-            let truncated = bytes.len() > 65536;
-            bytes.truncate(65536);
-            (String::from_utf8_lossy(&bytes).into_owned(), truncated)
+            let mut buffer = [0u8; 8192];
+            let mut total = 0usize;
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(read) => {
+                        total += read;
+                        if bytes.len() < 65536 {
+                            let keep = (65536 - bytes.len()).min(read);
+                            bytes.extend_from_slice(&buffer[..keep]);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            (String::from_utf8_lossy(&bytes).into_owned(), total > 65536)
         })
     };
     let out = read(Box::new(stdout));
@@ -125,8 +139,8 @@ fn process(args: &[String], input: &str, timeout: Duration) -> Result<RunResult,
         std::thread::sleep(Duration::from_millis(25));
     };
     let _ = writer.join();
-    let (stdout, out_truncated) = out.join().unwrap_or_default();
-    let (stderr, err_truncated) = err.join().unwrap_or_default();
+    let (stdout, out_truncated) = out.join().map_err(|_| "读取 Docker 输出失败")?;
+    let (stderr, err_truncated) = err.join().map_err(|_| "读取 Docker 输出失败")?;
     Ok(RunResult {
         stdout,
         stderr,

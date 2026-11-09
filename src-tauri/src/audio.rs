@@ -127,20 +127,26 @@ impl Resampler {
 }
 
 pub(super) fn emit_chunk(app: &AppHandle, stop: &AtomicBool, pcm: &[i16]) {
-    let state = app.state::<AudioCaptureState>();
-    let Ok(slot) = state.session.lock() else {
-        return;
+    // 编码和派发不持会话锁：录音线程每 100ms 走一次，锁里做 MB 级 base64 会拖住停止/重启。
+    let capture_id = {
+        let state = app.state::<AudioCaptureState>();
+        let Ok(slot) = state.session.lock() else {
+            return;
+        };
+        let Some(session) = slot
+            .as_ref()
+            .filter(|s| std::ptr::eq(s.stop.as_ref(), stop) && !stop.load(Ordering::SeqCst))
+        else {
+            return;
+        };
+        session.id.clone()
     };
-    let Some(session) = slot
-        .as_ref()
-        .filter(|s| std::ptr::eq(s.stop.as_ref(), stop) && !stop.load(Ordering::SeqCst))
-    else {
-        return;
-    };
-    let capture_id = session.id.clone();
     let volume = crate::audio_dsp::input_volume(pcm);
     let bytes: Vec<u8> = pcm.iter().flat_map(|sample| sample.to_le_bytes()).collect();
     let pcm_base64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    if stop.load(Ordering::SeqCst) {
+        return;
+    }
     let _ = app.emit_to(
         "overlay",
         "system-audio-chunk",

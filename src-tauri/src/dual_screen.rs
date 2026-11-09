@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 手机副屏（exam-dual 本地版）：在局域网起一个 HTTP+WebSocket 服务，
  * 手机扫码打开托管页，浮窗 UI 状态与动作经此中继（原版走 api.mianlingai.com 的
  * exam.toSecondary/toPrimary 消息族，见 _recon/spec/04-exam.md §8）。
@@ -32,7 +32,7 @@ impl Default for DualState {
     }
 }
 impl DualState {
-    pub(crate) fn has_peer(&self) -> bool { self.peer_tx.lock().map(|p| p.is_some()).unwrap_or(true) }
+    pub(crate) fn has_peer(&self) -> bool { self.peer_tx.lock().map(|p| p.is_some()).unwrap_or(false) }
 }
 
 const PAGE: &str = include_str!("dual_page.html");
@@ -360,6 +360,17 @@ fn stop_server(state: &DualState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_poisoned_peer_lock_does_not_report_a_peer() {
+        let state = DualState::default();
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = state.peer_tx.lock().unwrap();
+            panic!("poison the peer lock");
+        }));
+        assert!(poisoned.is_err());
+        assert!(!state.has_peer());
+    }
 
     #[test]
     fn connection_slots_are_bounded_and_released_on_drop() {

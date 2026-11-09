@@ -266,9 +266,15 @@ fn matches_name(path: &Path, name: &str) -> bool {
 fn copy_dir(identifier: &str) -> Option<PathBuf> {
     dirs::data_local_dir().map(|root| root.join(identifier).join("disguise"))
 }
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
 fn is_copy(path: &Path, identifier: &str) -> bool {
     std::env::var_os(MARKER).is_some()
-        || copy_dir(identifier).is_some_and(|dir| path.parent().is_some_and(|parent| parent == dir))
+        || copy_dir(identifier).is_some_and(|dir| path.parent().is_some_and(|parent| same_dir(parent, &dir)))
 }
 #[cfg(windows)]
 pub(crate) fn running_copy(path: &Path, identifier: &str) -> bool { is_copy(path, identifier) }
@@ -474,6 +480,23 @@ mod tests {
         }
         assert!(normalize_name(&"a".repeat(41)).is_err());
     }
+    #[test]
+    fn copy_detection_compares_the_real_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "mianxu-copy-dir-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let dir = root.join("disguise");
+        std::fs::create_dir_all(dir.join("nested")).unwrap();
+        assert!(same_dir(&dir.join("nested").join(".."), &dir));
+        assert!(!same_dir(&root.join("elsewhere"), &dir));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn reads_compatible_flat_store_keys_and_rejects_bad_titles() {
         let config = Config::from_json(&serde_json::json!({"disguise.enabled":true, "disguise.processName":"Helper.exe", "disguise.windowTitle":"窗口"})).unwrap();

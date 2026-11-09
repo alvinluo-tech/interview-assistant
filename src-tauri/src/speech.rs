@@ -197,6 +197,43 @@ fn speak(text: String, stop: &AtomicBool, language: Option<&str>, rate: f32) -> 
     }
 }
 #[cfg(target_os = "macos")]
+fn list_voices() -> Result<String, String> {
+    use std::{
+        io::Read,
+        process::{Command, Stdio},
+    };
+    let mut child = Command::new("/usr/bin/say")
+        .args(["-v", "?"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let stdout = child.stdout.take().ok_or("无法读取系统语音包列表")?;
+    let reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stdout.take(1 << 20).read_to_end(&mut bytes);
+        bytes
+    });
+    let started = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed() < std::time::Duration::from_secs(3) => {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("读取系统语音包超时，请重试或改用云语音。".into());
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    let bytes = reader.join().unwrap_or_default();
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+#[cfg(target_os = "macos")]
 fn speak(
     text: String,
     stop: &AtomicBool,
@@ -218,11 +255,7 @@ fn speak(
             "yue-HK" => "zh_HK",
             _ => "zh_CN",
         };
-        let listing = Command::new("/usr/bin/say")
-            .args(["-v", "?"])
-            .output()
-            .map_err(|e| e.to_string())?;
-        let listing = String::from_utf8_lossy(&listing.stdout);
+        let listing = list_voices()?;
         let voice = listing
             .lines()
             .find_map(|line| {
