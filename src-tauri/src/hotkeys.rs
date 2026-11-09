@@ -83,6 +83,47 @@ fn handle_panic(app: &AppHandle) {
     }
 }
 
+/// Applies a whole action-hotkey set atomically: new keys are registered before
+/// any old key is released, so a conflict keeps the previous working set.
+fn apply_action_hotkeys(
+    previous: &HashMap<Shortcut, String>,
+    desired: Vec<(Shortcut, String)>,
+    mut register: impl FnMut(Shortcut) -> Result<(), String>,
+    mut unregister: impl FnMut(Shortcut) -> Result<(), String>,
+) -> Result<HashMap<Shortcut, String>, String> {
+    let mut map = HashMap::new();
+    let mut errors: Vec<String> = Vec::new();
+    for (shortcut, action) in &desired {
+        if let Some(other) = map.insert(*shortcut, action.clone()) {
+            errors.push(format!("{action}: 与 {other} 使用了相同快捷键"));
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors.join("; "));
+    }
+    let mut newly = Vec::new();
+    for shortcut in map.keys() {
+        if previous.contains_key(shortcut) {
+            continue;
+        }
+        if let Err(error) = register(*shortcut) {
+            for done in newly.iter().rev() {
+                let _ = unregister(*done);
+            }
+            return Err(error);
+        }
+        newly.push(*shortcut);
+    }
+    for shortcut in previous.keys() {
+        if !map.contains_key(shortcut) {
+            if let Err(error) = unregister(*shortcut) {
+                log::warn!("[hotkey] release {shortcut:?}: {error}");
+            }
+        }
+    }
+    Ok(map)
+}
+
 fn register_one(app: &AppHandle, shortcut: Shortcut) -> Result<(), String> {
     if app.global_shortcut().is_registered(shortcut) {
         return Ok(());
@@ -100,36 +141,34 @@ pub fn cmd_set_action_hotkeys(
 ) -> Result<(), String> {
     let _registration = state.registration_lock.lock().map_err(|_| "快捷键注册锁异常")?;
     let panic = *state.panic_shortcut.lock().map_err(|_| "快捷键状态锁异常")?;
-    // 先注销现有 action 快捷键
     // OS registration dispatches to the UI thread. Never hold locks read by
     // the shortcut handler while waiting for that dispatch to finish.
-    let previous = std::mem::take(&mut *state.action_map.lock().unwrap());
-    for sc in previous.keys() {
-        if Some(*sc) != panic { let _ = app.global_shortcut().unregister(*sc); }
-    }
+    let previous = state.action_map.lock().unwrap().clone();
+    let mut desired: Vec<(Shortcut, String)> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
-    let mut map = HashMap::new();
     for b in bindings {
         match Shortcut::from_str(&b.accelerator) {
             Ok(sc) if Some(sc) == panic => errors.push(format!("{}: 与应急隐藏快捷键冲突", b.action)),
-            Ok(sc) => match register_one(&app, sc) {
-                Ok(()) => {
-                    map.insert(sc, b.action.clone());
-                }
-                Err(e) => errors.push(format!("{}: {e}", b.action)),
-            },
+            Ok(sc) => desired.push((sc, b.action)),
             Err(e) => errors.push(format!("{}: {e}", b.action)),
         }
     }
+    if !errors.is_empty() {
+        log::warn!("[hotkey] rejected, keeping previous bindings: {errors:?}");
+        return Err(errors.join("; "));
+    }
+    // Atomic replacement: the previous set stays registered until every new key
+    // is accepted, so a single conflict no longer leaves the user without keys.
+    let map = apply_action_hotkeys(
+        &previous,
+        desired,
+        |shortcut| register_one(&app, shortcut),
+        |shortcut| app.global_shortcut().unregister(shortcut).map_err(|e| e.to_string()),
+    )?;
     let count = map.len();
     *state.action_map.lock().unwrap() = map;
-    if errors.is_empty() {
-        log::info!("[hotkey] action hotkeys active: {} ok, 0 failed", count);
-        Ok(())
-    } else {
-        log::warn!("[hotkey] action hotkeys partially failed: {errors:?}");
-        Err(errors.join("; "))
-    }
+    log::info!("[hotkey] action hotkeys active: {}", count);
+    Ok(())
 }
 
 #[tauri::command]
@@ -182,6 +221,43 @@ pub fn cmd_panic_hotkey_status(state: State<'_, HotkeyRouting>) -> HashMap<Strin
 mod audit_tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn failed_action_rebind_keeps_previous_bindings() {
+        let old = Shortcut::from_str("Control+Shift+A").unwrap();
+        let new = Shortcut::from_str("Control+Shift+B").unwrap();
+        let previous = HashMap::from([(old, "scroll".to_string())]);
+        let unregistered = Cell::new(0);
+        let failure = apply_action_hotkeys(
+            &previous,
+            vec![(new, "scroll".to_string())],
+            |_| Err("occupied".into()),
+            |_| { unregistered.set(unregistered.get() + 1); Ok(()) },
+        );
+        assert!(failure.is_err());
+        assert_eq!(unregistered.get(), 0);
+        let applied = apply_action_hotkeys(
+            &previous,
+            vec![(new, "scroll".to_string())],
+            |_| Ok(()),
+            |_| { unregistered.set(unregistered.get() + 1); Ok(()) },
+        ).unwrap();
+        assert_eq!(applied.get(&new).map(String::as_str), Some("scroll"));
+        assert!(!applied.contains_key(&old));
+        assert_eq!(unregistered.get(), 1);
+    }
+
+    #[test]
+    fn duplicate_shortcuts_are_rejected() {
+        let key = Shortcut::from_str("Control+Shift+A").unwrap();
+        let applied = apply_action_hotkeys(
+            &HashMap::new(),
+            vec![(key, "scroll".to_string()), (key, "copy".to_string())],
+            |_| Ok(()),
+            |_| Ok(()),
+        );
+        assert!(applied.is_err());
+    }
     #[test]
     fn panic_replacement_is_idempotent_and_keeps_working_key_on_conflict() {
         let old = Shortcut::from_str("Control+Shift+X").unwrap();
