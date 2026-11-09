@@ -51,6 +51,7 @@ import { effectiveHotkeys, type ActionKey, type HotkeyScheme } from '@/lib/hotke
 import { t } from '@/lib/i18n';
 import { showToast } from '@/ui/primitives';
 import { Md, mdToPlain } from './Md';
+import { ThinkingLine } from './ThinkingLine';
 import {
   DwellButton,
   DwellIconButton,
@@ -402,6 +403,18 @@ function statusOf(engine: EngineState): { text: string; live: boolean } {
 /** 对话视图：转写（左竖线）+ AI 答案（markdown 流式），newestFirst/answerFirst */
 function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<ActionKey, string> }) {
   const listRef = useRef<HTMLDivElement | null>(null);
+  // 作答进度：思维链阶段没有任何别的 UI 更新，靠这个 1 秒的定时重渲染让秒表走起来。
+  const answering = engine.status === 'answering';
+  const [, bumpAnswerClock] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (!answering) return;
+    const id = window.setInterval(bumpAnswerClock, 1000);
+    return () => window.clearInterval(id);
+  }, [answering]);
+  const progress = engine.answerProgress;
+  const progressNow = progress.lastDataAt || progress.startedAt || 0;
+  const answerElapsedSec = progress.startedAt ? Math.max(0, Math.floor((Date.now() - progress.startedAt) / 1000)) : 0;
+  const answerQuietSec = progressNow ? Math.max(0, Math.floor((Date.now() - progressNow) / 1000)) : answerElapsedSec;
   const newestFirst = useSetting('interview.newestFirst', false)[0];
   const answerFirst = useSetting('interview.answerFirst', false)[0];
   const followNewRound = useSetting('interview.followNewRound', true)[0];
@@ -498,7 +511,15 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         {!m.pending && <GenerationDetails status={m.metadata?.completionStatus} request={m.metadata?.request}/>}
                         {!!m.metadata?.sources?.length && <DwellDisclosure id={`sources-${m.id}`} label={t('本轮参考资料')} className="ov-text-3 mt-1 text-[10px]">{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</DwellDisclosure>}
                         {m.pending && (
-                          <span className="ov-text-3 mt-0.5 inline-block size-3 animate-spin rounded-full border border-current border-t-transparent" />
+                          <div className="mt-1">
+                            <ThinkingLine
+                              zoneId={`live-reasoning-${m.id}`}
+                              elapsedSec={answerElapsedSec}
+                              chars={progress.chars}
+                              preview={progress.preview}
+                              quietSec={answerQuietSec}
+                            />
+                          </div>
                         )}
                       </div>
                     ),

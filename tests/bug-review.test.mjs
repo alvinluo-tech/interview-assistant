@@ -76,7 +76,7 @@ function examOverlay(body, clipboardFails=false) {
   const state={mode:'quick',phase:'done',pendingScreenshots:[],turns:body?[{id:'turn',body,followUpOptions:['Why this result?']}]:[],elapsedSec:0};
   const modules={
     'react':{useEffect:fn=>fn(),useMemo:fn=>fn(),useReducer:()=>[0,()=>{}],useRef:()=>({current:null}),useState:initial=>[initial,()=>{}]},
-    'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':names,'@/ui/primitives':names,'./Md':{},'./GenerationDetails':{},
+    'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':names,'@/ui/primitives':names,'./Md':{},'./ThinkingLine':{ThinkingLine:()=>null},'./GenerationDetails':{},
     '@/lib/overlayStyle':{normalizeStyle:style=>style,computeSkin:()=>({vars:{}})},
     '@/lib/store':{DEFAULT_OVERLAY_STYLE:{examWidth:420,examHeight:520},useSetting:(_key,fallback)=>[fallback,()=>{}],getSetting:(_key,fallback)=>fallback},
     '@/lib/examEngine':{getSolverState:()=>state,subscribeSolver:()=>()=>{},extractLastCodeBlock:()=>null,scaffoldForTurn:()=>null,stripMarkdown:text=>text,examModeInfo:()=>({shortLabel:'quick',maxScreenshotPages:4})},

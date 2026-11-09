@@ -32,6 +32,7 @@ import { getSolverState,prepareExamRun,finishInterviewExam } from './examEngine'
 import { getSetting, setSetting } from './store';
 import { bus } from './events';
 import { t } from './i18n';
+import { recordFirstToken } from './latencyStats';
 import { openMicrophone, type MicrophoneCapture } from './microphone';
 import { joinTranscript } from './speechProtocol';
 import { buildKnowledgeContext,captureKnowledge,authorizedKnowledge,type KnowledgeSnapshot,type ContextSource } from './knowledgeContext';
@@ -117,6 +118,8 @@ export interface EngineState {
   turns: InterviewTurn[];
   /** 服务/配置不可用提示 */
   aiDown: boolean;
+  /** 作答中的实时进度：思维链字数、尾部预览、最后一次收到数据的时间；只用于界面提示，不落盘 */
+  answerProgress: { chars: number; preview: string; startedAt: number; lastDataAt: number };
   /** 当前会话的目标岗位 / 简历 / 资料 */
   goalId: string | null;
   resumeId: string | null;
@@ -134,6 +137,7 @@ let state: EngineState = {
   messages: [],
   turns: [],
   aiDown: false,
+  answerProgress: { chars: 0, preview: '', startedAt: 0, lastDataAt: 0 },
   goalId: null,
   resumeId: null,
   materialIds: [],
@@ -615,7 +619,11 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
     abort: new AbortController(),
   };
   const turns = [...state.turns, turn];
-  setState({ turns, status: 'answering', aiDown: false });
+  answerReasoning = '';
+  answerReasoningAt = 0;
+  answerProgressFlushedAt = 0;
+  setState({ turns, status: 'answering', aiDown: false,
+    answerProgress: { chars: 0, preview: '', startedAt: Date.now(), lastDataAt: Date.now() } });
   const assistantMsg: ChatMessage = {
     id: `m${Date.now()}a-${answerSequence}`,
     role: 'ASSISTANT',
@@ -646,11 +654,31 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
       ],
       signal: turn.abort!.signal,
       onTrace:request=>{
+        if(request.firstOutputMs!==undefined)recordFirstToken(request.modelId,request.firstOutputMs);
         if(current!==answerGeneration||state.sessionId!==sessionId||turn.abort?.signal.aborted)return;
         setState({messages:state.messages.map(message=>message.id===assistantMsg.id?{...message,metadata:{...message.metadata,request,completionStatus:request.completionStatus}}:message)});
       },
+      onReasoning: (thought) => {
+        if (turn.abort?.signal.aborted || state.sessionId !== sessionId || current !== answerGeneration) return;
+        const now = Date.now();
+        answerReasoning += thought;
+        answerReasoningAt = now;
+        // 到点才刷界面：思维链动辄上万 token，逐 token setState 会拖慢整条作答链路。
+        if (now - answerProgressFlushedAt < ANSWER_REASONING_FLUSH_MS) return;
+        answerProgressFlushedAt = now;
+        setState({
+          answerProgress: {
+            chars: answerReasoning.length,
+            preview: answerReasoning.slice(-ANSWER_REASONING_PREVIEW),
+            startedAt: state.answerProgress.startedAt || now,
+            lastDataAt: now,
+          },
+        });
+      },
       onDelta: (delta) => {
         if (turn.abort?.signal.aborted || state.sessionId !== sessionId || current!==answerGeneration) return false;
+        answerReasoningAt = Date.now();
+        answerProgressFlushedAt = answerReasoningAt;
         // 流式期间只更新消息正文：turns 里没有读者需要半截答案，
         // 每个 token 再复制一遍 turns 会让长会话的开销随轮数线性上涨（答案在完成时一次性写回）。
         if (state.messages.some((x) => x.id === assistantMsg.id)) {
@@ -658,6 +686,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
             messages: state.messages.map((x) =>
               x.id === assistantMsg.id ? { ...x, text: x.text + delta } : x,
             ),
+            answerProgress: { ...state.answerProgress, lastDataAt: answerReasoningAt },
           });
         }
         if (checkpointTimer === null) checkpointTimer=window.setTimeout(() => {
@@ -914,6 +943,13 @@ const RECOVERY_MAX_ATTEMPTS = 10;
 const STALE_ANSWER_MS = 25000;
 /** 旧回答成形到这么多字，就让位给新的追问。 */
 const PREEMPT_MIN_CHARS = 120;
+/** 作答过程中的思维链：只留最近一段给界面看，不落盘、不进上下文。 */
+let answerReasoning = '';
+let answerReasoningAt = 0;
+let answerProgressFlushedAt = 0;
+const ANSWER_REASONING_PREVIEW = 1200;
+/** 思维链很长时逐 token setState 太贵，最多每 250ms 刷一次界面。 */
+const ANSWER_REASONING_FLUSH_MS = 250;
 /** 服务端断句阈值默认值。1.6 秒的沉默在「面试官问完在等你答」的场景里是纯等待。 */
 const DEFAULT_SILENCE_GATE_MS = 900;
 /** 断句变短后同一句话可能被切成两段：这段窗口内的后续片段按「同一道题接着说」处理。 */

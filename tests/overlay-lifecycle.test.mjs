@@ -52,6 +52,7 @@ function interview({deferSetting=true,createGate,storedSession=false}={}){
     './bridge':{cmd:async()=>{},stopSystemAudioCapture:async()=>{}},'./ai':{liveSpeechEnabled:()=>false},
     './backend':{readData:(key,fallback)=>storedSession&&key==='interviewSessions'?[stored]:fallback,createSession:async()=>{sessionsCreated++;if(createGate)await createGate.promise;return {id:'synthetic'};},updateSession:async()=>{},completeSession:async()=>{}},
     './examEngine':{prepareExamRun:()=>{},finishInterviewExam:async()=>{}},'./store':settings,'./events':{bus:{emit:()=>{}}},
+    './latencyStats':{estimateFirstToken:()=>null,recordFirstToken:()=>{}},
     './microphone':{openMicrophone:async()=>{micStarts++;return {label:'Synthetic',close:async()=>{micCloses++;}};}},
     './speechProtocol':{},'./knowledgeContext':{captureKnowledge:()=>({})},'./aiContext':{},'./speechPreferences':{getSpeechProfile:()=>({})},'./speechProfile':{},
     './speakerRouting':{AudioTimeline:class{reset(){}}},'./speakerClient':{},'./speechTranslation':{},
@@ -60,7 +61,7 @@ function interview({deferSetting=true,createGate,storedSession=false}={}){
     react:{useEffect:fn=>effects.push(fn),useMemo:fn=>fn()},'react/jsx-runtime':{jsx:()=>null},'lucide-react':{},'./GenerationDetails':{},'@/lib/examEngine':{},'@/lib/interviewEngine':engine,
     '@/lib/overlayStyle':{normalizeStyle:value=>value,computeSkin:()=>({})},
     '@/lib/store':{...settings,useSetting:()=>[{}],setSetting:async()=>{writing=true;if(deferSetting)await pending.promise;}},
-    '@/lib/ai':{},'@/lib/microphone':{},'@/lib/bridge':{},'@/lib/hotkeys':{},'@/ui/primitives':{},'./Md':{},'./widgets':{},'./platform':{},'@/lib/speechPreferences':{},
+    '@/lib/ai':{},'@/lib/microphone':{},'@/lib/bridge':{},'@/lib/hotkeys':{},'@/ui/primitives':{},'./Md':{},'./ThinkingLine':{ThinkingLine:()=>null},'./widgets':{},'./platform':{},'@/lib/speechPreferences':{},
     '@/lib/overlayPalette':{applyOverlayPalette:async()=>{},restoreOverlayPalette:async()=>{}},'@/lib/events':{bus:{on:()=>()=>{},emit:()=>{}}},
   },{window:{__ml_pendingConfig:{goalId:null,resumeId:null,materialIds:[],audioSource:'MICROPHONE'}}});
   const mount=()=>{effects.length=0;ui.InterviewOverlay({preview:false});return effects[1]();};

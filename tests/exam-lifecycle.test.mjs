@@ -39,6 +39,7 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
         ? { extractCodeBlock: text => { const m = /```[a-zA-Z]*\n([\s\S]*?)```/.exec(text); return m ? { language: 'python', code: m[1] } : null; }, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [{ input: '1', output: '2' }] }
         : { extractCodeBlock: () => null, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [] };
       if (name === './codeScaffold') return { buildScaffold: () => ({ filename: 'solution.py', content: '', runnable: false }) };
+      if (name === './latencyStats') return { estimateFirstToken: () => null, recordFirstToken: () => {} };
       if (name === './codeRunner') return { judgedSamples: list => list.filter(sample => sample.output.trim()).slice(0, 5), verifyCode: async () => {
         if (!sampleFix) return { verdict: 'unverified', runner: '', passed: 0, total: 0, outcomes: [] };
         return sampleFix.verdicts.shift() ?? { verdict: 'failed', runner: 'python', passed: 0, total: 1, outcomes: [{ index: 0, ok: false, expected: '2', actual: '1', timedOut: false }] };

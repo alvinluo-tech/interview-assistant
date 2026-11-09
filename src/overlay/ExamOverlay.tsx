@@ -44,9 +44,9 @@ import { isMac, BRAND } from '@/lib/env';
 import { t } from '@/lib/i18n';
 import { getSetting } from '@/lib/store';
 import { Md } from './Md';
+import { ThinkingLine } from './ThinkingLine';
 import {
   DwellButton,
-  DwellDisclosure,
   ConfirmPaletteButton,
   DragHandle,
   HOVER_MS,
@@ -272,26 +272,13 @@ function ExamShell({
               </div>
             )}
             {waitingFirstToken && (
-              <div className="mb-2" role="status">
-                <div className="ov-text-2 flex items-center gap-1.5 text-[11px]">
-                  <span className="ov-dot size-1.5 animate-pulse rounded-full" />
-                  {solver.reasoningChars > 0
-                    ? t('思考中 · 已 {s} 秒 · 思考 {n} 字', { s: solver.elapsedSec, n: solver.reasoningChars })
-                    : t('已发送，等待模型响应 · 已 {s} 秒', { s: solver.elapsedSec })}
-                </div>
-                {solver.reasoningPreview && (
-                  <>
-                    <div className="ov-text-3 mt-1 truncate text-[10.5px] opacity-75">
-                      {solver.reasoningPreview.slice(-180).replace(/\s+/g, ' ')}
-                    </div>
-                    <DwellDisclosure id="live-reasoning" label={t('查看思考过程')} className="mt-1">
-                      <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">
-                        {solver.reasoningPreview}
-                      </div>
-                    </DwellDisclosure>
-                  </>
-                )}
-              </div>
+              <ThinkingLine
+                elapsedSec={solver.elapsedSec}
+                chars={solver.reasoningChars}
+                preview={solver.reasoningPreview}
+                quietSec={solver.quietSec}
+                firstTokenMs={solver.firstTokenMs}
+              />
             )}
             {solver.turns.map((turn, i) => (
               <div key={turn.id} className="mb-3">

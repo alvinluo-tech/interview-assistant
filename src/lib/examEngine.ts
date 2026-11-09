@@ -6,6 +6,7 @@ import { captureScreen, cmd } from './bridge';
 import { buildExamUserPrompt, chatWithImages, EXAM_SYSTEM_PROMPT } from './ai';
 import { type ExamQuestion, createExamSession, readData, updateExamSession, completeExamSession } from './backend';
 import { getSetting, ExamCustomization, DEFAULT_EXAM_CUSTOMIZATION } from './store';
+import { estimateFirstToken, recordFirstToken } from './latencyStats';
 import { t } from './i18n';
 import {assembleExamContext} from './aiContext';
 import type {AiRequestTrace} from './aiTaskPolicy';
@@ -94,6 +95,10 @@ export interface SolverState {
   reasoningChars: number;
   /** 思维链尾部预览，只在思考阶段显示，不落盘 */
   reasoningPreview: string;
+  /** 距离上一次收到数据（思维链或正文）过了多少秒，用来判断连接是否还活着 */
+  quietSec: number;
+  /** 该模型首字耗时的中位数；null 表示样本还不够 */
+  firstTokenMs: number | null;
   errorMessage: string | null;
   goalId: string | null;
 }
@@ -109,6 +114,8 @@ let state: SolverState = {
   elapsedSec: 0,
   reasoningChars: 0,
   reasoningPreview: '',
+  quietSec: 0,
+  firstTokenMs: null,
   errorMessage: null,
   goalId: null,
 };
@@ -154,16 +161,25 @@ function cancelRequest() {
 /** 流式思维链只留最近一段给界面预览：每个 token 都 setState 会把渲染打爆，交给 1 秒的计时器统一刷新。 */
 const REASONING_PREVIEW_CHARS = 1200;
 let liveReasoning = '';
+/** 最近一次收到数据的时间：思维链和正文都算，用来判断连接是不是静默了。 */
+let liveLastDataAt = 0;
+/** 每次请求结束记一次首字耗时，界面据此给出「通常 N 秒出字」的预期。 */
+function noteTraceLatency(request: AiRequestTrace) {
+  if (request.firstOutputMs !== undefined) recordFirstToken(request.modelId, request.firstOutputMs);
+}
 function beginLiveReasoning() {
   liveReasoning = '';
-  setState({ reasoningChars: 0, reasoningPreview: '' });
+  liveLastDataAt = Date.now();
+  setState({ reasoningChars: 0, reasoningPreview: '', quietSec: 0, firstTokenMs: estimateFirstToken() });
 }
 function ensureTicker() {
   if (tickTimer) return;
   tickTimer = window.setInterval(() => {
     if (state.phase === 'thinking' || state.phase === 'streaming' || state.phase === 'capturing' || state.phase === 'uploading') {
+      const quietSec = liveLastDataAt ? Math.max(0, Math.floor((Date.now() - liveLastDataAt) / 1000)) : state.elapsedSec + 1;
       setState({
         elapsedSec: state.elapsedSec + 1,
+        quietSec,
         ...(liveReasoning ? { reasoningChars: liveReasoning.length, reasoningPreview: liveReasoning.slice(-REASONING_PREVIEW_CHARS) } : {}),
       });
     }
@@ -412,15 +428,17 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
     const c = customization();
     const answer = await chatWithImages(buildExamUserPrompt(c), shots, {
       task:'exam-solve',
-      onTrace:request=>{if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
+      onTrace:request=>{noteTraceLatency(request);if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
       signal: controller.signal,
       system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'简洁输出结论，避免展开长篇解释。':state.mode==='programming'?'给出完整可运行代码、边界条件与时间空间复杂度。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路，保持简明。'),
       onReasoning: (thought) => {
         if (current !== generation) return;
         liveReasoning += thought;
+        liveLastDataAt = Date.now();
       },
       onDelta: (delta) => {
         if (current !== generation) return;
+        liveLastDataAt = Date.now();
         raw += delta;
         const parsed = splitExamResponse(raw);
         setState({
@@ -554,15 +572,17 @@ export async function followUp(opts: {
       images,
       {
         task:'exam-followup',
-        onTrace:request=>{if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
+        onTrace:request=>{noteTraceLatency(request);if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
         signal: controller.signal,
         system: EXAM_SYSTEM_PROMPT,
         onReasoning: (thought) => {
           if (current !== generation) return;
           liveReasoning += thought;
+          liveLastDataAt = Date.now();
         },
         onDelta: (delta) => {
           if (current !== generation) return;
+          liveLastDataAt = Date.now();
           setState({
             turns: state.turns.map((t) => (t.id === turn.id ? { ...t, body: t.body + delta } : t)),
           });
@@ -635,15 +655,18 @@ export async function continueTurn(targetId?: string): Promise<void> {
       task: 'exam-followup',
       signal: controller.signal,
       system: `${EXAM_SYSTEM_PROMPT}\n这是续写任务：直接从断点继续写，不重复已有内容，不重新开头，不解释这是续写。`,
-      onTrace: request => {
+      onTrace: (request) => {
+        noteTraceLatency(request);
         if (current === generation) setState({ turns: state.turns.map(t => t.id === target.id ? { ...t, request, completionStatus: request.completionStatus } : t) });
       },
       onReasoning: (thought) => {
         if (current !== generation) return;
         liveReasoning += thought;
+        liveLastDataAt = Date.now();
       },
       onDelta: (delta) => {
         if (current !== generation) return;
+        liveLastDataAt = Date.now();
         addition += delta;
         setState({ turns: state.turns.map(t => t.id === target.id ? { ...t, body: mergeContinuation(base, addition) } : t) });
         scheduleTurnCheckpoint(current);
@@ -764,14 +787,17 @@ export async function fixTurnWithSamples(targetId?: string, options: { silent?: 
       signal: controller.signal,
       system: EXAM_SYSTEM_PROMPT,
       onTrace: (request) => {
+        noteTraceLatency(request);
         if (current === generation) setState({ turns: state.turns.map((turn) => (turn.id === target.id ? { ...turn, request, completionStatus: request.completionStatus } : turn)) });
       },
       onReasoning: (thought) => {
         if (current !== generation) return;
         liveReasoning += thought;
+        liveLastDataAt = Date.now();
       },
       onDelta: (delta) => {
         if (current !== generation) return;
+        liveLastDataAt = Date.now();
         raw += delta;
         const streamed = splitExamResponse(raw).answer;
         setState({ turns: state.turns.map((turn) => (turn.id === target.id && streamed ? { ...turn, body: streamed } : turn)) });
