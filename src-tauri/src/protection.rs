@@ -178,8 +178,9 @@ fn update(
         return Err("仅支持 main / overlay 窗口".into());
     }
     let state = app.state::<CaptureState>();
-    let mut policy = state.0.lock().map_err(|e| e.to_string())?;
-    let mut next = policy.clone();
+    // Work on a clone: the lock must never be held while dispatching to the UI
+    // thread (see cmd_get_capture_status), or a macOS read blocks on itself.
+    let mut next = state.0.lock().map_err(|e| e.to_string())?.clone();
     if let Some(enable) = enable {
         for (key, requested) in &mut next.requested {
             if label.is_none_or(|label| key == label) {
@@ -214,7 +215,7 @@ fn update(
             Ok(())
         },
     )?;
-    *policy = next;
+    *state.0.lock().map_err(|e| e.to_string())? = next;
     Ok(())
 }
 

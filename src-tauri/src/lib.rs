@@ -239,6 +239,9 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // 设置阶段就在承载原生事件循环的线程上，先记录它，AppKit 调用才能走内联快路径。
+            #[cfg(target_os = "macos")]
+            window_macos::record_ui_thread();
             // store.json 保存全部设置与加密后的密钥；启动时留一份可解析的副本，写坏时可手动恢复。
             if let Ok(dir) = app.path().app_data_dir() {
                 let store = dir.join("store.json");

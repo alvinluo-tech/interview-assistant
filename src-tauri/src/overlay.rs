@@ -142,10 +142,17 @@ pub fn show_overlay_and_emit(app: &AppHandle) -> Result<i64, String> {
     let win = overlay_window(app).ok_or("overlay window missing")?;
     let native =
         crate::protection::window(app, "overlay").ok_or("overlay native window missing")?;
-    crate::protection::reapply(&native)?;
-    crate::disguise::reapply(&native)?;
+    // 加固只是尽力而为：它失败时也必须让浮窗出现，否则用户两个窗口都看不到。
+    if let Err(error) = crate::protection::reapply(&native) {
+        log::warn!("[capture] show overlay: {error}");
+    }
+    if let Err(error) = crate::disguise::reapply(&native) {
+        log::warn!("[disguise] show overlay: {error}");
+    }
     #[cfg(target_os = "macos")]
-    crate::window_macos::configure_overlay(&native)?;
+    if let Err(error) = crate::window_macos::configure_overlay(&native) {
+        log::warn!("[window] configure overlay: {error}");
+    }
     let seq = state.show_seq.fetch_add(1, Ordering::SeqCst) + 1;
     let interactive = state.interactive.load(Ordering::SeqCst);
     let _ = win.set_ignore_cursor_events(!interactive);
