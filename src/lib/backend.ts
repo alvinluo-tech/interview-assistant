@@ -4,7 +4,7 @@
  * 持久化在 tauri-plugin-store 的 data.json。
  */
 import { load } from '@tauri-apps/plugin-store';
-import { useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 import type { ImportedDocument } from './documentIngest';
 import { t } from './i18n';
 
@@ -128,13 +128,15 @@ export function readData<T>(key: string, fallback: T): T {
 
 export { persist as writeData };
 export function useData<T>(key: string, fallback: T): [T, (v: T | ((prev: T) => T)) => void] {
+  // 与 useSetting 同理：内联的 [] / {} 默认值每次 render 都是新引用。
+  const stableFallback = useRef(fallback);
   const value = useSyncExternalStore(
     (cb) => {
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
-    () => readData(key, fallback),
-    () => fallback,
+    () => readData(key, stableFallback.current),
+    () => stableFallback.current,
   );
   return [value, (v: T | ((prev: T) => T)) => {
     // 基于写入瞬间的最新缓存计算，避免用旧渲染快照覆盖别处刚写入的记录。

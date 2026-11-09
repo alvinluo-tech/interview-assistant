@@ -2,7 +2,7 @@
  * 设置存储：键名与原版 store.json 完全一致（跨版本兼容）。
  * 内置 useSyncExternalStore 订阅，change 时可选持久化。
  */
-import { useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 import { t } from './i18n';
 
 type Listener = () => void;
@@ -126,13 +126,16 @@ export function getSetting<T>(key: string, fallback: T): T {
 
 /** React hook：订阅设置 */
 export function useSetting<T>(key: string, fallback: T): [T, (v: T) => void] {
+  // 调用方常传内联对象/数组字面量，每次 render 都是新引用。若直接交给
+  // useSyncExternalStore，快照会被判定为每次都变化，导致无限重渲染。
+  const stableFallback = useRef(fallback);
   const value = useSyncExternalStore(
     (cb) => {
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
-    () => getSetting(key, fallback),
-    () => fallback,
+    () => getSetting(key, stableFallback.current),
+    () => stableFallback.current,
   );
   return [value, (v: T) => {void setSetting(key, v);}];
 }
