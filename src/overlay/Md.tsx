@@ -50,7 +50,20 @@ function useThrottled(value: string, ms: number): string {
       setShown(latest.current);
     }, ms);
   }, [value, ms]);
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  /*
+   * 清理必须把 ref 也归零。StrictMode 在开发环境会把「挂载 → 清理 → 再挂载」跑一遍：
+   * 只 clearTimeout 而不清 ref，第二次挂载看到非空 ref 就不再排程，shown 永远停在初值
+   * —— 表现就是流式回答一片空白（或只显示第一帧）。生产构建不会双跑，但这是真 bug。
+   */
+  useEffect(
+    () => () => {
+      if (timer.current !== null) {
+        window.clearTimeout(timer.current);
+        timer.current = null;
+      }
+    },
+    [],
+  );
   return shown;
 }
 
