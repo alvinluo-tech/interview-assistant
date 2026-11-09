@@ -99,6 +99,9 @@ async function endInterviewAndReturn() {
   await bridge.hideOverlay().catch(() => {});
 }
 
+// 挂载期间共用的取消信号：挂载 effect 建一个，用户点「重试收音」沿用同一个。
+let bootAbort: AbortController | null = null;
+
 export function InterviewOverlay({ preview }: { preview?: boolean }) {
   exposeEngineDebug();
   const rawStyle = useSetting('overlay.style', DEFAULT_OVERLAY_STYLE)[0];
@@ -114,10 +117,14 @@ export function InterviewOverlay({ preview }: { preview?: boolean }) {
   useEffect(() => {
     if (preview) return;
     const controller = new AbortController();
+    bootAbort = controller;
     void bootInterviewSession(controller.signal).catch((e) => {
       if (!controller.signal.aborted) reportInterviewError(e);
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (bootAbort === controller) bootAbort = null;
+    };
   }, [preview]);
 
   return <InterviewShell skin={skin} preview={preview} />;
@@ -305,7 +312,9 @@ function InterviewShell({
                 onTrigger={() => {
                   if (!started || engine.status === 'error') {
                     // 会话没建起来时（如创建失败/被清理）先补建，再开始收音。
-                    if (!engine.sessionId) void bootInterviewSession().catch(error => reportInterviewError(error));
+                    if (!engine.sessionId) void bootInterviewSession(bootAbort?.signal).catch(error => {
+                      if (!bootAbort?.signal.aborted) reportInterviewError(error);
+                    });
                     else void beginListening(configuredSource);
                   } else if (engine.status === 'paused') {
                     void resumeListening();

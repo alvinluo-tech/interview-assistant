@@ -34,8 +34,7 @@
     "core:window:allow-monitor-from-point",
     "core:window:allow-start-resize-dragging",
     "core:window:allow-internal-toggle-maximize",
-    "opener:default",
-    "opener:allow-open-url",
+    { "identifier": "opener:allow-open-url", "allow": [{ "url": "https://*" }] },
     "store:default",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text"

@@ -40,11 +40,16 @@ mod tests {
 
 #[tauri::command]
 pub async fn cmd_capture_screen(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     compatibility_mode: Option<bool>,
     capture_mode: Option<String>,
     protected_on_top: Option<bool>,
 ) -> Result<String, String> {
+    // 截图只有主窗（练习）和浮窗（笔试）需要；mock 预览窗口不该拿到整屏画面。
+    if !matches!(window.label(), "main" | "overlay") {
+        return Err("当前窗口不能截屏。".into());
+    }
     // ScreenCaptureKit completions must be free to run on the UI thread.
     tauri::async_runtime::spawn_blocking(move || {
         capture_screen(app, compatibility_mode, capture_mode, protected_on_top)
