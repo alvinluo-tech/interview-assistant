@@ -206,9 +206,11 @@ pub(super) fn capture_loop(
             continue;
         }
         let name = device.name.clone();
-        let stream = LoopbackStream::open(&enumerator, device)
-            .map_err(|e| format!("无法采集播放设备「{name}」：{e}"))?;
-        streams.push(stream);
+        // 某一路打不开（蓝牙休眠、独占模式、驱动限制）不该让其它播放设备一起失声。
+        match LoopbackStream::open(&enumerator, device) {
+            Ok(stream) => streams.push(stream),
+            Err(error) => log::warn!("[system_audio] 跳过播放设备「{name}」：{error}"),
+        }
     }
     if streams.is_empty() {
         return Err("没有可用的系统播放设备，请连接耳机或扬声器后重试".into());
@@ -230,13 +232,26 @@ pub(super) fn capture_loop(
     let mut buffers = vec![VecDeque::new(); streams.len()];
     let mut deadline = Instant::now() + Duration::from_millis(100);
     while !stop.load(Ordering::SeqCst) {
-        for (stream, buffer) in streams.iter_mut().zip(&mut buffers) {
-            stream.read_pending(buffer).map_err(|e| {
-                format!(
-                    "播放设备「{}」收音中断：{e}。请暂停后继续以重新连接设备。",
-                    stream.device.name
-                )
-            })?;
+        // 单路掉线（设备被拔掉、蓝牙断开）只淘汰这一路；全部设备都掉了才终止整场收音。
+        let mut failures = Vec::new();
+        for (index, (stream, buffer)) in streams.iter_mut().zip(&mut buffers).enumerate() {
+            if let Err(error) = stream.read_pending(buffer) {
+                failures.push((
+                    index,
+                    format!("播放设备「{}」收音中断：{error}", stream.device.name),
+                ));
+            }
+        }
+        for (index, error) in failures.iter().rev() {
+            log::warn!("[system_audio] {error}，已停止采集该设备");
+            streams.remove(*index);
+            buffers.remove(*index);
+        }
+        if streams.is_empty() {
+            return Err(failures
+                .last()
+                .map(|(_, error)| format!("{error}。请暂停后继续以重新连接设备。"))
+                .unwrap_or_else(|| "系统收音已中断，请暂停后继续以重新连接设备。".into()));
         }
         if Instant::now() >= deadline {
             let pcm = crate::audio_dsp::mix_chunk(&mut buffers);

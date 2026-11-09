@@ -48,19 +48,22 @@ struct CaptureSession {
 impl Drop for CaptureSession {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
-        if let Some(handle) = self.handle.take() {
-            #[cfg(target_os = "macos")]
-            if !handle.is_finished() {
-                // A cancelled native startup may still be waiting for an OS
-                // completion. Retire it off-thread; its stop token gates audio.
-                let _ = std::thread::Builder::new()
-                    .name("capture-cleanup".into())
-                    .spawn(move || {
-                        let _ = handle.join();
-                    });
-                return;
-            }
+        let Some(handle) = self.handle.take() else {
+            return;
+        };
+        if handle.is_finished() {
             let _ = handle.join();
+            return;
+        }
+        // 线程还活着：设备初始化或 COM 读可能卡住，Drop 不能等它，否则停止收音会拖住 IPC 线程。
+        // 停止标志已经置位，把 join 交给后台线程收尾即可。
+        if let Err(error) = std::thread::Builder::new()
+            .name("capture-cleanup".into())
+            .spawn(move || {
+                let _ = handle.join();
+            })
+        {
+            log::warn!("[system_audio] 无法移交采集收尾线程：{error}");
         }
     }
 }
@@ -446,6 +449,30 @@ mod tests {
         );
         current.store(true, Ordering::SeqCst);
         assert!(publish_ready(&state, &current, info).is_err());
+    }
+
+    #[test]
+    fn dropping_a_stuck_session_returns_without_waiting_for_the_worker() {
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = stop.clone();
+        let handle = std::thread::spawn(move || {
+            while !worker_stop.load(Ordering::SeqCst) {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        });
+        let session = CaptureSession {
+            id: "stuck".into(),
+            stop: stop.clone(),
+            handle: Some(handle),
+            info: None,
+        };
+        let started = std::time::Instant::now();
+        drop(session);
+        assert!(stop.load(Ordering::SeqCst), "drop must signal the worker to stop");
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(200),
+            "drop must not join a live worker on the calling thread"
+        );
     }
 
     #[test]
