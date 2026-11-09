@@ -723,6 +723,7 @@ export const en: Record<string, string> = {
   "请在桌面应用中使用本地声音识别。": "Use local voice recognition in the desktop app.",
   "请在桌面应用中使用截图或系统收音。": "Use screenshots or system audio capture in the desktop app.",
   "取消": "Cancel",
+  "取消回答": "Cancel answer",
   "取消请求": "Cancel request",
   "全部恢复默认": "Restore all defaults",
   "确认发送图片/扫描页并识别": "Confirm sending images/scans for recognition",

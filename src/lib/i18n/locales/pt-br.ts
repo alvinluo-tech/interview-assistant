@@ -723,6 +723,7 @@ export const ptBr: Record<string, string> = {
   "请在桌面应用中使用本地声音识别。": "Use o reconhecimento local de voz no aplicativo de desktop.",
   "请在桌面应用中使用截图或系统收音。": "Use captura de tela ou captação do áudio do sistema no aplicativo de desktop.",
   "取消": "Cancelar",
+  "取消回答": "Cancelar resposta",
   "取消请求": "Cancelar requisição",
   "全部恢复默认": "Restaurar tudo ao padrão",
   "确认发送图片/扫描页并识别": "Confirmar envio e reconhecimento de imagens/páginas",

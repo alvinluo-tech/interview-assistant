@@ -57,6 +57,20 @@ test('first solve sends all collected screenshots without taking a replacement',
   assert.equal(h.captures(),2);
 });
 
+test('pages can still be collected while an answer is pending',async()=>{
+  const h=engine();
+  const solving=h.api.solve({screenshots:['first']});
+  await flush();
+  assert.equal(h.api.getSolverState().phase,'thinking');
+  // 等 AI 作答时继续加页：截图只往 pending 里攒，不碰在飞的请求。
+  assert.equal(await h.api.capturePage(),'synthetic-page-1');
+  assert.deepEqual(Array.from(h.api.getSolverState().pendingScreenshots),['synthetic-page-1']);
+  assert.equal(h.api.getSolverState().phase,'thinking','capturing must not clobber the answering phase');
+  h.resolve('<exam-question>q</exam-question><exam-answer>a</exam-answer>');
+  await solving;
+  assert.equal(h.api.getSolverState().phase,'done');
+});
+
 test('disk failure before upload retains collected pages and recovers without another capture',async()=>{
   const writeFailure={value:true},h=engine({deferred:false,writeFailure});
   await h.api.capturePage();await h.api.capturePage();

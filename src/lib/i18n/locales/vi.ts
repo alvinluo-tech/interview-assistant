@@ -723,6 +723,7 @@ export const vi: Record<string, string> = {
   "请在桌面应用中使用本地声音识别。": "Hãy dùng nhận dạng giọng cục bộ trong ứng dụng desktop.",
   "请在桌面应用中使用截图或系统收音。": "Hãy dùng chụp màn hình hoặc thu âm hệ thống trong ứng dụng desktop.",
   "取消": "Hủy",
+  "取消回答": "Hủy câu trả lời",
   "取消请求": "Hủy yêu cầu",
   "全部恢复默认": "Khôi phục toàn bộ mặc định",
   "确认发送图片/扫描页并识别": "Xác nhận gửi ảnh/trang quét để nhận dạng",

@@ -286,22 +286,28 @@ export async function capturePage(): Promise<string> {
     setState({ errorMessage: message });
     throw new Error(message);
   }
-  if (['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) throw new Error(t('当前操作尚未完成，请稍候。'));
+  if (['capturing', 'uploading'].includes(state.phase)) throw new Error(t('当前操作尚未完成，请稍候。'));
+  // 等 AI 作答时也能继续加页：截屏只往 pending 里攒图，不碰在飞的请求，
+  // 否则一次慢回答就把「继续收集题目」整条路堵死。
+  const resumePhase = state.phase;
+  const resumeStatus = state.statusText;
+  const answering = resumePhase === 'thinking' || resumePhase === 'streaming';
   const current = generation;
-  setState({ phase: 'capturing', statusText: t('截屏中…') });
+  if (!answering) setState({ phase: 'capturing', statusText: t('截屏中…') });
   try {
     const dataUrl = await captureScreen(captureOptions());
     if (current !== generation) return dataUrl;
     setState({
-      phase: 'idle',
-      statusText: '',
+      phase: answering ? resumePhase : 'idle',
+      statusText: answering ? resumeStatus : '',
       pendingScreenshots: [...state.pendingScreenshots, dataUrl],
     });
     return dataUrl;
   } catch (e) {
     if (current !== generation) throw e;
     setState({
-      phase: 'error',
+      phase: answering ? resumePhase : 'error',
+      statusText: answering ? resumeStatus : '',
       errorMessage: t('截屏失败：{msg}', { msg: String((e as Error).message ?? e) }),
     });
     throw e;

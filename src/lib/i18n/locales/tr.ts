@@ -723,6 +723,7 @@ export const tr: Record<string, string> = {
   "请在桌面应用中使用本地声音识别。": "Yerel ses tanımayı masaüstü uygulamasında kullan.",
   "请在桌面应用中使用截图或系统收音。": "Ekran görüntüsünü veya sistem sesi yakalamayı masaüstü uygulamasında kullan.",
   "取消": "İptal",
+  "取消回答": "Yanıtı iptal et",
   "取消请求": "İsteği iptal et",
   "全部恢复默认": "Tümünü varsayılana döndür",
   "确认发送图片/扫描页并识别": "Görsellerin/taranmış sayfaların tanıma için gönderilmesini onayla",

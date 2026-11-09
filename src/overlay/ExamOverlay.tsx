@@ -412,9 +412,10 @@ function ExamShell({
                 id="cancel-pages"
                 variant="muted"
                 hoverMs={HOVER_MS.cancelPages}
-                onTrigger={() => clearPendingScreenshots()}
+                // 答题途中也要能中断：多页模式下原本只有「清空待发截图」，在飞的请求停不下来。
+                onTrigger={() => (solving ? void abortSolve() : clearPendingScreenshots())}
               >
-                {t('取消')}
+                {t(solving ? '取消回答' : '取消')}
               </DwellButton>
             </>
           ) : (

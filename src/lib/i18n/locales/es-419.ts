@@ -723,6 +723,7 @@ export const es419: Record<string, string> = {
   "请在桌面应用中使用本地声音识别。": "Usa el reconocimiento local de voces en la aplicación de escritorio.",
   "请在桌面应用中使用截图或系统收音。": "Usa las capturas o la captura de audio del sistema en la aplicación de escritorio.",
   "取消": "Cancelar",
+  "取消回答": "Cancelar respuesta",
   "取消请求": "Cancelar solicitud",
   "全部恢复默认": "Restaurar todo por defecto",
   "确认发送图片/扫描页并识别": "Confirmar el envío de imágenes/escaneos para reconocer",
