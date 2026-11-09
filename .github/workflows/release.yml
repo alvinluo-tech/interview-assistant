@@ -113,8 +113,17 @@ jobs:
       - name: Test chat tools and voice calls
         run: pnpm test:chat
 
+      - name: Test speech profile and speaker routing
+        run: pnpm test:speech
+
+      - name: Test TTS protocol and playback
+        run: pnpm test:tts
+
       - name: Test desktop appearance
         run: node --test tests/desktop-appearance.test.mjs
+
+      - name: Test storage, hotkeys and i18n contracts
+        run: pnpm test:audit
 
       - name: Test permission and native capture bridge
         run: pnpm test:platform
