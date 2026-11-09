@@ -274,6 +274,17 @@ test('a capture failure schedules an automatic reconnect instead of ending the i
   await h.engine.endInterview(false);
 });
 
+test('an exhausted quota is treated as permanent too', async () => {
+  const timers = [];
+  const h = harness({ deadlineTimers: { setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {} } });
+  await h.start('SPEAKER');
+  h.emitNative('system-audio-error', { error: 'Incorrect API key provided. insufficient_quota' });
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.equal(h.engine.getInterviewEngineState().status, 'error');
+  assert.equal(timers.filter(timer => timer.ms >= 2000).length, 0, 'a quota failure must not be retried on a timer');
+  await h.engine.endInterview(false);
+});
+
 test('a denied key keeps the error visible instead of retrying forever', async () => {
   const timers = [];
   const h = harness({ deadlineTimers: { setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimeout() {} } });

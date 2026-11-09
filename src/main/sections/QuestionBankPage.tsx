@@ -59,7 +59,8 @@ export function QuestionBankPage() {
   const questions = savedBank?.questions ?? [];
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  // 用「序号 + 题干」定位展开项：重新生成题库后下标会指向别的题。
+  const [openKey, setOpenKey] = useState<string | null>(null);
   // 「存进面试资料」的目标资料：默认第一份，可在页面顶部改，避免固定写进 materials[0]。
   const [targetMaterialId, setTargetMaterialId] = useState('');
   const favorites = new Set(savedBank?.favorites ?? []);
@@ -172,14 +173,15 @@ export function QuestionBankPage() {
           <SectionHeader title={t('{count} 题', { count: questions.length })} desc={t('点开一题看参考思路；可以收藏或存进面试资料。')} />
           <div className="flex flex-col gap-2">
             {questions.map((q, i) => {
-              const open = openIdx === i;
+              const itemKey = `${i}:${q.question}`;
+              const open = openKey === itemKey;
               const fav = favorites.has(q.question);
               return (
-                <div key={i} className="rounded-md border">
+                <div key={itemKey} className="rounded-md border">
                   <button
                     type="button"
                     className="flex w-full items-start gap-2 p-2.5 text-left"
-                    onClick={() => setOpenIdx(open ? null : i)}
+                    onClick={() => setOpenKey(open ? null : itemKey)}
                   >
                     <span className="mt-0.5 text-xs text-muted-foreground">{i + 1}.</span>
                     <div className="min-w-0 flex-1">

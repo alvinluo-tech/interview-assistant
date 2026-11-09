@@ -7,5 +7,11 @@ test('production CSP restricts executable resources while supporting document an
   assert.match(String(csp['default-src']),/'self'/);assert.equal(csp['object-src'],"'none'");assert.equal(csp['base-uri'],"'none'");
   assert.doesNotMatch(String(csp['script-src']),/'unsafe-inline'|'unsafe-eval'|https?:|\*/);
   assert.match(String(csp['script-src']),/'wasm-unsafe-eval'/);assert.match(String(csp['worker-src']),/blob:/);assert.match(String(csp['media-src']),/blob:/);
-  assert.match(String(csp['connect-src']),/ipc:/);assert.doesNotMatch(String(csp['connect-src']),/\*|https?:\s|wss?:\s/);
+  const connect=String(csp['connect-src']).trim().split(/\s+/);
+  assert.ok(connect.includes('ipc:'),'connect-src must allow Tauri IPC');
+  for (const source of connect) {
+    const bare=source.replace(/\/$/,'');
+    assert.ok(!bare.includes('*'),`connect-src must not use a wildcard: ${source}`);
+    assert.ok(!['http:','https:','ws:','wss:'].includes(bare),`connect-src must not allow every host over ${bare}`);
+  }
 });

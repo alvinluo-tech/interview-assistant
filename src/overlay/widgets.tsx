@@ -239,8 +239,8 @@ export async function persistPosition() {
     const { positionOverlay } = await import('@/lib/bridge');
     const { setSetting } = await import('@/lib/store');
     const outer = await getCurrentWindow().outerPosition();
-    setSetting('overlay.position', { x: outer.x, y: outer.y });
-    void positionOverlay({ x: outer.x, y: outer.y });
+    await setSetting('overlay.position', { x: outer.x, y: outer.y });
+    await positionOverlay({ x: outer.x, y: outer.y });
   } catch {
     // ignore
   }

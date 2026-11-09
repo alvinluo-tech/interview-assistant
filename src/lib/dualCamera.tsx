@@ -47,8 +47,9 @@ export async function setDualCamera(scope: OverlayScope, on: boolean): Promise<v
       [f.text]: PARKED_LOOK.textOpacity,
       [f.border]: PARKED_LOOK.borderOpacity,
     } as OverlayStyle;
-    await setSetting('overlay.style', next);
+    // 先存还原信息再改外观：中途失败时外观还没变，下次关闭仍然还原得回去。
     await setSetting('overlay.parkedLooks', parked);
+    await setSetting('overlay.style', next);
   } else {
     const saved = parked[scope] ?? DEFAULT_LOOK;
     const next = {

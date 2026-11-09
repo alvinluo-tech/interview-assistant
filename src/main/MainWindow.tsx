@@ -399,20 +399,35 @@ function Sidebar({
 }
 
 /** 启动面试/笔试的公共流程（对齐原版 he）：setSessionActive → showOverlay → hideMain */
-export async function startOverlayFlow(mode: 'exam' | 'interview', goalId: string | null): Promise<void> {
-  const { setSetting } = await import('@/lib/store');
-  await setSetting('overlay.mode', mode);
-  if (goalId !== undefined) await setSetting('exam.goalId', goalId);
-  await setSessionActive(true);
-  await showOverlay();
-  // 400ms 后隐藏主窗口（对齐原版时序）
-  window.setTimeout(() => {
+let mainHideTimer: number | undefined;
+
+/** 400ms 后隐藏主窗口（对齐原版时序）；这段时间内退出浮窗可以取消。 */
+function scheduleMainHide() {
+  cancelMainHide();
+  mainHideTimer = window.setTimeout(() => {
+    mainHideTimer = undefined;
     getCurrentWindow().hide().catch(() => {});
   }, 400);
 }
 
+export function cancelMainHide() {
+  if (mainHideTimer === undefined) return;
+  window.clearTimeout(mainHideTimer);
+  mainHideTimer = undefined;
+}
+
+export async function startOverlayFlow(mode: 'exam' | 'interview', goalId: string | null): Promise<void> {
+  const { setSetting } = await import('@/lib/store');
+  await setSetting('overlay.mode', mode);
+  if (goalId) await setSetting('exam.goalId', goalId);
+  await setSessionActive(true);
+  await showOverlay();
+  scheduleMainHide();
+}
+
 /** 浮窗退出后恢复工作台（panic/退出共用） */
 export async function recallWorkbench() {
+  cancelMainHide();
   await setSessionActive(false);
   // 先亮主窗口再收浮窗：主窗口没起来时，用户至少还有浮窗可用。
   await showMain().catch(() => {});

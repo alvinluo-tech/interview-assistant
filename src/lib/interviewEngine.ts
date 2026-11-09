@@ -306,7 +306,7 @@ async function previewUtterance(utterance: LiveUtterance) {
 }
 
 /** 欠费、未开通、密钥无权限这类错误重连一百次也是同一个结果，只会让横幅反复闪。 */
-const PERMANENT_CAPTURE_ERROR = /Access to model denied|AccessDenied|Model\.AccessDenied|InvalidApiKey|invalid api key|AllocationQuota|欠费|未开通|无权限/i;
+const PERMANENT_CAPTURE_ERROR = /Access to model denied|AccessDenied|Model\.AccessDenied|InvalidApiKey|invalid api key|Incorrect API key|insufficient_quota|InsufficientQuota|AllocationQuota|model_not_found|Unauthorized|欠费|未开通|无权限|余额不足/i;
 function permanentCaptureError(error: unknown): boolean {
   return PERMANENT_CAPTURE_ERROR.test(String((error as Error)?.message ?? error));
 }
@@ -1194,7 +1194,8 @@ export async function interruptAnswer() {
   // 被中断的回答保留已有正文，但必须标成 cancelled，避免看起来像完整答案。
   setState({
     messages: state.messages.map((m) => (m.pending ? { ...m, pending: false, metadata: { ...m.metadata, completionStatus: 'cancelled' } } : m)),
-    status: 'listening',
+    // 收音已经出错或暂停时不能假装在听，否则界面会盖住真实状态。
+    status: state.status === 'answering' ? 'listening' : state.status,
   });
 }
 
