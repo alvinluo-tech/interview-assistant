@@ -17,7 +17,7 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
   };
   const api = evaluateFixture('src/lib/examEngine.ts', {
     exports: {}, console, Date: fixedTime ? class extends Date { static now() { return 1000; } } : Date, AbortController,
-    window: { setInterval: () => { const id = {}; timers.add(id); return id; }, clearInterval(id) {timers.delete(id);}, setTimeout(fn) {const id={}; checkpoints.set(id,fn); return id;}, clearTimeout(id){checkpoints.delete(id);} },
+    window: { setInterval: (fn) => { const id = { fn }; timers.add(id); return id; }, clearInterval(id) {timers.delete(id);}, setTimeout(fn) {const id={}; checkpoints.set(id,fn); return id;}, clearTimeout(id){checkpoints.delete(id);} },
     require: name => {
       if (name === './i18n') return evaluateModuleFixture('src/lib/i18n.ts');
       if (name === './aiContext') return evaluateModuleFixture('src/lib/aiContext.ts');
@@ -46,7 +46,7 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
       throw new Error(`Unexpected dependency ${name}`);
     },
   });
-  return { api, calls, saved, settings, timers,prompts,createdInputs,sentImages, captures:()=>captures, runCheckpoints:()=>{for(const fn of [...checkpoints.values()])fn();checkpoints.clear();}, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
+  return { api, calls, saved, settings, timers,prompts,createdInputs,sentImages, captures:()=>captures, tick:()=>{for(const id of [...timers]) id.fn?.();}, runCheckpoints:()=>{for(const fn of [...checkpoints.values()])fn();checkpoints.clear();}, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
     reject:error=>rejectRequest?.(error),created: () => created, resolveSession: () => resolveSession?.({ id: 'synthetic-session' }), resolveCapture: () => resolveCapture?.('synthetic') };
 }
 
@@ -369,4 +369,19 @@ test('a failed verdict without an execution error waits for the user', async () 
   h.runCheckpoints();
   await flush();
   assert.equal(h.requests(), 1, 'a wrong answer is not rewritten behind the user back');
+});
+
+test('reasoning progress is visible while the first token is still pending', async () => {
+  const h = engine({ deferred: true });
+  const solving = h.api.solve({ screenshots: ['page'] });
+  await flush();
+  h.options().onReasoning('先读题意：第一组三角形外接正方形。');
+  h.tick();
+  const state = h.api.getSolverState();
+  assert.equal(state.phase, 'thinking');
+  assert.ok(state.reasoningChars > 0, 'reasoning chars must be counted');
+  assert.match(state.reasoningPreview, /先读题意/);
+  h.resolve('<exam-answer>答案</exam-answer>');
+  await solving;
+  assert.equal(h.api.getSolverState().phase, 'done');
 });

@@ -158,7 +158,7 @@ function extractText(value: unknown): string {
   return '';
 }
 /** One parser for both text and vision, including split UTF-8 and final unterminated lines. */
-export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal, onReasoning?:()=>void, touch?:()=>void): Promise<ChatCompletion> {
+export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal, onReasoning?:(text:string)=>void, touch?:()=>void): Promise<ChatCompletion> {
   if (!response.body) throw new Error(t('接口未返回响应内容'));
   const type = response.headers.get('content-type') ?? '';
   let full='',reasoning='',finishReason:string|undefined,ended=false,refused=false;
@@ -170,7 +170,7 @@ export async function consumeChatResult(response: Response, onDelta?: (text: str
     if(choice?.delta?.refusal || choice?.message?.refusal)refused=true;
     // 思考内容与正文分开累计：思维链既不能当答案展示，也提示输出预算被谁用掉。
     const thought=extractText(choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? choice?.message?.reasoning_content);
-    if(thought){reasoning+=thought;onReasoning?.();}
+    if(thought){reasoning+=thought;onReasoning?.(thought);}
     const text=extractText(choice?.delta?.content ?? choice?.message?.content);
     if(text){full+=text;if(full.length>2_000_000)throw new Error(t('回答过长，请缩小任务范围。'));onDelta?.(text);}
     if(json.usage)usage={inputTokens:json.usage.prompt_tokens,outputTokens:json.usage.completion_tokens,cachedTokens:json.usage.prompt_tokens_details?.cached_tokens,reasoningTokens:json.usage.completion_tokens_details?.reasoning_tokens};

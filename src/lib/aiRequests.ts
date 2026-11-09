@@ -18,6 +18,8 @@ export interface ChatOptions {
   messages: ChatMessage[];
   signal?: AbortSignal;
   onDelta?: (text: string) => void;
+  /** 思维链增量：只用来显示「还在思考」的进度，不进回答正文。 */
+  onReasoning?: (text: string) => void;
   temperature?: number;
   maxTokens?: number;
   task?:AiTask;
@@ -63,7 +65,7 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
     }),
   }, settings.timeoutMs, async (response,pending,touch) => {
     // 流式请求的超时按「多久没数据」算：思考模型先安静几十秒是常态，按总时长掐断会白扔一次完整回答。
-    const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending,()=>{emitted=true;},touch);
+    const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending,(thought)=>{emitted=true;opts.onReasoning?.(thought);},touch);
     trace.completionStatus=result.completionStatus;trace.finishReason=result.finishReason;Object.assign(trace,result.usage);
     return result.text;
   }, aiFetch, opts.signal, true);

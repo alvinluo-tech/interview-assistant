@@ -46,6 +46,7 @@ import { getSetting } from '@/lib/store';
 import { Md } from './Md';
 import {
   DwellButton,
+  DwellDisclosure,
   ConfirmPaletteButton,
   DragHandle,
   HOVER_MS,
@@ -196,6 +197,8 @@ function ExamShell({
     solver.phase === 'uploading';
 
   const selected=solver.turns.find(turn=>turn.id===solver.selectedTurnId) || solver.turns[solver.turns.length-1];
+  // 正文还没吐出来时，唯一能证明「模型在干活」的就是思维链：给字数、耗时和尾部预览。
+  const waitingFirstToken = solving && !solver.turns.find(turn => turn.id === solver.activeTurnId)?.body.trim();
   // 被输出上限截断且已有正文：给「继续生成」把剩下的写完，而不是让用户自己追问。
   const truncated = selected?.completionStatus === 'truncated' && Boolean(selected?.body.trim());
   // 样例没全过：让用户决定要不要按失败样例重写（最多两轮，硬上限）。
@@ -266,6 +269,28 @@ function ExamShell({
               <div className="ov-text-2 mb-2 flex items-center gap-1.5 text-[11px]">
                 <span className="ov-dot size-1.5 animate-pulse rounded-full" />
                 {solver.statusText}
+              </div>
+            )}
+            {waitingFirstToken && (
+              <div className="mb-2" role="status">
+                <div className="ov-text-2 flex items-center gap-1.5 text-[11px]">
+                  <span className="ov-dot size-1.5 animate-pulse rounded-full" />
+                  {solver.reasoningChars > 0
+                    ? t('思考中 · 已 {s} 秒 · 思考 {n} 字', { s: solver.elapsedSec, n: solver.reasoningChars })
+                    : t('已发送，等待模型响应 · 已 {s} 秒', { s: solver.elapsedSec })}
+                </div>
+                {solver.reasoningPreview && (
+                  <>
+                    <div className="ov-text-3 mt-1 truncate text-[10.5px] opacity-75">
+                      {solver.reasoningPreview.slice(-180).replace(/\s+/g, ' ')}
+                    </div>
+                    <DwellDisclosure id="live-reasoning" label={t('查看思考过程')} className="mt-1">
+                      <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">
+                        {solver.reasoningPreview}
+                      </div>
+                    </DwellDisclosure>
+                  </>
+                )}
               </div>
             )}
             {solver.turns.map((turn, i) => (

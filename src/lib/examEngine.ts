@@ -90,6 +90,10 @@ export interface SolverState {
   /** 当前活跃 turn（流式写入） */
   activeTurnId: string | null;
   elapsedSec: number;
+  /** 本次请求已收到的思维链字数（界面用来判断「在思考」还是「没动静」） */
+  reasoningChars: number;
+  /** 思维链尾部预览，只在思考阶段显示，不落盘 */
+  reasoningPreview: string;
   errorMessage: string | null;
   goalId: string | null;
 }
@@ -103,6 +107,8 @@ let state: SolverState = {
   turns: [],
   activeTurnId: null,
   elapsedSec: 0,
+  reasoningChars: 0,
+  reasoningPreview: '',
   errorMessage: null,
   goalId: null,
 };
@@ -145,11 +151,21 @@ function cancelRequest() {
   requestController = null;
   startingSolve = false;
 }
+/** 流式思维链只留最近一段给界面预览：每个 token 都 setState 会把渲染打爆，交给 1 秒的计时器统一刷新。 */
+const REASONING_PREVIEW_CHARS = 1200;
+let liveReasoning = '';
+function beginLiveReasoning() {
+  liveReasoning = '';
+  setState({ reasoningChars: 0, reasoningPreview: '' });
+}
 function ensureTicker() {
   if (tickTimer) return;
   tickTimer = window.setInterval(() => {
     if (state.phase === 'thinking' || state.phase === 'streaming' || state.phase === 'capturing' || state.phase === 'uploading') {
-      setState({ elapsedSec: state.elapsedSec + 1 });
+      setState({
+        elapsedSec: state.elapsedSec + 1,
+        ...(liveReasoning ? { reasoningChars: liveReasoning.length, reasoningPreview: liveReasoning.slice(-REASONING_PREVIEW_CHARS) } : {}),
+      });
     }
   }, 1000);
 }
@@ -373,6 +389,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   };
   const turns = [...state.turns, turn];
   setState({ turns, activeTurnId: turn.id,selectedTurnId:turn.id });
+  beginLiveReasoning();
   ensureTicker();
   const startedAt = Date.now();
   let raw = '', answerCompleted=false;
@@ -398,6 +415,10 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       onTrace:request=>{if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
       signal: controller.signal,
       system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'简洁输出结论，避免展开长篇解释。':state.mode==='programming'?'给出完整可运行代码、边界条件与时间空间复杂度。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路，保持简明。'),
+      onReasoning: (thought) => {
+        if (current !== generation) return;
+        liveReasoning += thought;
+      },
       onDelta: (delta) => {
         if (current !== generation) return;
         raw += delta;
@@ -510,6 +531,7 @@ export async function followUp(opts: {
     phase: 'streaming',
     statusText: opts.intent === 'code-review' ? t('AI 检查中…') : t('AI 输出中…'),
   });
+  beginLiveReasoning();
   ensureTicker();
   const startedAt = Date.now();
   let answerCompleted=false;
@@ -535,6 +557,10 @@ export async function followUp(opts: {
         onTrace:request=>{if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
         signal: controller.signal,
         system: EXAM_SYSTEM_PROMPT,
+        onReasoning: (thought) => {
+          if (current !== generation) return;
+          liveReasoning += thought;
+        },
         onDelta: (delta) => {
           if (current !== generation) return;
           setState({
@@ -601,6 +627,7 @@ export async function continueTurn(targetId?: string): Promise<void> {
   const question = (target.questionText || '').trim();
   const prompt = `${question ? `原题：\n${question}\n\n` : ''}下面这条回答在末尾被输出长度限制截断了：\n\n${base.slice(-CONTINUE_CONTEXT_CHARS)}\n\n请从中断处接着写完剩余内容，只输出接下来的部分。`;
   setState({ activeTurnId: target.id, phase: 'streaming', statusText: t('继续生成中…'), errorMessage: null });
+  beginLiveReasoning();
   ensureTicker();
   let addition = '';
   try {
@@ -610,6 +637,10 @@ export async function continueTurn(targetId?: string): Promise<void> {
       system: `${EXAM_SYSTEM_PROMPT}\n这是续写任务：直接从断点继续写，不重复已有内容，不重新开头，不解释这是续写。`,
       onTrace: request => {
         if (current === generation) setState({ turns: state.turns.map(t => t.id === target.id ? { ...t, request, completionStatus: request.completionStatus } : t) });
+      },
+      onReasoning: (thought) => {
+        if (current !== generation) return;
+        liveReasoning += thought;
       },
       onDelta: (delta) => {
         if (current !== generation) return;
@@ -724,6 +755,7 @@ export async function fixTurnWithSamples(targetId?: string, options: { silent?: 
     statusText: options.silent ? '' : t('按样例修正中…'),
     errorMessage: null,
   });
+  beginLiveReasoning();
   ensureTicker();
   let raw = '';
   try {
@@ -733,6 +765,10 @@ export async function fixTurnWithSamples(targetId?: string, options: { silent?: 
       system: EXAM_SYSTEM_PROMPT,
       onTrace: (request) => {
         if (current === generation) setState({ turns: state.turns.map((turn) => (turn.id === target.id ? { ...turn, request, completionStatus: request.completionStatus } : turn)) });
+      },
+      onReasoning: (thought) => {
+        if (current !== generation) return;
+        liveReasoning += thought;
       },
       onDelta: (delta) => {
         if (current !== generation) return;
