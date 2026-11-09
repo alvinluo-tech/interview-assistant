@@ -1,5 +1,5 @@
 /*
- * 浮窗快捷键：18 个动作、simple / conflict-free 双方案全表、退役键迁移、
+ * 浮窗快捷键：19 个动作、simple / conflict-free 双方案全表、退役键迁移、
  * 键位捕获与徽标格式化。全部表格对齐原版（BS:25516-25638）。
  */
 
@@ -8,6 +8,7 @@ export const ACTIONS = [
   'scroll-down',
   'answer',
   'capture',
+  'cancel',
   'voice-ask',
   'move-left',
   'move-right',
@@ -31,6 +32,7 @@ export const ACTION_LABELS: Record<ActionKey, { label: string; desc: string }> =
   'scroll-down': { label: '向下滚动', desc: '看新生成的内容' },
   answer: { label: '答题 / 回答', desc: '笔试：解题；面试：立即回答，笔试答题里为截屏答题 / 接住追问' },
   capture: { label: '截屏 / 笔试答题', desc: '重新截屏 / 加页' },
+  cancel: { label: '打断答题', desc: '笔试答题途中按一下立刻停下：已生成的部分会保留，随时可以重新截图' },
   'voice-ask': { label: '语音提问', desc: '按一下开始说话，再按一下结束，AI 回答你说的问题' },
   'move-left': { label: '浮窗左移', desc: '按住不放持续往左挪，松开停下' },
   'move-right': { label: '浮窗右移', desc: '同上' },
@@ -57,6 +59,7 @@ export const SCHEME_DEFAULTS: Record<HotkeyScheme, Record<ActionKey, string>> = 
     answer: 'CmdOrCtrl+Enter',
     capture: 'CmdOrCtrl+H',
     'voice-ask': 'CmdOrCtrl+T',
+    cancel: 'CmdOrCtrl+.',
     'move-left': 'CmdOrCtrl+Left',
     'move-right': 'CmdOrCtrl+Right',
     'move-up': 'CmdOrCtrl+PageUp',
@@ -77,6 +80,7 @@ export const SCHEME_DEFAULTS: Record<HotkeyScheme, Record<ActionKey, string>> = 
     answer: 'CmdOrCtrl+Alt+Shift+Enter',
     capture: 'CmdOrCtrl+Alt+Shift+S',
     'voice-ask': 'CmdOrCtrl+Alt+Shift+T',
+    cancel: 'CmdOrCtrl+Alt+Shift+X',
     'move-left': 'CmdOrCtrl+Alt+Shift+Left',
     'move-right': 'CmdOrCtrl+Alt+Shift+Right',
     'move-up': 'CmdOrCtrl+Alt+Shift+PageUp',

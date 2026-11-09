@@ -219,6 +219,20 @@ test('clearing a capture does not erase completed questions from the session', a
 });
 
 
+test('interrupting an answer says where to go next and drops the queued pages', async () => {
+  const h = engine({deferred: true});
+  const pending = h.api.solve({screenshots: ['synthetic']});
+  await flush();
+  await h.api.abortSolve();
+  assert.equal(h.api.getSolverState().phase, 'idle');
+  assert.equal(h.api.getSolverState().pendingScreenshots.length, 0);
+  assert.equal(h.api.getSolverState().statusText, '已打断，可重新截图或加页');
+  // 提示是三秒后自己消失的，不是一直挂在状态行上。
+  h.runCheckpoints();
+  assert.equal(h.api.getSolverState().statusText, '');
+  h.resolve('late'); await pending;
+});
+
 test('capture limit rejects extra pages instead of silently discarding them (B28)', async () => {
   const h = engine();
   for(let i=0;i<4;i++) await h.api.capturePage();

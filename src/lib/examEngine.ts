@@ -879,13 +879,18 @@ export function setSolverMode(mode: ExamModeKey) {
 export async function abortSolve(): Promise<void> {
   cancelRequest();
   await persistTurns();
+  // 打断后给一句明确的去处：用户此刻多半是想换个截图重来，而不是想退出。
+  const hint = t('已打断，可重新截图或加页');
   setState({
     phase: 'idle',
-    statusText: '',
+    statusText: hint,
     activeTurnId: null,
     pendingScreenshots: [],
     elapsedSec: 0,
   });
+  window.setTimeout(() => {
+    if (state.statusText === hint) setState({ statusText: '' });
+  }, 3000);
 }
 
 export async function endExamSession(relaunch: boolean): Promise<void> {

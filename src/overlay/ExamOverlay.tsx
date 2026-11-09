@@ -86,16 +86,23 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
     };
   }, [preview]);
 
-  // 全局热键：答题 / 截屏加页 / 复制答案（原版 exam 的绑定）
+  // 全局热键：答题 / 截屏加页 / 复制答案 / 打断（原版 exam 的绑定 + 应急打断）
   useEffect(() => {
     if (preview) return;
     const offAnswer = bindHotkey('answer', () => void solve());
     const offCapture = bindHotkey('capture', () => void capturePage());
     const offCopy = bindHotkey('copy-code', () => void copyAnswerToClipboard());
+    // 应急：鼠标正忙着做题时也能停掉这次回答，或者丢掉还没发出去的截图。
+    const offCancel = bindHotkey('cancel', () => {
+      const current = getSolverState();
+      if (['thinking', 'streaming', 'uploading', 'capturing'].includes(current.phase)) void abortSolve();
+      else if (current.pendingScreenshots.length) clearPendingScreenshots();
+    });
     return () => {
       offAnswer();
       offCapture();
       offCopy();
+      offCancel();
     };
   }, [preview, bindHotkey]);
 
@@ -427,7 +434,7 @@ function ExamShell({
                 // 答题途中也要能中断：多页模式下原本只有「清空待发截图」，在飞的请求停不下来。
                 onTrigger={() => (solving ? void abortSolve() : clearPendingScreenshots())}
               >
-                {t(solving ? '取消回答' : '取消')}
+                {t(solving ? '打断回答' : '取消')}
               </DwellButton>
             </>
           ) : (
@@ -461,9 +468,11 @@ function ExamShell({
                 id="reset"
                 variant="muted"
                 hoverMs={HOVER_MS.reset}
+                hotkey={solving ? hotkeys.cancel : undefined}
+                subLabel={solving ? t('保留已生成的部分') : undefined}
                 onTrigger={() => void abortSolve()}
               >
-                {t('重置')}
+                {t(solving ? '打断' : '重置')}
               </DwellButton>
             </>
           )}
