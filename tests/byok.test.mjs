@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 globalThis.localStorage ??= { getItem: key => (key === 'desktop.locale' ? 'zh-cn' : null), setItem() {}, removeItem() {} };
 import { createProvider, defaultAiSettings, normalizeBaseUrl, validateAiSettings, resolveAiRoute, isRoleConfigured, mergeDiscoveredModels, removeProvider } from '../artifacts/byok-tests/aiConfig.js';
 import * as configApi from '../artifacts/byok-tests/aiConfig.js';
-import { aiHeaders, consumeChat, discoverModels, withAiRequest, testChatModel, transcriptionLanguage } from '../artifacts/byok-tests/aiProtocol.js';
+import { aiHeaders, consumeChat, consumeChatResult, discoverModels, withAiRequest, testChatModel, transcriptionLanguage } from '../artifacts/byok-tests/aiProtocol.js';
 
 const provider = (patch = {}) => ({ id: 'local', name: 'Local', baseUrl: 'http://localhost:11434/v1', authMode: 'none', apiKey: '', models: [{ id: 'custom/model', name: 'Custom', source: 'custom' }], lastFetchedAt: null, ...patch });
 const settings = () => ({ ...defaultAiSettings(), providers: [provider()], routes: { chat: { providerId: 'local', modelId: 'custom/model' }, vision: null, stt: null, tts: null } });
@@ -311,4 +311,31 @@ test('model test sends only a short real chat request and consumes its stream', 
     return streaming('data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n');
   });
   assert.equal(result.sample, 'OK'); assert.ok(result.latencyMs >= 0);
+});
+const chat = (response, signal, touch) => consumeChatResult(response, undefined, signal, undefined, touch);
+
+test('a streaming answer that keeps sending data outlives the idle timeout', async () => {
+  // 思考模型常常几十秒不吐正文，但推理增量一直在来：按「多久没数据」判超时，不能按总时长掐断。
+  const encoder = new TextEncoder();
+  const drip = () => new Response(new ReadableStream({ start(controller) {
+    let sent = 0;
+    const timer = setInterval(() => {
+      sent++;
+      controller.enqueue(encoder.encode(`data: {"choices":[{"delta":{"content":"${sent}"}}]}\n\n`));
+      if (sent === 4) { clearInterval(timer); controller.enqueue(encoder.encode('data: [DONE]\n\n')); controller.close(); }
+    }, 25);
+  } }), { headers: { 'content-type': 'text/event-stream' } });
+  const result = await withAiRequest(provider(), 'chat/completions', {}, 60, chat, async () => drip(), undefined, true);
+  assert.equal(result.text, '1234');
+});
+
+test('a streaming answer that goes silent is aborted by the idle timeout', async () => {
+  const encoder = new TextEncoder();
+  const stalled = () => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"a"}}]}\n\n'));
+  } }), { headers: { 'content-type': 'text/event-stream' } });
+  await assert.rejects(
+    withAiRequest(provider(), 'chat/completions', {}, 40, chat, async () => stalled(), undefined, true),
+    /超时/,
+  );
 });

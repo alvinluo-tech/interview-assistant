@@ -13,13 +13,18 @@ export function transcriptionLanguage(locale?: string): string | undefined {
   const language = locale?.trim().toLowerCase().split(/[-_]/)[0];
   return language && /^[a-z]{2}$/.test(language) ? language : undefined;
 }
-export interface RequestScope { signal: AbortSignal; cleanup: () => void }
-export function requestScope(timeoutMs: number, signal?: AbortSignal): RequestScope {
+export interface RequestScope { signal: AbortSignal; touch: () => void; cleanup: () => void }
+export function requestScope(timeoutMs: number, signal?: AbortSignal, idle = false): RequestScope {
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(() => controller.abort(new DOMException(t('请求超时，请检查接口或增加超时时间'), 'TimeoutError')), timeoutMs);
-  return { signal: controller.signal, cleanup: () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); } };
+  const timeout = () => controller.abort(new DOMException(t('请求超时，请检查接口或增加超时时间'), 'TimeoutError'));
+  // 流式响应不能按总时长算超时：思考模型可能先安静几十秒再吐字，但只要数据还在来就不算卡住。
+  // idle 模式下 timeoutMs 是「多久没收到任何数据」，另外给一个总上限防止心跳式流永远不结束。
+  let timer = setTimeout(timeout, timeoutMs);
+  const total = idle ? setTimeout(timeout, Math.max(timeoutMs * 4, 600000)) : null;
+  const touch = () => { if (idle) { clearTimeout(timer); timer = setTimeout(timeout, timeoutMs); } };
+  return { signal: controller.signal, touch, cleanup: () => { clearTimeout(timer); if (total !== null) clearTimeout(total); signal?.removeEventListener('abort', abort); } };
 }
 export function aiHeaders(provider: AiProvider, json = false): Record<string, string> {
   const headers: Record<string, string> = json ? { 'Content-Type': 'application/json' } : {};
@@ -50,10 +55,10 @@ export async function responseError(response: Response, key: string): Promise<Er
 /** Apply timeout through body consumption too, not just response headers. */
 export async function withAiRequest<T>(
   provider: AiProvider, endpoint: string, init: RequestInit, timeoutMs: number,
-  consume: (response: Response, signal: AbortSignal) => Promise<T>, fetcher: AiFetch, signal?: AbortSignal,
+  consume: (response: Response, signal: AbortSignal, touch: () => void) => Promise<T>, fetcher: AiFetch, signal?: AbortSignal, idle = false,
 ): Promise<T> {
   const normalized = normalizeProvider(provider);
-  const scope = requestScope(timeoutMs, signal);
+  const scope = requestScope(timeoutMs, signal, idle);
   try {
     scope.signal.throwIfAborted();
     const response = await fetcher(`${normalized.baseUrl}/${endpoint}`, { ...init, signal: scope.signal, redirect: 'error' });
@@ -62,7 +67,7 @@ export async function withAiRequest<T>(
       throw new Error(t('当前连接是本地测试服务，只会返回固定内容，无法用于真实问答或语音识别。请到「设置 → AI 服务」配置真实接口。'));
     }
     if (!response.ok) throw await responseError(response, normalized.apiKey);
-    return await consume(response, scope.signal);
+    return await consume(response, scope.signal, scope.touch);
   } catch (error) {
     if (scope.signal.aborted) throw scope.signal.reason ?? new DOMException(t('已取消请求'), 'AbortError');
     if (error instanceof AiCompletionError) throw new AiCompletionError(redactError(error.message,normalized.apiKey),
@@ -153,7 +158,7 @@ function extractText(value: unknown): string {
   return '';
 }
 /** One parser for both text and vision, including split UTF-8 and final unterminated lines. */
-export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal, onReasoning?:()=>void): Promise<ChatCompletion> {
+export async function consumeChatResult(response: Response, onDelta?: (text: string) => void, signal?:AbortSignal, onReasoning?:()=>void, touch?:()=>void): Promise<ChatCompletion> {
   if (!response.body) throw new Error(t('接口未返回响应内容'));
   const type = response.headers.get('content-type') ?? '';
   let full='',reasoning='',finishReason:string|undefined,ended=false,refused=false;
@@ -194,6 +199,7 @@ export async function consumeChatResult(response: Response, onDelta?: (text: str
       signal?.throwIfAborted();
       const { value, done } = await reader.read();
       signal?.throwIfAborted();
+      if (!done) touch?.();
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       if (buffer.length > 1_048_576) throw new Error(t('接口返回的单条流式消息过大'));
       let newline;

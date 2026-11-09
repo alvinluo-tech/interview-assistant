@@ -61,11 +61,12 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
       ...(opts.temperature === undefined || capabilities?.temperature===false ? {} : { temperature: opts.temperature }),
       ...(outputParameter==='none'?{}:{[outputParameter]:limit}),...(format?{response_format:format}:{}),
     }),
-  }, Math.max(1,settings.timeoutMs-(Date.now()-trace.startedAt)), async (response,pending) => {
-    const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending,()=>{emitted=true;});
+  }, settings.timeoutMs, async (response,pending,touch) => {
+    // 流式请求的超时按「多久没数据」算：思考模型先安静几十秒是常态，按总时长掐断会白扔一次完整回答。
+    const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending,()=>{emitted=true;},touch);
     trace.completionStatus=result.completionStatus;trace.finishReason=result.finishReason;Object.assign(trace,result.usage);
     return result.text;
-  }, aiFetch, opts.signal);
+  }, aiFetch, opts.signal, true);
   } catch(error){
     const message=String((error as Error)?.message || error);
     // 思考模型把整份预算花在思维链上：finish_reason=length 但正文一个字都没有。
