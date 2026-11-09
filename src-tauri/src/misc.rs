@@ -2,7 +2,7 @@
  * 杂项命令：日志读取、崩溃存根、退出、版本查询。重启见 disguise。
  * 崩溃/恢复类命令返回"非恢复启动"（冷启动），与原版语义兼容。
  */
-use std::io::{BufRead, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
@@ -11,17 +11,23 @@ pub fn cmd_read_recent_logs(app: AppHandle, limit: Option<usize>) -> Result<Vec<
     // tauri-plugin-log 默认文件名 = productName
     let name = app.config().product_name.as_deref().unwrap_or(&app.package_info().name);
     let path = dir.join(format!("{name}.log"));
-    let f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
-    let mut reader = std::io::BufReader::new(f);
-    let mut lines: Vec<String> = Vec::new();
-    reader.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-    for line in reader.lines() {
-        match line {
-            Ok(l) => lines.push(l),
-            Err(_) => break,
-        }
+    // 日志可能有几十 MB：只读末尾一段，别把整个文件搬进内存、卡住同步 IPC 命令。
+    const TAIL_BYTES: u64 = 256 * 1024;
+    let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let len = f.metadata().map(|meta| meta.len()).unwrap_or(0);
+    let offset = len.saturating_sub(TAIL_BYTES);
+    f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+    let mut buffer = Vec::new();
+    f.take(TAIL_BYTES)
+        .read_to_end(&mut buffer)
+        .map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&buffer);
+    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+    if offset > 0 && !lines.is_empty() {
+        // 第一行大概率是从中间截断的，读出来是乱码。
+        lines.remove(0);
     }
-    let limit = limit.unwrap_or(200);
+    let limit = limit.unwrap_or(200).min(2000);
     let start = lines.len().saturating_sub(limit);
     Ok(lines[start..].to_vec())
 }

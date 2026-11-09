@@ -31,6 +31,14 @@ interface WorkerScope {
 
 declare function importScripts(...urls: string[]): void;
 
+/** 与 codeRunner 保持一致：输出上限，避免死循环 print 撑爆 Worker 内存。 */
+const MAX_OUTPUT_CHARS = 64 * 1024;
+
+function appendOutput(current: string, text: string): string {
+  if (current.length >= MAX_OUTPUT_CHARS) return current;
+  return (current + text + '\n').slice(0, MAX_OUTPUT_CHARS);
+}
+
 const scope = self as unknown as WorkerScope;
 let ready: Promise<PyodideApi> | null = null;
 
@@ -56,8 +64,8 @@ scope.onmessage = async (event: MessageEvent<RunRequest>) => {
   let stderr = '';
   try {
     const pyodide = await boot();
-    pyodide.setStdout({ batched: (text) => { stdout += text + '\n'; } });
-    pyodide.setStderr({ batched: (text) => { stderr += text + '\n'; } });
+    pyodide.setStdout({ batched: (text) => { stdout = appendOutput(stdout, text); } });
+    pyodide.setStderr({ batched: (text) => { stderr = appendOutput(stderr, text); } });
     // 把 stdin 换成固定字符串：用户代码里的 input() / sys.stdin.read() 都读它。
     const payload = JSON.stringify(stdin);
     await pyodide.runPythonAsync(`

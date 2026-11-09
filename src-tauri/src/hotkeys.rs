@@ -50,13 +50,23 @@ pub fn global_shortcut_handler(app: &AppHandle, shortcut: &Shortcut, event: Shor
     let routing: State<HotkeyRouting> = app.state();
     let pressed = event.state() == ShortcutState::Pressed;
 
-    if let Some(action) = routing.action_map.lock().unwrap().get(shortcut) {
-        let action = action.clone();
+    // 出锁再派发：emit 会跑前端回调，回调可能重新设置快捷键，持锁会卡住全局热键线程。
+    let action = {
+        let map = routing
+            .action_map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        map.get(shortcut).cloned()
+    };
+    if let Some(action) = action {
         emit_action(app, &action, pressed);
         return;
     }
     let is_panic = {
-        let panic_guard = routing.panic_shortcut.lock().unwrap();
+        let panic_guard = routing
+            .panic_shortcut
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         panic_guard.as_ref() == Some(shortcut)
     };
     if is_panic && pressed {

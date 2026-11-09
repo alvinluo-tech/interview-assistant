@@ -77,6 +77,14 @@ globalThis.require = function (name) {
 };
 `;
 
+/** 用户代码的输出上限：死循环里 print 会把桌面端内存吃光。 */
+const MAX_OUTPUT_CHARS = 64 * 1024;
+
+function appendOutput(current: string, chunk: string): string {
+  if (current.length >= MAX_OUTPUT_CHARS) return current;
+  return (current + chunk).slice(0, MAX_OUTPUT_CHARS);
+}
+
 async function runJavaScript(code: string, stdin: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
   const QuickJS = await getQuickJS();
   const runtime = QuickJS.newRuntime();
@@ -93,10 +101,10 @@ async function runJavaScript(code: string, stdin: string, timeoutMs: number): Pr
   let stderr = '';
   try {
     const log = context.newFunction('__log', (...args) => {
-      stdout += args.map((arg) => context.dump(arg)).map(formatValue).join(' ') + '\n';
+      stdout = appendOutput(stdout, args.map((arg) => context.dump(arg)).map(formatValue).join(' ') + '\n');
     });
     const error = context.newFunction('__error', (...args) => {
-      stderr += args.map((arg) => context.dump(arg)).map(formatValue).join(' ') + '\n';
+      stderr = appendOutput(stderr, args.map((arg) => context.dump(arg)).map(formatValue).join(' ') + '\n');
     });
     context.setProp(context.global, '__log', log);
     context.setProp(context.global, '__error', error);
@@ -122,12 +130,12 @@ async function runJavaScript(code: string, stdin: string, timeoutMs: number): Pr
     if (result.error) {
       const dumped = context.dump(result.error);
       result.error.dispose();
-      stderr += formatValue(dumped) + '\n';
+      stderr = appendOutput(stderr, formatValue(dumped) + '\n');
     } else {
       result.value.dispose();
     }
   } catch (caught) {
-    stderr += (caught instanceof Error ? caught.message : String(caught)) + '\n';
+    stderr = appendOutput(stderr, (caught instanceof Error ? caught.message : String(caught)) + '\n');
   } finally {
     context.dispose();
     runtime.dispose();
