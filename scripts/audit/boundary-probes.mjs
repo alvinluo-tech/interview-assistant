@@ -8,7 +8,7 @@ const results=[];
 const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 function load(file,overrides={},extra={}) {
   return evaluateFixture(file,{exports:{},console:{warn(){},log(){}},Date,TextDecoder,TextEncoder,Blob,Response,URL,URLSearchParams,AbortController,DOMException,Int16Array,Uint8Array,Float32Array,setTimeout,clearTimeout,
-    require:name=>Object.hasOwn(overrides,name)?overrides[name]:name==='./codeRunner'?{verifyCode:async()=>({verdict:'unverified',runner:'',passed:0,total:0,outcomes:[]}),runnerSupports:()=>false}:load(path.resolve(path.dirname(file),name.replace(/\.js$/,'')+'.ts'),overrides,extra),...extra});
+    require:name=>Object.hasOwn(overrides,name)?overrides[name]:name==='./codeRunner'?{verifyCode:async()=>({verdict:'unverified',runner:'',passed:0,total:0,outcomes:[]}),judgedSamples:list=>list,runnerSupports:()=>false}:load(path.resolve(path.dirname(file),name.replace(/\.js$/,'')+'.ts'),overrides,extra),...extra});
 }
 async function probe(id,invariant,run) {
   try {const evidence=await run();results.push({id,invariant,...evidence});console.log(`${evidence.verdict.toUpperCase()} ${id}: ${JSON.stringify(evidence.observed)}`);}

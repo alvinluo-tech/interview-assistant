@@ -11,7 +11,7 @@ import {assembleExamContext} from './aiContext';
 import type {AiRequestTrace} from './aiTaskPolicy';
 import { extractCodeBlock, detectLanguage, detectRunMode, parseSamples, type RunMode } from './codeQuestion';
 import { buildScaffold } from './codeScaffold';
-import { verifyCode, type CodeVerdict } from './codeRunner';
+import { verifyCode, judgedSamples, type CodeVerdict } from './codeRunner';
 
 export const EXAM_MODES = {
   instant: {
@@ -72,6 +72,10 @@ export interface SolverTurn {
   codeLanguage?: string;
   codeMode?: RunMode;
   sampleCount?: number;
+  /** 「按样例修正」已用轮数（硬上限 FIX_MAX_ROUNDS，防止为过样例反复重写） */
+  fixRound?: number;
+  /** 修正前的原答案，供「恢复上一版」 */
+  previousBody?: string;
 }
 
 export interface SolverState {
@@ -183,7 +187,7 @@ export function prepareExamRun(runId:string, goalId:string|null,interviewSession
   setState({sessionId:null,goalId,interviewSessionId,selectedTurnId:undefined,mode:examModeInfo(getSetting(modeSettingKey(),'quick')).key as ExamModeKey,
     phase:'idle',turns:[],pendingScreenshots:[],activeTurnId:null,elapsedSec:0,statusText:'',errorMessage:null});
   const saved=readData<import('./backend').ExamSessionRecord[]>('examSessions',[]).find(session=>session.status==='ACTIVE' && (interviewSessionId ? session.interviewSessionId===interviewSessionId : !!resumeSessionId && session.id===resumeSessionId && !session.interviewSessionId));
-  if(saved){const pending=unsavedTurns.get(saved.id);const turns=pending||saved.questions.map(question=>({...question,body:question.answer,reasoning:'',reasoningDone:true,reasoningDurationMs:0,followUpOptions:[]}));
+  if(saved){const pending=unsavedTurns.get(saved.id);const turns=pending||saved.questions.map(question=>({...question,body:question.answer,verification:sanitizeVerdict(question.verification),reasoning:'',reasoningDone:true,reasoningDurationMs:0,followUpOptions:[]}));
     setState({sessionId:saved.id,turns,selectedTurnId:turns[turns.length-1]?.id,...(pending?{phase:'error' as const,errorMessage:t('上次未保存内容已恢复，请重试保存后再关闭。')}:{})});}
   else if(resumeSessionId) setState({phase:'error',errorMessage:t('未找到可恢复的笔试记录，请返回工作台重新尝试。')});
 }
@@ -239,6 +243,8 @@ async function persistTurns() {
       questionText: t.questionText || (t.screenshotRefs?.length ? '模型未单独返回题干，请查看原题截图。' : '模型未单独返回题干。'),
       screenshotRefs: t.screenshotRefs, imageSaveError: t.imageSaveError, parentTurnId: t.parentTurnId,
       completionStatus:t.completionStatus,request:t.request,
+      verification: t.verification, codeLanguage: t.codeLanguage, codeMode: t.codeMode,
+      sampleCount: t.sampleCount, fixRound: t.fixRound, previousBody: t.previousBody,
       answer: t.body,
       createdAt: t.createdAt,
     }));
@@ -640,6 +646,149 @@ export async function continueTurn(targetId?: string): Promise<void> {
   }
 }
 
+// ---------------- 按样例修正 ----------------
+
+/** 修正轮数硬上限：再多，模型为了过样例硬编码打表的概率会明显上升。 */
+const FIX_MAX_ROUNDS = 2;
+const FIX_DETAIL_CHARS = 400;
+
+/** data.json 可能来自旧版本或写到一半：形状不对就当没有验证结果，别让它把渲染带崩。 */
+function sanitizeVerdict(value: CodeVerdict | undefined): CodeVerdict | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  if (value.verdict !== 'passed' && value.verdict !== 'failed' && value.verdict !== 'unverified') return undefined;
+  const outcomes = Array.isArray(value.outcomes) ? value.outcomes.filter((outcome) => !!outcome && typeof outcome === 'object') : [];
+  return { ...value, outcomes };
+}
+
+function clipText(text: string, limit = FIX_DETAIL_CHARS): string {
+  const trimmed = text.trim();
+  return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
+}
+
+/** 把「哪几组样例没过」整理成喂回模型的证据：输入取自题面，期望/实际取自本地执行结果。 */
+function failingSampleDetails(turn: SolverTurn): string {
+  const verdict = turn.verification;
+  if (!verdict || verdict.verdict !== 'failed') return '';
+  // outcome.index 是「有期望输出的样例」里的序号，和 verifyCode 用的列表保持一致。
+  const samples = judgedSamples(parseSamples(turn.questionText ?? ''));
+  const blocks: string[] = [];
+  for (const outcome of verdict.outcomes) {
+    if (outcome.ok) continue;
+    const input = (samples[outcome.index]?.input ?? '').trim();
+    const parts = [`样例 ${outcome.index + 1}`];
+    if (input) parts.push(`输入：\n${clipText(input)}`);
+    parts.push(`期望输出：\n${clipText(outcome.expected)}`);
+    parts.push(`实际输出：\n${clipText(outcome.actual)}`);
+    if ((outcome.error ?? '').trim()) parts.push(`运行报错：\n${clipText(outcome.error ?? '')}`);
+    blocks.push(parts.join('\n'));
+    if (blocks.length >= 3) break;
+  }
+  return blocks.join('\n\n');
+}
+
+/**
+ * 按样例修正：把失败样例喂回去重写代码，最多 FIX_MAX_ROUNDS 轮。
+ * 触发点只有两个：用户点「按样例修正」，或执行器真的报错时的静默重试（1 轮）。
+ */
+export async function fixTurnWithSamples(targetId?: string, options: { silent?: boolean } = {}): Promise<void> {
+  if (startingSolve || requestController || ['capturing', 'thinking', 'streaming', 'uploading'].includes(state.phase)) return;
+  const target = state.turns.find((turn) => turn.id === (targetId || state.selectedTurnId)) || state.turns[state.turns.length - 1];
+  if (!target || !target.body.trim()) return;
+  if (target.verification?.verdict !== 'failed') return;
+  const round = (target.fixRound ?? 0) + 1;
+  if (round > FIX_MAX_ROUNDS) return;
+  const block = extractCodeBlock(target.body);
+  const details = failingSampleDetails(target);
+  if (!block || !details) return;
+  const current = ++generation;
+  const controller = new AbortController();
+  requestController = controller;
+  const base = target.body;
+  const question = (target.questionText || '').trim();
+  const prompt = [
+    question ? `原题：\n${clipText(question, 2000)}` : '',
+    `你上一次给出的代码：\n\`\`\`${block.language}\n${clipText(block.code, 3000)}\n\`\`\``,
+    `在本地执行后，下面这些题面样例没有通过：\n\n${details}`,
+    '请修正代码让这些样例真正通过。不要改题面，不要为了过样例硬编码特判（不要按样例 if、不要打表），保持原来的算法思路。只输出一个 <exam-answer>…</exam-answer> 区块：修正后的完整答案，代码为主，必要的说明保持简短。',
+  ].filter(Boolean).join('\n\n');
+  setState({
+    activeTurnId: target.id,
+    // 静默重试不抢界面：phase 保持原状，只有正文自己变，用户不会看到「AI 输出中」跳一下。
+    phase: options.silent ? state.phase : 'streaming',
+    statusText: options.silent ? '' : t('按样例修正中…'),
+    errorMessage: null,
+  });
+  ensureTicker();
+  let raw = '';
+  try {
+    const answer = await chatWithImages(prompt, [], {
+      task: 'exam-followup',
+      signal: controller.signal,
+      system: EXAM_SYSTEM_PROMPT,
+      onTrace: (request) => {
+        if (current === generation) setState({ turns: state.turns.map((turn) => (turn.id === target.id ? { ...turn, request, completionStatus: request.completionStatus } : turn)) });
+      },
+      onDelta: (delta) => {
+        if (current !== generation) return;
+        raw += delta;
+        const streamed = splitExamResponse(raw).answer;
+        setState({ turns: state.turns.map((turn) => (turn.id === target.id && streamed ? { ...turn, body: streamed } : turn)) });
+        scheduleTurnCheckpoint(current);
+      },
+    });
+    if (current !== generation) return;
+    const final = (answer || raw).trim();
+    const parsed = splitExamResponse(final);
+    // 模型有时会照抄 <exam-question>：只有它确实给了答案区块时才用它，否则把整段当答案。
+    const body = (parsed.answer || (parsed.questionText ? '' : final)).trim() || base;
+    setState({
+      phase: 'done',
+      statusText: '',
+      activeTurnId: null,
+      turns: state.turns.map((turn) => turn.id === target.id
+        ? { ...turn, body, previousBody: turn.previousBody ?? base, fixRound: round, completionStatus: 'complete', reasoningDone: true }
+        : turn),
+    });
+    await persistTurns();
+    void verifyTurnCode(target.id, body, target.questionText, current, { autoFix: true });
+  } catch (e) {
+    if (current !== generation) return;
+    const err = e as Error;
+    if (err?.name === 'AbortError') {
+      setState({ phase: 'idle', statusText: '', activeTurnId: null });
+      return;
+    }
+    setState({
+      phase: 'error',
+      statusText: '',
+      errorMessage: String(err?.message ?? e),
+      activeTurnId: null,
+      turns: state.turns.map((turn) => (turn.id === target.id ? { ...turn, completionStatus: 'failed' } : turn)),
+    });
+    await persistRecovery(current);
+  } finally {
+    if (current === generation) {
+      if (checkpointTimer !== null) { window.clearTimeout(checkpointTimer); checkpointTimer = null; }
+      requestController = null;
+    }
+  }
+}
+
+/** 恢复上一版：把修正前的答案放回去，并重新验证一次。 */
+export async function restorePreviousAnswer(targetId?: string): Promise<void> {
+  if (startingSolve || requestController) return;
+  const target = state.turns.find((turn) => turn.id === (targetId || state.selectedTurnId)) || state.turns[state.turns.length - 1];
+  if (!target || !target.previousBody) return;
+  const previous = target.previousBody;
+  setState({
+    turns: state.turns.map((turn) => turn.id === target.id
+      ? { ...turn, body: previous, previousBody: undefined, fixRound: 0, verification: undefined, completionStatus: 'complete' }
+      : turn),
+  });
+  await persistTurns();
+  void verifyTurnCode(target.id, previous, target.questionText, generation);
+}
+
 /** 多页收集态：发送 */
 export function hasPendingPages(): boolean {
   return state.pendingScreenshots.length > 0;
@@ -709,7 +858,7 @@ export function extractLastCodeBlock(text: string): string | null {
  * 代码题本地验证：解析题面样例 → 生成可运行文件 → 在本地 WASM 执行器里跑 → 把结论写回 turn。
  * 全程异步：失败只影响这一行标注，不影响答案本身，也不会把整场笔试置为出错。
  */
-async function verifyTurnCode(turnId: string, answer: string, questionText: string | undefined, generationAtStart: number) {
+async function verifyTurnCode(turnId: string, answer: string, questionText: string | undefined, generationAtStart: number, options: { autoFix?: boolean } = {}) {
   const block = extractCodeBlock(answer);
   if (!block) return;
   const language = detectLanguage(block, questionText ?? '');
@@ -727,6 +876,14 @@ async function verifyTurnCode(turnId: string, answer: string, questionText: stri
   if (generationAtStart !== generation) return;
   setState({ turns: state.turns.map((turn) => (turn.id === turnId ? { ...turn, verification: verdict, codeLanguage: language, codeMode: mode, sampleCount: samples.length } : turn)) });
   void persistTurns();
+  // 只有「执行器真的报错」（语法错/抛异常）才值得静默重试一轮：这类失败一定是代码问题，
+  // 而不是判定口径问题；输出格式差异留给用户点「按样例修正」决定。
+  const crashed = verdict.verdict === 'failed' && verdict.outcomes.some((outcome) => !outcome.ok && (outcome.error ?? '').trim());
+  const local = language === 'python' || language === 'javascript';
+  const fresh = (state.turns.find((turn) => turn.id === turnId)?.fixRound ?? 0) === 0;
+  if (options.autoFix !== false && crashed && local && fresh) {
+    window.setTimeout(() => { void fixTurnWithSamples(turnId, { silent: true }); }, 0);
+  }
 }
 
 export function stripMarkdown(text: string): string {

@@ -27,6 +27,8 @@ import {
   endExamSession,
   followUp,
   continueTurn,
+  fixTurnWithSamples,
+  restorePreviousAnswer,
   prepareExamRun,
   extractLastCodeBlock,
   scaffoldForTurn,
@@ -134,8 +136,33 @@ function verificationLabel(verdict: CodeVerdict, language?: string): string {
   return t('未执行验证：{note}', { note: reason });
 }
 
-function useSolverState(): SolverState {
-  const [, force] = useReducer((x: number) => x + 1, 0);
+/** 把一段输出压成一行，方便在浮窗里并排显示「期望 / 实际」。 */
+function shortValue(value: string, limit = 40): string {
+  const flat = value.replace(/\s+/g, ' ').trim();
+  if (!flat) return '∅';
+  return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
+}
+
+/** 失败时把每组的期望/实际露出来：不露，用户没法判断是代码错还是判定口径错。 */
+function VerificationDetails({ verdict }: { verdict: CodeVerdict }) {
+  if (verdict.verdict !== 'failed') return null;
+  const failing = verdict.outcomes.filter((outcome) => !outcome.ok).slice(0, 3);
+  if (!failing.length) return null;
+  return (
+    <div className="ov-text-3 mt-0.5 space-y-0.5 text-[10px]">
+      {failing.map((outcome) => (
+        <div key={outcome.index}>
+          <span className="opacity-70">{t('第 {index} 组', { index: outcome.index + 1 })}</span>
+          <span> · {t('期望 {value}', { value: shortValue(outcome.expected) })}</span>
+          <span> · {t('实际 {value}', { value: shortValue(outcome.actual) })}</span>
+          {outcome.error?.trim() ? <div>{t('报错：{error}', { error: shortValue(outcome.error) })}</div> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function useSolverState(): SolverState {  const [, force] = useReducer((x: number) => x + 1, 0);
   useEffect(() => subscribeSolver(force), [force]);
   return getSolverState();
 }
@@ -171,6 +198,8 @@ function ExamShell({
   const selected=solver.turns.find(turn=>turn.id===solver.selectedTurnId) || solver.turns[solver.turns.length-1];
   // 被输出上限截断且已有正文：给「继续生成」把剩下的写完，而不是让用户自己追问。
   const truncated = selected?.completionStatus === 'truncated' && Boolean(selected?.body.trim());
+  // 样例没全过：让用户决定要不要按失败样例重写（最多两轮，硬上限）。
+  const fixable = selected?.verification?.verdict === 'failed' && (selected?.fixRound ?? 0) < 2;
   const copy = () => copyAnswerToClipboard(selected?.body ?? '');
 
   const doSolve = async () => {
@@ -251,6 +280,7 @@ function ExamShell({
                   <Md text={turn.body.replace(/^> .*\n\n/, '')} />
                   <GenerationDetails status={turn.completionStatus} request={turn.request}/>
                   {turn.verification && <div className="ov-text-3 mt-1 text-[10px]" role="status">{verificationLabel(turn.verification, turn.codeLanguage)}</div>}
+                  {turn.verification && <VerificationDetails verdict={turn.verification} />}
                   {turn.imageSaveError && <div role="alert" className="ov-text-2">{t('原题截图未保存，请保留题目并在需要时重新截图。')}</div>}
                 </div>
               </div>
@@ -278,6 +308,22 @@ function ExamShell({
               hoverMs={HOVER_MS.followUp}
               onTrigger={() => void continueTurn(selected?.id)}
               label={t('继续生成')}
+            />
+          )}
+          {fixable && (
+            <DwellChip
+              id="fix-samples"
+              hoverMs={HOVER_MS.followUp}
+              onTrigger={() => void fixTurnWithSamples(selected?.id)}
+              label={t('按样例修正')}
+            />
+          )}
+          {selected?.previousBody && (
+            <DwellChip
+              id="restore-answer"
+              hoverMs={HOVER_MS.followUp}
+              onTrigger={() => void restorePreviousAnswer(selected?.id)}
+              label={t('恢复上一版')}
             />
           )}
           {showCopyCode && (

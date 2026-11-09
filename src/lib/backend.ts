@@ -195,6 +195,15 @@ export interface ExamQuestion {
   screenshotRefs?: string[];
   imageSaveError?: string;
   parentTurnId?: string;
+  /** 代码题的本地验证结论：重启后仍要能看到「哪一组样例没通过」 */
+  verification?: import('./codeRunner').CodeVerdict;
+  codeLanguage?: string;
+  codeMode?: import('./codeQuestion').RunMode;
+  sampleCount?: number;
+  /** 「按样例修正」已经用掉的轮数（上限 2，含 1 轮静默自动重试） */
+  fixRound?: number;
+  /** 修正前的原答案，用于「恢复上一版」 */
+  previousBody?: string;
   id: string;
   questionText: string;
   answer: string;

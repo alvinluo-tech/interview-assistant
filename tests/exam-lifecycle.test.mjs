@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { evaluateFixture, evaluateModuleFixture } from './compile-fixture.mjs';
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
-function engine({ completionFails = false, imageSaveFails = false, captureFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[],writeFailure={value:false} } = {}) {
+function engine({ completionFails = false, imageSaveFails = false, captureFails = false, deferred = true, deferredSession = false, fixedTime = false, deferredCapture = false, settings = {}, records=[],writeFailure={value:false}, sampleFix = null } = {}) {
   let resolveRequest, rejectRequest, options, requests = 0, sentImages = [], captures = 0;
   let resolveSession, resolveCapture, created = 0;
   const calls = [], saved = [],prompts=[],createdInputs=[];
@@ -31,12 +31,19 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
       };
       if (name === './ai') return { EXAM_SYSTEM_PROMPT: '', buildExamUserPrompt: () => 'test', chatWithImages: async (_prompt, _images, opts) => {
         requests++;prompts.push(_prompt); sentImages.push(_images); options = opts;
+        const text = sampleFix ? (requests === 1 ? sampleFix.answer : (sampleFix.fixAnswer ?? sampleFix.answer)) : 'answer';
         if (deferred) return new Promise((resolve,reject) => { resolveRequest = resolve;rejectRequest=reject; });
-        opts.onDelta?.('answer'); return 'answer';
+        opts.onDelta?.(text); return text;
       } };
-      if (name === './codeQuestion') return { extractCodeBlock: () => null, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [] };
+      if (name === './codeQuestion') return sampleFix
+        ? { extractCodeBlock: text => { const m = /```[a-zA-Z]*\n([\s\S]*?)```/.exec(text); return m ? { language: 'python', code: m[1] } : null; }, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [{ input: '1', output: '2' }] }
+        : { extractCodeBlock: () => null, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [] };
       if (name === './codeScaffold') return { buildScaffold: () => ({ filename: 'solution.py', content: '', runnable: false }) };
-      if (name === './codeRunner') return { verifyCode: async () => ({ verdict: 'unverified', runner: '', passed: 0, total: 0, outcomes: [] }) };      throw new Error(`Unexpected dependency ${name}`);
+      if (name === './codeRunner') return { judgedSamples: list => list.filter(sample => sample.output.trim()).slice(0, 5), verifyCode: async () => {
+        if (!sampleFix) return { verdict: 'unverified', runner: '', passed: 0, total: 0, outcomes: [] };
+        return sampleFix.verdicts.shift() ?? { verdict: 'failed', runner: 'python', passed: 0, total: 1, outcomes: [{ index: 0, ok: false, expected: '2', actual: '1', timedOut: false }] };
+      } };
+      throw new Error(`Unexpected dependency ${name}`);
     },
   });
   return { api, calls, saved, settings, timers,prompts,createdInputs,sentImages, captures:()=>captures, runCheckpoints:()=>{for(const fn of [...checkpoints.values()])fn();checkpoints.clear();}, options: () => options, requests: () => requests, resolve: text => resolveRequest?.(text),
@@ -277,4 +284,75 @@ test('a truncated answer is continued inside the same turn without resending scr
   assert.equal(done.turns[0].body,'第一段，第二段');
   assert.equal(done.turns[0].completionStatus,'complete');
   assert.equal(done.phase,'done');
+});
+
+test('a failed sample run is fixed from the sample details without resending screenshots', async () => {
+  const h = engine({
+    deferred: false,
+    sampleFix: {
+      answer: '```python\nprint(1)\n```',
+      fixAnswer: '```python\nprint(2)\n```',
+      verdicts: [
+        { verdict: 'failed', runner: 'python', passed: 0, total: 1, outcomes: [{ index: 0, ok: false, expected: '2', actual: '1', timedOut: false }] },
+        { verdict: 'passed', runner: 'python', passed: 1, total: 1, outcomes: [{ index: 0, ok: true, expected: '2', actual: '2', timedOut: false }] },
+      ],
+    },
+  });
+  await h.api.solve();
+  await flush();
+  const failed = h.api.getSolverState();
+  assert.equal(failed.turns[0].verification.verdict, 'failed');
+
+  await h.api.fixTurnWithSamples();
+  await flush();
+  assert.equal(h.requests(), 2, 'the fix is one extra text-only request');
+  assert.deepEqual(Array.from(h.sentImages[1]), [], 'fix does not resend screenshots');
+  assert.match(h.prompts[1], /期望输出/);
+  assert.match(h.prompts[1], /实际输出/);
+  const fixed = h.api.getSolverState();
+  assert.match(fixed.turns[0].body, /print\(2\)/);
+  assert.equal(fixed.turns[0].fixRound, 1);
+  assert.match(fixed.turns[0].previousBody, /print\(1\)/, 'the previous answer stays restorable');
+  assert.equal(fixed.turns[0].verification.verdict, 'passed', 'the fixed code is verified again');
+  const saved = h.saved[h.saved.length - 1].questions[0];
+  assert.equal(saved.verification.verdict, 'passed', 'verification survives a restart');
+  assert.equal(saved.fixRound, 1);
+});
+
+test('a crashing sample run retries silently once without the user clicking', async () => {
+  const h = engine({
+    deferred: false,
+    sampleFix: {
+      answer: '```python\nprint(1)\n```',
+      fixAnswer: '```python\nprint(2)\n```',
+      verdicts: [
+        { verdict: 'failed', runner: 'python', passed: 0, total: 1, outcomes: [{ index: 0, ok: false, expected: '2', actual: '', timedOut: false, error: 'Traceback: boom' }] },
+        { verdict: 'passed', runner: 'python', passed: 1, total: 1, outcomes: [{ index: 0, ok: true, expected: '2', actual: '2', timedOut: false }] },
+      ],
+    },
+  });
+  await h.api.solve();
+  await flush();
+  assert.equal(h.requests(), 1, 'the first answer is not retried before verification runs');
+  h.runCheckpoints();
+  await flush();
+  assert.equal(h.requests(), 2, 'a real execution error retries once on its own');
+  const state = h.api.getSolverState();
+  assert.equal(state.turns[0].fixRound, 1);
+  assert.equal(state.turns[0].verification.verdict, 'passed');
+});
+
+test('a failed verdict without an execution error waits for the user', async () => {
+  const h = engine({
+    deferred: false,
+    sampleFix: {
+      answer: '```python\nprint(1)\n```',
+      verdicts: [{ verdict: 'failed', runner: 'python', passed: 0, total: 1, outcomes: [{ index: 0, ok: false, expected: '2', actual: '1', timedOut: false }] }],
+    },
+  });
+  await h.api.solve();
+  await flush();
+  h.runCheckpoints();
+  await flush();
+  assert.equal(h.requests(), 1, 'a wrong answer is not rewritten behind the user back');
 });
