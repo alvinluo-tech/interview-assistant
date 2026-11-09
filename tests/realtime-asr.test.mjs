@@ -226,6 +226,16 @@ test('an unresponsive PCM send has a bounded timeout instead of hanging finish f
   assert.match(result, /中断|超时|断开/);
 });
 
+test('a dropped connection fails finish instead of returning half a transcript',async()=>{
+  const f=fixture();const capture=await f.open();
+  try {
+    f.emit('result-generated',{output:{sentence:{sentence_id:1,begin_time:0,text:'讲到一半',sentence_end:true}}});
+    f.raw({type:'Close',data:{}});
+    await new Promise(resolve=>setTimeout(resolve,10));
+    await assert.rejects(capture.finish(),error=>error.partialText==='讲到一半'&&/断开/.test(error.message));
+  } finally {await capture.close();}
+});
+
 test('long-session replay preserves 600 final sentences and recovers after repeated stable intervals', async()=>{
   let now=1000;
   const f=fixture({overrides:{Date:class extends Date{static now(){return now;}},setTimeout:(fn,ms)=>setTimeout(fn,ms>=500&&ms<3000?1:ms)}});

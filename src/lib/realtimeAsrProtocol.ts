@@ -199,7 +199,13 @@ export async function openRealtimeAsr(config: RealtimeConfig, connect: RealtimeC
       return true;
     },
     async finish() {
-      if (closed || !socket) return finalTexts.join(' ');
+      // 断线时把半截转写当完整结果返回，上层会静默丢掉后半句话；宁可报错并带上已识别部分。
+      if (closed || !socket) {
+        if (config.signal?.aborted) throw new DOMException(t('实时识别已取消'), 'AbortError');
+        const error = new Error(t('语音连接已断开，本次识别可能不完整，请重说。')) as Error & { partialText?: string };
+        error.partialText = finalTexts.join(' ');
+        throw error;
+      }
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         const deadline = Date.now() + 8000;

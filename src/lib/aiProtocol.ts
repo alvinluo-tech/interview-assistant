@@ -180,7 +180,7 @@ export async function consumeChatResult(response: Response, onDelta?: (text: str
   } else {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '',eventData:string[]=[];
+  let buffer = '',eventData:string[]=[],badData=0;
   const parseLine = (line: string) => {
     if(line.startsWith('data:'))eventData.push(line.slice(5).trimStart());
     else if(line!=='' || !eventData.length)return;
@@ -189,7 +189,12 @@ export async function consumeChatResult(response: Response, onDelta?: (text: str
     if(!data)return;
     if (data === '[DONE]') { ended = true; return; }
     let json;
-    try { json = JSON.parse(data); } catch { throw new Error(t('接口返回了无效的流式数据')); }
+    try { json = JSON.parse(data); } catch {
+      // 心跳帧、被截断的注释之类的单条坏数据不该让整条流作废；连续坏三帧才判定协议异常。
+      if (++badData >= 3) throw new Error(t('接口返回了无效的流式数据'));
+      return;
+    }
+    badData = 0;
     consume(json);
   };
   const abort=()=>{void reader.cancel().catch(()=>{});};

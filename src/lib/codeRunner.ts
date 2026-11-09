@@ -188,7 +188,17 @@ function pythonWorker(): Worker {
   return worker;
 }
 
+let pyChain: Promise<unknown> = Promise.resolve();
+
 function runPython(code: string, stdin: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
+  // Pyodide 的 eval 是同步的，worker 里的消息本来就排队；宿主侧也排成一条队，
+  // 否则一次超时 terminate 会把另一轮校验一起 reject 成「执行器错误」，把对的答案判成未验证。
+  const task = pyChain.then(() => runPythonOnce(code, stdin, timeoutMs));
+  pyChain = task.then(() => undefined, () => undefined);
+  return task;
+}
+
+function runPythonOnce(code: string, stdin: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
   const worker = pythonWorker();
   const id = ++pySeq;
   return new Promise((resolve, reject) => {

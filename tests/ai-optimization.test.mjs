@@ -110,6 +110,14 @@ test('stream failure preserves partial content and abort cancels a pending reade
   controller.abort();await assert.rejects(pending);assert.equal(cancelled,true);
 });
 
+test('a stray non-JSON event does not discard the rest of the stream, but three in a row still fail',async()=>{
+  const {consumeChatResult}=load('src/lib/aiProtocol.ts');
+  const body='data: {"choices":[{"delta":{"content":"前半"}}]}\n\ndata: ping\n\ndata: {"choices":[{"delta":{"content":"后半"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+  const result=await consumeChatResult(new Response(body,{headers:{'content-type':'text/event-stream'}}));
+  assert.equal(result.text,'前半后半');assert.equal(result.completionStatus,'complete');
+  await assert.rejects(consumeChatResult(new Response('data: oops1\n\ndata: oops2\n\ndata: oops3\n\n',{headers:{'content-type':'text/event-stream'}})),/无效的流式数据/);
+});
+
 test('refusal is not treated as a successful completion',async()=>{
   const {consumeChatResult}=load('src/lib/aiProtocol.ts');
   await assert.rejects(consumeChatResult(new Response(JSON.stringify({choices:[{message:{refusal:'无法完成'},finish_reason:'stop'}]}),{headers:{'content-type':'application/json'}})),error=>error.completionStatus==='refused');
