@@ -315,6 +315,8 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const [q, setQ] = useState('');
   const [a, setA] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [entrySaving, setEntrySaving] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [preparationResumes]=useData<Resume[]>('resumes',[]);
   const [preparationGoals]=useData<Goal[]>('goals',[]);
@@ -335,9 +337,14 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
   };
   // 「完成」= 保存并关闭：有未保存改动时先落盘，保存失败就留在编辑器里，不能静默丢弃。
   const finish = async () => { if (!dirty || await save()) onClose(); };
+  // Esc 和点遮罩也走同一道门：有改动先问一句，别让输入静默消失。
+  const requestClose = () => {
+    if (dirty && !window.confirm(t('有未保存的改动，确定放弃？'))) return;
+    onClose();
+  };
 
   return (
-    <Dialog open onClose={onClose} className="max-w-2xl">
+    <Dialog open onClose={requestClose} className="max-w-2xl">
       <DialogTitle>{t('编辑面试资料')}</DialogTitle>
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium text-muted-foreground">
@@ -368,7 +375,16 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
               <Button size="sm" variant="ghost" onClick={() => setGenOpen(true)}>
                 {t('AI 出题')}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditId(null);
+                  setQ('');
+                  setA('');
+                  setAddOpen(true);
+                }}
+              >
                 <Plus size={12} />
                 {t('添加')}
               </Button>
@@ -395,6 +411,7 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
                         type="button"
                         className="text-[11px] text-primary hover:underline"
                         onClick={() => {
+                          setEditId(e.id);
                           setQ(e.question);
                           setA(e.answer);
                           setAddOpen(true);
@@ -429,8 +446,8 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
 
       {/* 添加/编辑问答 */}
       {addOpen && (
-        <Dialog open onClose={() => setAddOpen(false)}>
-          <DialogTitle>{q ? t('编辑问答') : t('添加问答')}</DialogTitle>
+        <Dialog open onClose={() => { if (!entrySaving) setAddOpen(false); }}>
+          <DialogTitle>{editId ? t('编辑问答') : t('添加问答')}</DialogTitle>
           <DialogDesc>{t('面试官问到相似问题时，AI 会优先照你预设的答案回答。')}</DialogDesc>
           <div className="flex flex-col gap-3">
             <label className="text-xs font-medium text-muted-foreground">
@@ -458,22 +475,27 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
             </label>
           </div>
           <div className="mt-4 flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setAddOpen(false)}>
+            <Button size="sm" variant="outline" disabled={entrySaving} onClick={() => setAddOpen(false)}>
               {t('取消')}
             </Button>
             <Button
               size="sm"
-              disabled={!q.trim() || !a.trim()}
+              disabled={!q.trim() || !a.trim() || entrySaving}
               onClick={async () => {
+                if (entrySaving) return;
+                setEntrySaving(true);
                 try {
-                await saveEntry(id, { question: q.trim(), answer: a.trim() });
+                // 编辑必须带回原条目 id，否则会被当成新增，原文案重复一份。
+                await saveEntry(id, { id: editId ?? undefined, question: q.trim(), answer: a.trim() });
                 setQ('');
                 setA('');
+                setEditId(null);
                 setAddOpen(false);
                 }catch(error){showToast({type:'error',title:t('问答保存失败，输入已保留'),description:String((error as Error).message||error)});}
+                finally{setEntrySaving(false);}
               }}
             >
-              {t('保存')}
+              {entrySaving ? t('正在保存…') : t('保存')}
             </Button>
           </div>
         </Dialog>
