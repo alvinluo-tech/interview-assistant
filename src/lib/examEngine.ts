@@ -430,7 +430,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       task:'exam-solve',
       onTrace:request=>{noteTraceLatency(request);if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
       signal: controller.signal,
-      system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'简洁输出结论，避免展开长篇解释。':state.mode==='programming'?'给出完整可运行代码、边界条件与时间空间复杂度。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路，保持简明。'),
+      system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'结论优先：先用一两句话把思路和答案说清，再给必要步骤，避免长篇铺垫。':state.mode==='programming'?'先按「题意→关键观察→做法与理由→复杂度」讲清思路（3 到 5 句），再给完整可运行代码；代码里对关键分支、边界与易错处写一句注释。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路：思路讲 3 到 5 句，说明为什么这么做，再给结论。'),
       onReasoning: (thought) => {
         if (current !== generation) return;
         liveReasoning += thought;
