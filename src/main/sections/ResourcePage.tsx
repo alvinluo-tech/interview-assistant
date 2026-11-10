@@ -187,7 +187,7 @@ export function ResourcePage() {
                   <div className="flex items-center gap-1.5 text-sm">
                     <span className="truncate">{m.name}</span>
                     <Badge variant="secondary">
-                      {m.source === 'official' ? t('网页抓取') : m.source === 'ai' ? t('AI 生成') : m.source === 'file' ? t('文件导入') : t('自建')}
+                      {m.source === 'official' ? t('官方') : m.source === 'ai' ? t('AI 生成') : m.source === 'file' ? t('文件导入') : t('自建')}
                     </Badge>
                   </div>
                   <div className="text-[11px] text-muted-foreground">

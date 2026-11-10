@@ -187,9 +187,9 @@ docs/            设计说明、ADR 与实现记录
 ## 常见问题
 
 <details>
-<summary>必须用 OpenAI 原生接口吗？</summary>
+<summary>必须用 OpenAI 官方接口吗？</summary>
 
-不需要。任何兼容 OpenAI Chat Completions 协议的服务都能接：OpenAI 原生接口、DeepSeek、通义千问、Moonshot、自建网关、本地 Ollama 都可以，不同用途还可以配不同供应商。
+不需要。任何兼容 OpenAI Chat Completions 协议的服务都能接：官方、DeepSeek、通义千问、Moonshot、自建网关、本地 Ollama 都可以，不同用途还可以配不同供应商。
 </details>
 
 <details>

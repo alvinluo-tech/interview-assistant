@@ -22,4 +22,4 @@ MiMo `mimo-*-asr` 模型自动使用 `/chat/completions`，输入为 Base64 WAV 
 
 预览与整句校正会增加计费音频量，具体取决于语速、停顿、边界重叠和请求完成时间。可切换「停顿后整句识别」减少请求。纯静音不发送转写；暂停和结束会取消在途预览及未完成的整句识别。
 
-这是基于文件接口的分段识别，不是持续上传 PCM 的原生 WebSocket ASR；约 2.5 秒是分段间隔，不包含网络和模型识别延迟。MiMo 协议文档：[语音识别 API](https://mimo.mi.com/docs/zh-CN/api/audio/Speech-Recognition)。
+这是基于文件接口的分段识别，不是持续上传 PCM 的原生 WebSocket ASR；约 2.5 秒是分段间隔，不包含网络和模型识别延迟。MiMo 官方协议：[语音识别 API](https://mimo.mi.com/docs/zh-CN/api/audio/Speech-Recognition)。

@@ -19,7 +19,7 @@
 
 ### 输出长度
 
-DeepSeek V4 文档（Chat Completions）：`thinking` 省略时默认开启思考；`max_tokens` 是本次生成的总 token 上限；`completion_tokens_details.reasoning_tokens` 单独统计思考用量。旧实现给 `interview-answer` 的上限只有 1800，复杂问题会把预算全部消耗在思维链上，以 `finish_reason=length` 结束，正文可能为空。
+DeepSeek V4 官方文档（Chat Completions）：`thinking` 省略时默认开启思考；`max_tokens` 是本次生成的总 token 上限；`completion_tokens_details.reasoning_tokens` 单独统计思考用量。旧实现给 `interview-answer` 的上限只有 1800，复杂问题会把预算全部消耗在思维链上，以 `finish_reason=length` 结束，正文可能为空。
 
 解析器此前只累计 `content`，完全忽略 `reasoning_content`，因此无法区分「思考吃满预算」和「正文写到一半被截断」，两种情况都只能显示同一句「已保留生成内容」。
 
@@ -79,7 +79,7 @@ DeepSeek V4 文档（Chat Completions）：`thinking` 省略时默认开启思�
 
 ## 备注
 
-截图识别未单独配置视觉模型时会回退到对话模型（`resolveAiRoute` 的 vision → chat 回退）。当前对话模型 `deepseek-flash` 支持图片输入，因此模型回复的「截图里没有识别到完整题目，请调整后重试」是对画面内容的判断，不是返回按钮或接口故障。
+截图识别未单独配置视觉模型时会回退到对话模型（`resolveAiRoute` 的 vision → chat 回退）。当前对话模型 `deepseek-flash` 官方支持图片输入，因此模型回复的「截图里没有识别到完整题目，请调整后重试」是对画面内容的判断，不是返回按钮或接口故障。
 
 ## 验证
 

@@ -23,7 +23,7 @@
 - 两秒上限同时统计队列和当前发送中的 PCM。单包超过两秒（输入异常）仍停止收音并提示重试；累计积压超过两秒时改为丢弃过期音频、重连实时连接，避免整场面试停止收音。没有通过扩大缓存或静默丢弃音频掩盖问题。
 - 保留断线提示、重连间隙不重放旧音频、发送超时和结束前排空队列等边界。
 
-参考：[阿里云 Fun-ASR-Realtime 说明](https://www.alibabacloud.com/help/en/model-studio/fun-asr-realtime-python-sdk)建议以约 100ms、1–16KB 的音频帧发送。这里的 3200 字节等于 16kHz PCM16 的 100ms。
+参考：[阿里云 Fun-ASR-Realtime 官方说明](https://www.alibabacloud.com/help/en/model-studio/fun-asr-realtime-python-sdk)建议以约 100ms、1–16KB 的音频帧发送。这里的 3200 字节等于 16kHz PCM16 的 100ms。
 
 ## 验证
 

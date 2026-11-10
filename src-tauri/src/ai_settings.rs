@@ -123,7 +123,7 @@ fn validate(config: &Value) -> Result<(), String> {
         if url.scheme() != "wss" || url.path() != "/api-ws/v1/inference" || url.query().is_some() || url.fragment().is_some()
             || !url.username().is_empty() || url.password().is_some() || url.port().is_some()
             || bailian_region(host).is_none() {
-            return Err("持续实时语音仅支持百炼北京或新加坡地域的 WSS 地址".into());
+            return Err("持续实时语音仅支持百炼北京或新加坡地域的官方 WSS 地址".into());
         }
     }
     if let Some(vocabulary) = config.get("realtimeVocabularyId") {
