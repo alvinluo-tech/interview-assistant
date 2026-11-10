@@ -8,9 +8,14 @@ use tauri::{AppHandle, Manager};
 #[tauri::command]
 pub fn cmd_read_recent_logs(app: AppHandle, limit: Option<usize>) -> Result<Vec<String>, String> {
     let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
-    // tauri-plugin-log 默认文件名 = productName
+    // tauri-plugin-log 默认文件名 = productName。产品改名后旧日志仍要能读，
+    // 所以按「当前名 → 历史名」依次找，谁存在用谁。
     let name = app.config().product_name.as_deref().unwrap_or(&app.package_info().name);
-    let path = dir.join(format!("{name}.log"));
+    let path = [name, "骆耀升老公酱面试助手", "面灵AI"]
+        .iter()
+        .map(|candidate| dir.join(format!("{candidate}.log")))
+        .find(|candidate| candidate.exists())
+        .unwrap_or_else(|| dir.join(format!("{name}.log")));
     // 日志可能有几十 MB：只读末尾一段，别把整个文件搬进内存、卡住同步 IPC 命令。
     const TAIL_BYTES: u64 = 256 * 1024;
     let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;

@@ -143,7 +143,7 @@ fn apply_identity(window: &Window, config: &Config) -> Result<(), String> {
         .iter()
         .find(|w| w.label == window.label())
         .map(|w| w.title.as_str())
-        .unwrap_or("骆耀升老公酱面试助手");
+        .unwrap_or("MianXu · 面序");
     window
         .set_title(if config.enabled {
             &config.window_title

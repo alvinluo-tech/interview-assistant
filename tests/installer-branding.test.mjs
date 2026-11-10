@@ -8,7 +8,7 @@ const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
 
 test('branded installer preserves upgrade identity and uses an explicit user installation policy', () => {
   assert.equal(config.identifier, 'com.luoyaosheng.mianxu');
-  assert.equal(config.productName, '骆耀升老公酱面试助手');
+  assert.equal(config.productName, 'Mianxu');
   assert.equal(config.bundle.windows?.nsis?.installMode, 'currentUser');
   assert.equal(config.bundle.windows.allowDowngrades, false);
   assert.deepEqual(config.bundle.windows.nsis.languages, ['SimpChinese', 'English']);

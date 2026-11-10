@@ -53,7 +53,7 @@ test('collect stages only installers and embedded app binaries and generates ver
   prepareRelease(root, 'v0.1.1');
   const target = path.join(root, 'src-tauri/target/x86_64-pc-windows-msvc/release');
   mkdirSync(path.join(target, 'bundle/nsis'), { recursive: true });
-  writeFileSync(path.join(target, 'bundle/nsis/骆耀升老公酱面试助手_0.1.1_x64-setup.exe'), 'MZfixture-installer');
+  writeFileSync(path.join(target, 'bundle/nsis/Mianxu_0.1.1_x64-setup.exe'), 'MZfixture-installer');
   writeFileSync(path.join(target, 'Mianxu.exe'), 'MZfixture-app');
   writeFileSync(path.join(target, 'private-test-data.json'), '{"dummy":"must not ship"}');
   const names = collectRelease(root, 'v0.1.1');
@@ -68,7 +68,7 @@ test('collect stages only installers and embedded app binaries and generates ver
   assert.throws(() => collectRelease(root, 'v0.1.1'), /must be empty/);
 });
 
-function macFixture(t, triple, cpu, { binary = 'Mianxu', dmgName = '骆耀升老公酱面试助手.dmg' } = {}) {
+function macFixture(t, triple, cpu, { binary = 'Mianxu', dmgName = 'Mianxu.dmg' } = {}) {
   const root = fixture(t);
   prepareRelease(root, 'v0.1.1');
   const target = path.join(root, 'src-tauri/target', triple, 'release');
