@@ -90,14 +90,17 @@ jobs:
           # PRs can restore main's cache; only trusted main runs populate it.
           save-if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
 
-      # sherpa-onnx-sys reuses target/sherpa-onnx-prebuilt whenever its lib/
-      # directory exists, without checking that every archive was unpacked.
-      # A restored cache from an interrupted extraction therefore fails the link
-      # with "could not find native static library". Start from a clean directory
-      # so the build script downloads and unpacks its own archive.
+      # sherpa-onnx-sys caches both the unpacked archives and the build script
+      # result that points at them. A restored cache can keep the link path after
+      # the archives themselves were pruned, and the build then fails the link
+      # with "could not find native static library". Drop the archives, the
+      # script output and its fingerprint so the script downloads them again.
       - name: Reset cached native speech libraries
         shell: bash
-        run: rm -rf src-tauri/target/sherpa-onnx-prebuilt
+        run: |
+          rm -rf src-tauri/target/sherpa-onnx-prebuilt
+          rm -rf src-tauri/target/*/build/sherpa-onnx-sys-*
+          rm -rf src-tauri/target/*/.fingerprint/sherpa-onnx-sys-*
 
       - name: Install locked frontend dependencies
         run: pnpm install --frozen-lockfile
