@@ -5,6 +5,7 @@ import {aiFetch} from './aiTransport';
 import {aiHeaders, withAiRequest} from './aiProtocol';
 import {chatStream, chatWithImageHistory, type ChatMessage} from './aiRequests';
 import {checkInputBudget, outputLimit} from './aiTaskPolicy';
+import {chatTitle} from './chatText';
 import { t } from './i18n';
 
 export const LOCAL_DATA_CATEGORIES = ['resumes','goals','materials','interviews','exams'] as const;
@@ -38,7 +39,7 @@ export function readFreeChatQueries(value:unknown):FreeChatQuery[] {
 export async function saveFreeChat(id:string, messages:FreeChatMessage[], model?:AiRoute|null) {
   const list=readData<FreeChatSession[]>('freeChats',[]);
   if(list.length>=100 && !list.some(item=>item.id===id))throw new Error(t('对话已达 100 条，请先删除不需要的对话。'));
-  const title=messages.find(m=>m.role==='user')?.content.trim().slice(0,32) || t('新对话');
+  const title=chatTitle(messages.find(m=>m.role==='user')?.content || '') || t('新对话');
   // Keep the conversation's own model choice: saving messages must not reset it, and
   // `undefined` means "leave it alone", `null` means "fall back to the global route".
   const previous=list.find(item=>item.id===id);

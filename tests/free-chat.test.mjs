@@ -7,6 +7,7 @@ function harness(responses=[], stream) {
   const requests=[],chatCalls=[],route={provider:{id:'provider',baseUrl:'https://model.invalid/v1',apiKey:'',models:[]},modelId:'model'};
   const api=evaluateFixture('src/lib/freeChat.ts',{exports:{},AbortController,Date,JSON,console,require:name=>{
     if(name==='./i18n')return evaluateModuleFixture('src/lib/i18n.ts');
+    if(name==='./chatText')return evaluateModuleFixture('src/lib/chatText.ts');
     if(name==='./backend')return {getDataError:()=>null,readData:(key,fallback)=>data[key] ?? fallback,writeData:async(key,value)=>{data[key]=value;}};
     if(name==='./aiSettings')return {getAiSettings:()=>({timeoutMs:30000}),getAiLoadError:()=>null};
     if(name==='./aiConfig')return {resolveAiRoute:()=>route};
@@ -173,6 +174,16 @@ test('voice answers request concise spoken language without applying it to text 
   await h.api.askFreeChat([{role:'user',content:'解释一下'}],options);
   assert.match(h.chatCalls[0].messages[0].content,/语音对话/);assert.equal(h.chatCalls[0].maxTokens,2048);
   assert.doesNotMatch(h.chatCalls[1].messages[0].content,/语音对话/);
+});
+
+test('a conversation title drops attachment blocks and code fences',async()=>{
+  const h=harness();
+  await h.api.saveFreeChat('id',[{role:'user',content:'这张图里是什么？\n\n<file name="brand.png">\n[image]\n</file>'}]);
+  assert.equal(h.data.freeChats[0].title,'这张图里是什么？');
+  await h.api.saveFreeChat('id2',[{role:'user',content:'```python\nimport sys\n```\n解释一下这段代码'}]);
+  assert.equal(h.data.freeChats[0].title,'解释一下这段代码');
+  await h.api.saveFreeChat('id3',[{role:'user',content:'你可以读取图片吗 <file name="bra'}]);
+  assert.equal(h.data.freeChats[0].title,'你可以读取图片吗');
 });
 
 test('conversation history persists locally and a second save updates the same thread',async()=>{

@@ -8,6 +8,9 @@
  */
 import { importDocument } from './documentImport';
 import { t } from './i18n';
+import { FILE_BLOCK } from './chatText';
+
+export { chatTitle, stripAttachmentBlocks } from './chatText';
 
 export type ChatFileKind = 'pdf' | 'image' | 'text';
 
@@ -29,8 +32,6 @@ export const CHAT_ATTACH_MAX = 6;
 export const CHAT_FILE_CHARS = 20000;
 /** Total limit for all attachments in one message. */
 export const CHAT_FILES_CHARS = 40000;
-
-const FILE_BLOCK = /<file name="([^"]*)">\n?([\s\S]*?)\n?<\/file>/g;
 
 export function chatFileKind(name: string): ChatFileKind | null {
   const extension = name.split('.').pop()?.toLowerCase() ?? '';
