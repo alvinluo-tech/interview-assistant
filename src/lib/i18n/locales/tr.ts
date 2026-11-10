@@ -1652,5 +1652,8 @@ export const tr: Record<string, string> = {
   "添加附件：PDF、图片、文本": "PDF, görsel veya metin ekle",
   "每次读取前询问": "Her okumadan önce sor",
   "已关闭逐次确认，开启本地资料后会直接读取。读取到的文字片段将发送至：{destination}。": "Onay kapalı; yerel veriler açıldığında doğrudan okunur. Okunan parçalar şuraya gönderilir: {destination}.",
+  "无法读取这张图片，请换一张试试。": "Bu görsel okunamadı — başka bir tane deneyin.",
+  "输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片": "Bir mesaj yazın. Enter gönderir, Shift + Enter yeni satır açar. Görselleri buraya yapıştırın veya sürükleyin.",
+  "图片": "Görsel",
   "对话附件支持 PDF、图片（PNG/JPEG/WebP）、TXT 和 Markdown。": "Ekler PDF, görsel (PNG/JPEG/WebP), TXT ve Markdown destekler.",
 };

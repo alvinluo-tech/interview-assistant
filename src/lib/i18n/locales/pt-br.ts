@@ -1652,5 +1652,8 @@ export const ptBr: Record<string, string> = {
   "添加附件：PDF、图片、文本": "Adicionar PDF, imagem ou texto",
   "每次读取前询问": "Perguntar antes de cada leitura",
   "已关闭逐次确认，开启本地资料后会直接读取。读取到的文字片段将发送至：{destination}。": "A confirmação está desligada, então os dados são lidos direto ao ativar. Os trechos vão para: {destination}.",
+  "无法读取这张图片，请换一张试试。": "Não foi possível ler esta imagem — tente outra.",
+  "输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片": "Escreva uma mensagem. Enter envia, Shift + Enter quebra a linha. Cole ou arraste imagens aqui.",
+  "图片": "Imagem",
   "对话附件支持 PDF、图片（PNG/JPEG/WebP）、TXT 和 Markdown。": "Os anexos aceitam PDF, imagens (PNG/JPEG/WebP), TXT e Markdown.",
 };

@@ -17,6 +17,8 @@ export interface ChatAttachment {
   size: number;
   kind: ChatFileKind;
   text: string;
+  /** Images travel to the model as vision input instead of extracted text. */
+  dataUrl?: string;
 }
 
 export const CHAT_ATTACH_ACCEPT = '.pdf,.txt,.md,.png,.jpg,.jpeg,.webp';
@@ -38,18 +40,33 @@ export function chatFileKind(name: string): ChatFileKind | null {
   return null;
 }
 
+const IMAGE_MAX_EDGE = 1568;
+
+/** Downscales an image to a JPEG data URL so the model sees the picture itself, not OCR text. */
+export async function imageToDataUrl(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error(t('无法读取这张图片，请换一张试试。'));
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
 export async function readChatAttachment(file: File, signal?: AbortSignal): Promise<ChatAttachment> {
   const kind = chatFileKind(file.name);
   if (!kind) throw new Error(t('对话附件支持 PDF、图片（PNG/JPEG/WebP）、TXT 和 Markdown。'));
-  // allowVision only affects images: picking a file here means the user agreed to OCR it.
+  const id = `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  if (kind === 'image') {
+    const dataUrl = await imageToDataUrl(file);
+    signal?.throwIfAborted();
+    return { id, name: file.name, size: file.size, kind, text: '', dataUrl };
+  }
   const document = await importDocument(file, { allowVision: true, signal });
-  return {
-    id: `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    name: file.name,
-    size: file.size,
-    kind,
-    text: document.text.slice(0, CHAT_FILE_CHARS),
-  };
+  return { id, name: file.name, size: file.size, kind, text: document.text.slice(0, CHAT_FILE_CHARS) };
 }
 
 /** Joins attachments in order, truncating the tail and noting how much was dropped. */
@@ -59,7 +76,7 @@ export function composeAttachmentContent(text: string, attachments: readonly Cha
   const blocks: string[] = [];
   for (const attachment of attachments) {
     if (budget <= 0) break;
-    const body = attachment.text.slice(0, budget);
+    const body = attachment.dataUrl ? IMAGE_MARKER : attachment.text.slice(0, budget);
     budget -= body.length;
     const truncated = body.length < attachment.text.length ? `\n…(truncated, ${attachment.text.length} chars in the original)` : '';
     blocks.push(`<file name="${attachment.name}">\n${body}${truncated}\n</file>`);
@@ -71,13 +88,17 @@ export interface ParsedFile {
   name: string;
   body: string;
   chars: number;
+  /** Pictures are sent to the model as vision input, so the transcript only keeps a placeholder. */
+  image: boolean;
 }
+
+export const IMAGE_MARKER = '[image]';
 
 /** Splits a stored message into prose and attachment blocks. */
 export function splitAttachments(content: string): { text: string; files: ParsedFile[] } {
   const files: ParsedFile[] = [];
   const text = content.replace(FILE_BLOCK, (_match, name: string, body: string) => {
-    files.push({ name, body, chars: body.length });
+    files.push({ name, body, chars: body.length, image: body.trim() === IMAGE_MARKER });
     return '';
   });
   return { text: text.replace(/\n{3,}/g, '\n\n').trim(), files };

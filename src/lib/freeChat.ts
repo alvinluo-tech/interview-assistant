@@ -3,7 +3,7 @@ import {getAiSettings, getAiLoadError} from './aiSettings';
 import {resolveAiRoute, type AiRoute} from './aiConfig';
 import {aiFetch} from './aiTransport';
 import {aiHeaders, withAiRequest} from './aiProtocol';
-import {chatStream, type ChatMessage} from './aiRequests';
+import {chatStream, chatWithImageHistory, type ChatMessage} from './aiRequests';
 import {checkInputBudget, outputLimit} from './aiTaskPolicy';
 import { t } from './i18n';
 
@@ -152,7 +152,7 @@ export function displayFreeChatText(text:string):string {
 }
 export interface FreeChatApprovalRequest {tool:string;category?:LocalDataCategory;title:string;summary:string}
 export type FreeChatApproval = 'once'|'always'|'deny';
-interface FreeChatOptions {signal:AbortSignal;allowLocal:boolean;categories?:readonly LocalDataCategory[];canQueryLocal?:()=>boolean;voice?:boolean;model?:AiRoute;onDelta:(text:string)=>void;onTool:(name:string)=>void;onToolResult?:(query:FreeChatQuery)=>void;/** Asked before a local tool reads data the user has not granted for this conversation. */requestApproval?:(request:FreeChatApprovalRequest)=>Promise<FreeChatApproval>}
+interface FreeChatOptions {signal:AbortSignal;images?:string[];allowLocal:boolean;categories?:readonly LocalDataCategory[];canQueryLocal?:()=>boolean;voice?:boolean;model?:AiRoute;onDelta:(text:string)=>void;onTool:(name:string)=>void;onToolResult?:(query:FreeChatQuery)=>void;/** Asked before a local tool reads data the user has not granted for this conversation. */requestApproval?:(request:FreeChatApprovalRequest)=>Promise<FreeChatApproval>}
 
 /** What a pending tool call is about to read, phrased for the approval card. */
 export function describeToolCall(name:string,input:Record<string,unknown>):{category?:LocalDataCategory;title:string;summary:string} {
@@ -189,6 +189,15 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
     assertActive();if(hasInternalToolMarkup(answer))throw new Error(t('模型返回了无效的内部工具标记，请更换模型后重试。'));
     flush(true);return emitted;
   };
+  const plainAnswerImages=async(prompt:ChatMessage[],images:string[])=>{
+    let pending='',emitted='';
+    const flush=(final:boolean)=>{if(!pending)return;const delta=pending;pending='';emitted+=delta;options.onDelta(delta);void final;};
+    const answer=await chatWithImageHistory(prompt,images,{task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);}});
+    if(!pending&&!emitted)pending=answer;
+    assertActive();flush(true);return emitted;
+  };
+  // Pictures go to the vision model as-is; no tool loop, because the model can already see them.
+  if(options.images?.length) return plainAnswerImages(history,options.images);
   if(!options.allowLocal) return plainAnswer(history);
   if(getAiLoadError())throw new Error(t('AI 配置读取失败，请检查 AI 服务设置。'));
   const settings=getAiSettings(),{provider,modelId}=resolveAiRoute(settings,'chat',options.model);

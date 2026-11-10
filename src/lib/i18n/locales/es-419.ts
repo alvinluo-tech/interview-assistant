@@ -1652,5 +1652,8 @@ export const es419: Record<string, string> = {
   "添加附件：PDF、图片、文本": "Añadir un PDF, imagen o texto",
   "每次读取前询问": "Preguntar antes de cada lectura",
   "已关闭逐次确认，开启本地资料后会直接读取。读取到的文字片段将发送至：{destination}。": "La confirmación está desactivada, así que los datos se leen directamente al activarlos. Los fragmentos se envían a: {destination}.",
+  "无法读取这张图片，请换一张试试。": "No se pudo leer esta imagen — prueba con otra.",
+  "输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片": "Escribe un mensaje. Enter envía, Shift + Enter hace un salto de línea. Pega o arrastra imágenes aquí.",
+  "图片": "Imagen",
   "对话附件支持 PDF、图片（PNG/JPEG/WebP）、TXT 和 Markdown。": "Los adjuntos admiten PDF, imágenes (PNG/JPEG/WebP), TXT y Markdown.",
 };

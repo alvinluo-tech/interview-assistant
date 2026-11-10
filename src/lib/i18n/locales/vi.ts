@@ -1652,5 +1652,8 @@ export const vi: Record<string, string> = {
   "添加附件：PDF、图片、文本": "Thêm PDF, ảnh hoặc văn bản",
   "每次读取前询问": "Hỏi trước mỗi lần đọc",
   "已关闭逐次确认，开启本地资料后会直接读取。读取到的文字片段将发送至：{destination}。": "Đã tắt xác nhận nên dữ liệu sẽ được đọc trực tiếp khi bật. Đoạn trích sẽ gửi tới: {destination}.",
+  "无法读取这张图片，请换一张试试。": "Không đọc được ảnh này — hãy thử ảnh khác.",
+  "输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片": "Nhập tin nhắn. Enter để gửi, Shift + Enter để xuống dòng. Dán hoặc kéo ảnh vào đây.",
+  "图片": "Ảnh",
   "对话附件支持 PDF、图片（PNG/JPEG/WebP）、TXT 和 Markdown。": "Tệp đính kèm hỗ trợ PDF, ảnh (PNG/JPEG/WebP), TXT và Markdown.",
 };

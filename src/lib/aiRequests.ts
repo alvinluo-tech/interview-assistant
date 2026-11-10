@@ -102,6 +102,18 @@ export async function chatWithImages(prompt: string, imageDataUrls: string[], op
   ] });
   return stream('vision', { ...opts,messages });
 }
+/** Same streaming path as chatWithImages, but keeps the whole conversation and only attaches images to the last user turn. */
+export async function chatWithImageHistory(messages: ChatMessage[], imageDataUrls: string[], opts: Omit<ChatOptions,'messages'>) {
+  const list = messages.slice();
+  const last = list[list.length-1];
+  if (!last || last.role !== 'user') throw new Error(t('图片只能附带在用户消息上。'));
+  const text = typeof last.content === 'string' ? last.content : last.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+  list[list.length-1] = { role: 'user', content: [
+    { type: 'text', text },
+    ...imageDataUrls.map(url => ({ type: 'image_url' as const, image_url: { url } })),
+  ] };
+  return stream('vision', { ...opts, messages: list });
+}
 export function liveSpeechEnabled() { return usesLiveSpeech(getAiSettings()); }
 export async function transcribeAudio(wav: Blob, opts: TranscriptionOptions = {}): Promise<string> {
   if (getAiSettings().speechInputMode === 'realtime') {

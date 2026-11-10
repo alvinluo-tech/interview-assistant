@@ -13,6 +13,8 @@ import {
   Minus,
   MessageSquareText,
   Mic,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings as SettingsIcon,
   Sparkles,
   Square,
@@ -305,14 +307,37 @@ function Sidebar({
   onNavigate: (s: Section) => void;
   onFeedback: () => void;
 }) {
+  const [collapsed, setCollapsed] = useSetting('app.sidebarCollapsed', false);
+  if (collapsed) {
+    return (
+      <aside className="flex min-h-0 w-14 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r bg-muted/35 py-2">
+        <button type="button" onClick={() => setCollapsed(false)} title={t('展开侧栏')} aria-label={t('展开侧栏')} className="rounded-lg p-2 text-muted-foreground hover:bg-accent"><PanelLeftOpen size={16} /></button>
+        <BrandMark size={22} />
+        <div className="mt-1 flex w-full flex-col items-center gap-0.5 px-1">
+          {BIG_NAV.map((n) => (
+            <button key={n.key} type="button" onClick={() => onNavigate(n.key)} title={t(n.label)} aria-label={t(n.label)} className={`flex size-9 items-center justify-center rounded-lg transition-colors ${section === n.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}>{n.icon}</button>
+          ))}
+          <div className="my-1.5 w-6 border-t" />
+          {SMALL_NAV.map((n) => (
+            <button key={n.key} type="button" onClick={() => onNavigate(n.key)} title={t(n.label)} aria-label={t(n.label)} className={`flex size-9 items-center justify-center rounded-lg transition-colors ${section === n.key ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}>{n.icon}</button>
+          ))}
+        </div>
+        <div className="flex-1" />
+        <button type="button" onClick={openProjectRepo} title={t('GitHub 仓库')} aria-label={t('GitHub 仓库')} className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"><GitHubMark size={16} /></button>
+        <button type="button" onClick={() => onNavigate('settings')} title={t('设置')} aria-label={t('设置')} className={`flex size-9 items-center justify-center rounded-lg transition-colors ${section === 'settings' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}><SettingsIcon size={16} /></button>
+        <button type="button" onClick={onFeedback} title={t('反馈')} aria-label={t('反馈')} className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"><MessageSquareText size={16} /></button>
+      </aside>
+    );
+  }
   return (
     <aside className="flex min-h-0 w-56 shrink-0 flex-col overflow-y-auto border-r bg-muted/35">
       <div className="flex items-center gap-2.5 px-4 pb-2 pt-4">
         <BrandMark />
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">{BRAND}</div>
           <div className="text-[11px] text-muted-foreground">{t('AI 面试助手')}</div>
         </div>
+        <button type="button" onClick={() => setCollapsed(true)} title={t('收起侧栏')} aria-label={t('收起侧栏')} className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><PanelLeftClose size={15} /></button>
       </div>
 
       <div className="flex flex-col gap-1 px-3 pt-2">

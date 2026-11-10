@@ -1652,5 +1652,8 @@ export const en: Record<string, string> = {
   "添加附件：PDF、图片、文本": "Add a PDF, image or text file",
   "每次读取前询问": "Ask before each read",
   "已关闭逐次确认，开启本地资料后会直接读取。读取到的文字片段将发送至：{destination}。": "Confirmation is off, so local data is read directly once enabled. Text snippets are sent to: {destination}.",
+  "无法读取这张图片，请换一张试试。": "That image could not be read — try another one.",
+  "输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片": "Type a message. Enter sends, Shift + Enter adds a line. Paste or drop images right here.",
+  "图片": "Image",
   "对话附件支持 PDF、图片（PNG/JPEG/WebP）、TXT 和 Markdown。": "Chat attachments support PDF, images (PNG/JPEG/WebP), TXT and Markdown.",
 };
