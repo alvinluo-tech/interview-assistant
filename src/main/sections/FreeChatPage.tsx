@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties,type RefObject} from 'react';
 import {createPortal} from 'react-dom';
 import {ActionBarPrimitive, AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime, unstable_useComposerInput, type ChatModelAdapter, type ThreadMessage} from '@assistant-ui/react';
-import {ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, LoaderCircle, Mic, Phone, PhoneOff, Plus, Search, ShieldQuestion, Square, Trash2, Volume2, VolumeX, X} from 'lucide-react';
+import {ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, FileText, Image as ImageIcon, LoaderCircle, Mic, Paperclip, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Phone, PhoneOff, Plus, Search, ShieldQuestion, Square, Trash2, Volume2, VolumeX, X} from 'lucide-react';
 import {useData} from '@/lib/backend';
 import {askFreeChat, saveFreeChat, setFreeChatModel, renameFreeChat, deleteFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession, type FreeChatApproval, type FreeChatApprovalRequest} from '@/lib/freeChat';
 import {ModelPicker, describeRoute} from './ModelPicker';
@@ -14,6 +14,8 @@ import {createVoiceCall, type VoiceCallPhase} from '@/lib/voiceCall';
 import {useAiReady, useAiSettings} from '@/lib/aiSettings';
 import {showToast, useClickOutside} from '@/ui/primitives';
 import { t } from '@/lib/i18n';
+import {CHAT_ATTACH_ACCEPT, CHAT_ATTACH_MAX, chatFileKind, composeAttachmentContent, conversationFiles, formatFileSize, readChatAttachment, splitAttachments, type ChatAttachment, type ParsedFile} from '@/lib/chatFiles';
+import {useSetting} from '@/lib/store';
 import './voice-call.css';
 import {useModalFocus} from '@/ui/useModalFocus';
 
@@ -35,6 +37,7 @@ export function FreeChatPage() {
   const [query,setQuery]=useState('');
   const [renaming,setRenaming]=useState<string|null>(null);
   const [draft,setDraft]=useState('');
+  const [collapsed,setCollapsed]=useSetting<boolean>('freechat.sidebarCollapsed',false);
   const openSession=(next:string)=>{setPermission({allowLocal:false,categories:[...LOCAL_DATA_CATEGORIES]});setQuery('');setId(next);};
   const callEnded=useCallback(()=>setRevision(value=>value+1),[]);
   const current=sessions.find(session=>session.id===id);
@@ -54,8 +57,12 @@ export function FreeChatPage() {
     catch{showToast({type:'error',title:t('删除失败')});}
   };
   return <div className="-mx-7 -my-7 flex h-[calc(100vh-6rem)] min-h-[520px] bg-background">
-    <aside className="hidden w-60 shrink-0 flex-col border-r bg-muted/20 md:flex">
-      <div className="p-3"><button className="flex w-full items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button></div>
+    <aside className={`hidden shrink-0 flex-col border-r bg-muted/20 md:flex ${collapsed?'w-14':'w-60'}`}>
+      {collapsed?<div className="flex flex-col items-center gap-1 p-2">
+        <button onClick={()=>setCollapsed(false)} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>
+        <button onClick={()=>openSession(crypto.randomUUID())} aria-label={t('新对话')} title={t('新对话')} className="rounded-lg border bg-background p-2 shadow-xs hover:bg-muted"><Plus size={16}/></button>
+      </div>:<>
+      <div className="flex items-center gap-1 p-3"><button className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button><button onClick={()=>setCollapsed(true)} aria-label={t('收起侧栏')} title={t('收起侧栏')} className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftClose size={15}/></button></div>
       <div className="px-3">
         <div className="relative">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"/>
@@ -73,6 +80,7 @@ export function FreeChatPage() {
             </div>)}
         {visible.length===0&&<p className="px-2 py-6 text-center text-xs text-muted-foreground">{query?t('没有匹配的对话'):t('还没有对话，说点什么开始吧。')}</p>}
       </div>
+      </>}
     </aside>
     <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} permission={permission} onPermissionChange={setPermission} onCallEnd={callEnded} onDelete={async()=>{
       if(!window.confirm(t('删除这段对话？此操作无法撤销。')))return;
@@ -93,8 +101,21 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
   const approvalRef=useRef<FreeChatApprovalRequest|null>(null);approvalRef.current=approval;
   const approvalResolve=useRef<((decision:FreeChatApproval)=>void)|null>(null);
   const grants=useRef<Set<string>>(new Set());
+  const [attachments,setAttachments]=useState<ChatAttachment[]>([]);
+  const attachmentsRef=useRef<ChatAttachment[]>([]);attachmentsRef.current=attachments;
+  const [sentFiles,setSentFiles]=useState<ParsedFile[]>([]);
+  const [resourcesOpen,setResourcesOpen]=useSetting<boolean>('freechat.resourcesOpen',true);
+  const [askBeforeRead,setAskBeforeRead]=useSetting<boolean>('freechat.askBeforeRead',true);
+  const askRef=useRef(askBeforeRead);askRef.current=askBeforeRead;
+  const files=useMemo(()=>{
+    const merged=new Map<string,ParsedFile>();
+    for(const file of conversationFiles(initial))merged.set(file.name,file);
+    for(const file of sentFiles)merged.set(file.name,file);
+    return [...merged.values()];
+  },[initial,sentFiles]);
   const askApproval=useCallback((request:FreeChatApprovalRequest)=>new Promise<FreeChatApproval>(resolve=>{
     if(request.category&&grants.current.has(request.category)){resolve('once');return;}
+    if(!askRef.current){resolve('once');return;}
     setReceipt('');setApproval(request);approvalResolve.current=resolve;
   }),[]);
   const decideApproval=useCallback((decision:FreeChatApproval)=>{
@@ -132,6 +153,13 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
     const controller=new AbortController(),epoch=permissionEpoch.current,grant=config.current;
     const cancel=()=>controller.abort(abortSignal.reason);abortSignal.addEventListener('abort',cancel,{once:true});if(abortSignal.aborted)cancel();textRequest.current=controller;
     const history=savedMessages(messages);
+    const pending=attachmentsRef.current;
+    if(pending.length&&history.length&&history[history.length-1].role==='user'){
+      const last=history[history.length-1];
+      history[history.length-1]={...last,content:composeAttachmentContent(last.content,pending)};
+      attachmentsRef.current=[];setAttachments([]);
+      setSentFiles(list=>{const merged=new Map(list.map(file=>[file.name,file]));for(const item of pending)merged.set(item.name,{name:item.name,body:item.text,chars:item.text.length});return [...merged.values()];});
+    }
     try {
       try {
         await saveFreeChat(id,history,modelRef.current);
@@ -220,11 +248,12 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
   call.current=voiceCall;
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
-  return <AssistantRuntimeProvider runtime={runtime}><ThreadPrimitive.Root inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
+  return <AssistantRuntimeProvider runtime={runtime}><div className="flex min-w-0 flex-1"><ThreadPrimitive.Root inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
     <div className="flex items-center gap-3 border-b px-6 py-4"><div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{t('自由对话')}</div><div className="text-xs text-muted-foreground">{t('文字、语音与本地资料')}</div></div>
       <ModelPicker settings={aiSettings} value={model} onChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}}/>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?t('关闭语音回复'):t('开启语音回复')} title={speak?t('关闭语音回复'):t('开启语音回复')}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
       <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError(t('请先在「设置 → AI 服务」配置对话模型和语音转写模型。'));return;}inputOwner.current='call';voiceHistory.current=savedMessages(runtime.thread.getState().messages);voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
+      <button onClick={()=>setResourcesOpen(!resourcesOpen)} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={resourcesOpen?t('收起资源栏'):t('展开资源栏')} title={resourcesOpen?t('收起资源栏'):t('展开资源栏')}>{resourcesOpen?<PanelRightClose size={16}/>:<PanelRightOpen size={16}/>}</button>
       <DeleteButton onDelete={onDelete} onError={setError}/>
       {speaking&&<button className="text-xs text-primary" onClick={()=>speaker.stop()}>{t('停止播放')}</button>}
     </div>
@@ -237,12 +266,14 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
         </div></ThreadPrimitive.Empty>
         <ThreadPrimitive.Messages>{({message})=><ChatMessage role={message.role}/>}</ThreadPrimitive.Messages>
         <div className="sticky bottom-2 flex justify-center pb-1"><ThreadPrimitive.ScrollToBottom className="flex size-9 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-md hover:text-foreground" aria-label={t('滚动到底部')}><ArrowDown size={16}/></ThreadPrimitive.ScrollToBottom></div>
-        {tool&&<p className="py-2 text-xs text-muted-foreground">{tool}</p>}{!tool&&toolsUsed.length>0&&<p className="py-2 text-xs text-muted-foreground">{t('本轮请求的工具：{tools}',{tools:toolsUsed.join('、')})}</p>}{error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
+        {(tool||toolsUsed.length>0)&&<details className="py-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{tool||t('本轮调用工具 {count} 次',{count:toolsUsed.length})}</summary>{toolsUsed.length>0&&<p className="mt-1 leading-5">{t('本轮请求的工具：{tools}',{tools:toolsUsed.join('、')})}</p>}</details>}{error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
       </div>
     </ThreadPrimitive.Viewport>
-    <div className="mx-auto w-full max-w-2xl px-5 pb-4">{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer permission={permission} onPermissionChange={changePermission} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
+    <div className="mx-auto w-full max-w-2xl px-5 pb-4">{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
-  </ThreadPrimitive.Root></AssistantRuntimeProvider>;
+  </ThreadPrimitive.Root>
+    {resourcesOpen&&<ResourcePanel files={files} pending={attachments} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/>}
+  </div></AssistantRuntimeProvider>;
 }
 
 function CallButton({disabled,onStart}:{disabled:boolean;onStart:()=>void}) {
@@ -281,12 +312,13 @@ function DeleteButton({onDelete,onError}:{onDelete:()=>Promise<void>;onError:(me
 
 function ChatMessage({role}:{role:string}) {
   const text=useAuiState(s=>s.message.content.filter(part=>part.type==='text').map(part=>part.text).join(''));
+  const parsed=useMemo(()=>splitAttachments(text),[text]);
   const status=useAuiState(s=>s.message.status),rawQueries=useAuiState(s=>s.message.metadata.custom.localQueries);
   const queries=readFreeChatQueries(rawQueries);
   const failed=role==='assistant'&&status?.type==='incomplete'&&status.reason==='error';
   const waiting=role==='assistant'&&status?.type==='running'&&!text;
   return <MessagePrimitive.Root className={`mb-5 flex ${role==='user'?'justify-end':'justify-start'}`}><div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 ${role==='user'?'bg-primary text-primary-foreground':'border bg-card text-foreground'}`}>
-    {role==='assistant'?<>{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><ActionBarPrimitive.Copy className="transition hover:text-foreground data-[copied=true]:text-primary">{t('复制')}</ActionBarPrimitive.Copy><ActionBarPrimitive.Reload disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40">{t('重新生成')}</ActionBarPrimitive.Reload></ActionBarPrimitive.Root>}</>:<div className="whitespace-pre-wrap break-words">{text}</div>}
+    {role==='assistant'?<>{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><ActionBarPrimitive.Copy className="transition hover:text-foreground data-[copied=true]:text-primary">{t('复制')}</ActionBarPrimitive.Copy><ActionBarPrimitive.Reload disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40">{t('重新生成')}</ActionBarPrimitive.Reload></ActionBarPrimitive.Root>}</>:<>{parsed.text&&<div className="whitespace-pre-wrap break-words">{parsed.text}</div>}{parsed.files.length>0&&<ul className="mt-2 space-y-1">{parsed.files.map(file=><li key={file.name} className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 opacity-70">{t('{count} 字',{count:file.chars})}</span></li>)}</ul>}</>}
   </div></MessagePrimitive.Root>;
 }
 
@@ -307,7 +339,7 @@ function ApprovalCard({request,onDecide}:{request:FreeChatApprovalRequest;onDeci
   </div>;
 }
 
-function Composer({permission,onPermissionChange,destination,setError,speakerStop,inputOwner,blocked,onInputBusy}:{permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;destination:string;setError:(v:string)=>void;speakerStop:()=>void;inputOwner:RefObject<'call'|'manual'|null>;blocked:boolean;onInputBusy:(busy:boolean)=>void}) {
+function Composer({permission,onPermissionChange,askBeforeRead,onAskBeforeReadChange,attachments,onAttach,onDetach,destination,setError,speakerStop,inputOwner,blocked,onInputBusy}:{permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;askBeforeRead:boolean;onAskBeforeReadChange:(value:boolean)=>void;attachments:ChatAttachment[];onAttach:(files:ChatAttachment[])=>void;onDetach:(id:string)=>void;destination:string;setError:(v:string)=>void;speakerStop:()=>void;inputOwner:RefObject<'call'|'manual'|null>;blocked:boolean;onInputBusy:(busy:boolean)=>void}) {
   const {allowLocal,categories}=permission;
   const composer=unstable_useComposerInput();
   const currentComposer=useRef(composer);currentComposer.current=composer;
@@ -337,7 +369,27 @@ function Composer({permission,onPermissionChange,destination,setError,speakerSto
   };
   const [permOpen,setPermOpen]=useState(false);
   const permRef=useClickOutside(()=>setPermOpen(false));
+  const [parsing,setParsing]=useState(0);
+  const fileInput=useRef<HTMLInputElement|null>(null);
+  const attach=async(files:FileList|null)=>{
+    if(!files||!files.length)return;
+    const picked=[...files];
+    if(attachments.length+picked.length>CHAT_ATTACH_MAX){setError(t('一条消息最多附带 {max} 个文件。',{max:CHAT_ATTACH_MAX}));return;}
+    setError('');setParsing(picked.length);
+    const parsed:ChatAttachment[]=[];
+    for(const file of picked){
+      try{parsed.push(await readChatAttachment(file));}
+      catch(error){if(!(error instanceof DOMException&&error.name==='AbortError'))setError(t('解析失败：{message}',{message:String((error as Error).message || error)}));}
+      finally{setParsing(count=>Math.max(0,count-1));}
+    }
+    if(parsed.length)onAttach(parsed);
+    if(fileInput.current)fileInput.current.value='';
+  };
   return <ComposerPrimitive.Root onKeyDownCapture={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&(busy||recording||blocked)){event.preventDefault();event.stopPropagation();}}} className="rounded-2xl border bg-card shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20">
+    {(attachments.length>0||parsing>0)&&<div className="flex flex-wrap items-center gap-1.5 px-3 pt-2">
+      {attachments.map(item=><span key={item.id} className="flex max-w-[15rem] items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1 text-[11px]">{item.kind==='image'?<ImageIcon size={12}/>:<FileText size={12}/>}<span className="min-w-0 flex-1 truncate" title={`${item.name} · ${formatFileSize(item.size)}`}>{item.name}</span><button type="button" onClick={()=>onDetach(item.id)} aria-label={t('移除附件')} title={t('移除附件')} className="rounded p-0.5 text-muted-foreground hover:text-destructive"><X size={11}/></button></span>)}
+      {parsing>0&&<span className="flex items-center gap-1.5 rounded-lg border border-dashed px-2 py-1 text-[11px] text-muted-foreground"><LoaderCircle size={12} className="animate-spin"/>{t('正在解析…')}</span>}
+    </div>}
     <ComposerPrimitive.Input rows={2} placeholder={t('输入消息，Enter 发送，Shift + Enter 换行')} className="max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-6 outline-none placeholder:text-muted-foreground"/>
     <div className="flex items-center gap-1.5 px-2 pb-2">
       <div className="relative" ref={permRef}>
@@ -345,14 +397,27 @@ function Composer({permission,onPermissionChange,destination,setError,speakerSto
         {permOpen&&<div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border bg-popover p-3 shadow-xl">
           <label className="flex items-center justify-between gap-3 text-xs font-medium"><span>{t('允许查询本地资料')}</span><input type="checkbox" checked={allowLocal} disabled={blocked||categories.length===0} onChange={event=>onPermissionChange({...permission,allowLocal:event.target.checked})}/></label>
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">{LOCAL_DATA_CATEGORIES.map(category=><label key={category} className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><input type="checkbox" checked={categories.includes(category)} disabled={blocked} onChange={event=>{const selected=event.target.checked?[...categories,category]:categories.filter(item=>item!==category);onPermissionChange({allowLocal:allowLocal&&selected.length>0,categories:selected});}}/>{t(LOCAL_DATA_LABELS[category])}</label>)}</div>
-          <p className="mt-2 text-[11px] leading-5 text-muted-foreground">{allowLocal?t('每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。',{destination}):t('本轮不查询本地资料，已有对话仍会作为上下文发送。')}</p>
+          <label className="mt-2 flex items-center justify-between gap-3 border-t pt-2 text-[11px] text-muted-foreground"><span>{t('每次读取前询问')}</span><input type="checkbox" checked={askBeforeRead} onChange={event=>onAskBeforeReadChange(event.target.checked)}/></label>
+          <p className="mt-2 text-[11px] leading-5 text-muted-foreground">{allowLocal?(askBeforeRead?t('每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。',{destination}):t('已关闭逐次确认，开启本地资料后会直接读取。读取到的文字片段将发送至：{destination}。',{destination})):t('本轮不查询本地资料，已有对话仍会作为上下文发送。')}</p>
           <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。')}</p>
         </div>}
       </div>
+      <input ref={fileInput} type="file" multiple accept={CHAT_ATTACH_ACCEPT} className="hidden" onChange={event=>void attach(event.target.files)}/>
+      <button type="button" onClick={()=>fileInput.current?.click()} disabled={blocked||parsing>0} className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted disabled:opacity-40" aria-label={t('添加附件')} title={t('添加附件：PDF、图片、文本')}><Paperclip size={17}/></button>
       <span className="min-w-0 flex-1 truncate px-1 text-[11px] text-muted-foreground">{recording?t('正在录音，再点一次结束'):busy?t('正在识别…'):''}</span>
       <button type="button" onClick={()=>void record()} disabled={busy||blocked||running} className={`rounded-lg p-2 transition ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?t('结束录音'):t('语音输入')} title={recording?t('结束录音'):t('语音输入')}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
       <ComposerPrimitive.Cancel className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={t('停止生成')}><Square size={16}/></ComposerPrimitive.Cancel>
       <ComposerPrimitive.Send disabled={busy||recording||blocked} className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition disabled:opacity-40" aria-label={t('发送')}><ArrowUp size={16}/></ComposerPrimitive.Send>
     </div>
   </ComposerPrimitive.Root>;
+}
+
+function ResourcePanel({files,pending,onQuote,onRemove}:{files:ParsedFile[];pending:ChatAttachment[];onQuote:(file:ParsedFile)=>void;onRemove:(id:string)=>void}) {
+  return <aside className="hidden w-72 shrink-0 flex-col border-l bg-muted/10 lg:flex">
+    <div className="border-b px-3 py-3"><p className="text-xs font-semibold">{t('对话资源')}</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('文件会解析成文字随消息发送，原文件不上传，也不写入磁盘。')}</p></div>
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+      {pending.length>0&&<div className="space-y-1.5"><p className="text-[11px] font-medium text-muted-foreground">{t('待发送（{count}）',{count:pending.length})}</p>{pending.map(item=><div key={item.id} className="flex items-center gap-1.5 rounded-lg border bg-background px-2 py-1.5 text-[11px]">{item.kind==='image'?<ImageIcon size={12}/>:<FileText size={12}/>}<span className="min-w-0 flex-1 truncate" title={`${item.name} · ${formatFileSize(item.size)}`}>{item.name}</span><button type="button" onClick={()=>onRemove(item.id)} aria-label={t('移除附件')} className="rounded p-0.5 text-muted-foreground hover:text-destructive"><X size={11}/></button></div>)}</div>}
+      <div className="space-y-1.5"><p className="text-[11px] font-medium text-muted-foreground">{t('已引用（{count}）',{count:files.length})}</p>{files.map(file=><div key={file.name} className="rounded-lg border bg-background px-2 py-1.5 text-[11px]"><div className="flex items-center gap-1.5"><FileText size={12}/><span className="min-w-0 flex-1 truncate" title={file.name}>{file.name}</span></div><div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground"><span>{t('{count} 字',{count:file.chars})}</span><button type="button" onClick={()=>onQuote(file)} className="rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground">{t('再次引用')}</button></div></div>)}{files.length===0&&<p className="py-6 text-center text-[11px] leading-5 text-muted-foreground">{t('还没有资源。点输入框左边的回形针上传 PDF、图片或文本。')}</p>}</div>
+    </div>
+  </aside>;
 }
