@@ -45,7 +45,7 @@ export function describeRoute(settings: AiSettings, route: AiRoute | null): stri
  * the option stays first and is selected by default, so a user who never opens the picker
  * keeps the old behaviour.
  */
-export function ModelPicker({settings, value, onChange}: { settings: AiSettings; value: AiRoute | null; onChange: (next: AiRoute | null) => void }) {
+export function ModelPicker({settings, value, onChange, placement = 'down'}: { settings: AiSettings; value: AiRoute | null; onChange: (next: AiRoute | null) => void; placement?: 'up' | 'down' }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const options = useMemo(() => chatModels(settings), [settings]);
@@ -61,7 +61,7 @@ export function ModelPicker({settings, value, onChange}: { settings: AiSettings;
       className="flex max-w-[15rem] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted" title={t('模型：{model}', { model: current })}>
       <span className="truncate">{current}</span><ChevronDown size={13} className="shrink-0"/>
     </button>
-    {open && <div role="listbox" className="absolute right-0 z-30 mt-1 w-72 rounded-xl border bg-[hsl(var(--popover))] p-1.5 shadow-lg">
+    {open && <div role="listbox" className={`absolute right-0 z-30 w-72 rounded-xl border bg-[hsl(var(--popover))] p-1.5 shadow-lg ${placement === 'up' ? 'bottom-full mb-2' : 'mt-1'}`}>
       <div className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5"><Search size={13} className="text-muted-foreground"/><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder={t('搜索模型')} className="w-full bg-transparent text-xs outline-none" aria-label={t('搜索模型')}/></div>
       <div className="mt-1 max-h-64 overflow-y-auto">
         <button type="button" onClick={() => pick(null)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted">

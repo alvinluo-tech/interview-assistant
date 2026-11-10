@@ -410,10 +410,10 @@ function Composer({settings,model,onModelChange,permission,onPermissionChange,as
           <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。')}</p>
         </div>}
       </div>
-      <ModelPicker settings={settings} value={model} onChange={onModelChange}/>
       <input ref={fileInput} type="file" multiple accept={CHAT_ATTACH_ACCEPT} className="hidden" onChange={event=>void attach(event.target.files)}/>
       <button type="button" onClick={()=>fileInput.current?.click()} disabled={blocked||parsing>0} className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted disabled:opacity-40" aria-label={t('添加附件')} title={t('添加附件：PDF、图片、文本')}><Paperclip size={17}/></button>
       <span className="min-w-0 flex-1 truncate px-1 text-[11px] text-muted-foreground">{recording?t('正在录音，再点一次结束'):busy?t('正在识别…'):''}</span>
+      <ModelPicker settings={settings} value={model} onChange={onModelChange} placement="up"/>
       <button type="button" onClick={()=>void record()} disabled={busy||blocked||running} className={`rounded-lg p-2 transition ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?t('结束录音'):t('语音输入')} title={recording?t('结束录音'):t('语音输入')}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
       <ComposerPrimitive.Cancel className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={t('停止生成')}><Square size={16}/></ComposerPrimitive.Cancel>
       <ComposerPrimitive.Send disabled={busy||recording||blocked} className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition disabled:opacity-40" aria-label={t('发送')}><ArrowUp size={16}/></ComposerPrimitive.Send>
