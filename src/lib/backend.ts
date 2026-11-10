@@ -1,6 +1,6 @@
 /*
- * 本地数据层：替代原版云端（api.mianlingai.com tRPC）的本地实现。
- * 数据结构尽量沿用原版字段（session/examSession/material/resume/goal…），
+ * 本地数据层：数据只落在本机磁盘，不经过任何服务端。
+ * 数据结构按实体组织（session/examSession/material/resume/goal…），
  * 持久化在 tauri-plugin-store 的 data.json。
  */
 import { load } from '@tauri-apps/plugin-store';
@@ -163,7 +163,7 @@ function uid(prefix = 'id'): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// ---------------- 实体类型（沿用原版字段名） ----------------
+// ---------------- 实体类型 ----------------
 
 export type ChatRole = 'INTERVIEWER' | 'ASSISTANT';
 
@@ -306,7 +306,7 @@ export function getActiveSessionLocal(type: 'INTERVIEW' | 'MOCK_INTERVIEW'): Int
 
 /**
  * 清理陈旧的「进行中」记录：浮窗没在运行时，上一场不可能还活着。
- * 与原版「结束旧会话」等价，避免工作台被假的活动会话拦住。
+ * 避免工作台被假的活动会话拦住。
  * 模拟面试不依赖浮窗（独立窗口、可跨重启续场），因此不在此清理。
  */
 export async function closeStaleActiveSessions() {

@@ -2,9 +2,9 @@ import {markTranscriptSpeaker} from '@/lib/interviewEngine';
 import {GenerationDetails} from './GenerationDetails';
 import {selectSolverTurn} from '@/lib/examEngine';
 /*
- * 面试浮窗（原版 Yq/Zq/Aq/wq）：头部（拖拽/状态/剩余时长/穿透切换/结束）、
+ * 面试浮窗：头部（拖拽/状态/剩余时长/穿透切换/结束）、
  * 对话视图（转写竖线气泡 + AI markdown 流式）、底部操作（开始/暂停/
- * 立即回答/笔试答题/语音提问）、内嵌笔试答题视图。文案对齐原版。
+ * 立即回答/笔试答题/语音提问）、内嵌笔试答题视图。
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
@@ -567,7 +567,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
   );
 }
 
-/** 内嵌笔试答题视图（原版 Iq） */
+/** 内嵌笔试答题视图 */
 function SolverView({
   solver,
   onBack,
@@ -625,7 +625,7 @@ function SolverView({
   );
 }
 
-/** solver 页动作条（原版 Rq） */
+/** solver 页动作条 */
 function SolverActions({
   solver,
   hotkeys,

@@ -1,7 +1,7 @@
 /** AI requests use the selected provider for each role. Prompt and WAV helpers stay here. */
 export { chatStream, chatWithImages, transcribeAudio, synthesizeSpeech, liveSpeechEnabled } from './aiRequests';
 export type { ChatMessage, ChatOptions } from './aiRequests';
-/** 把 PCM16/16k/mono 转 WAV（原版 encodeWAV 同格式） */
+/** 把 PCM16/16k/mono 转 WAV。 */
 export function encodeWav(pcm: Int16Array, sampleRate = 16000): Blob {
   const buffer = new ArrayBuffer(44 + pcm.length * 2);
   const view = new DataView(buffer);
@@ -28,7 +28,7 @@ export function encodeWav(pcm: Int16Array, sampleRate = 16000): Blob {
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
-// ---------------- Prompt（复刻原版回答风格） ----------------
+// ---------------- Prompt（回答风格） ----------------
 
 export const ANSWER_STYLES = [
   { key: 'natural', label: '自然口语', desc: '像平时说话一样，直接能说出口' },

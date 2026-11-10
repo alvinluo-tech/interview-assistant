@@ -210,7 +210,7 @@ export function DialogDesc({ children }: { children: ReactNode }) {
   return <p className="mb-4 text-sm text-muted-foreground">{children}</p>;
 }
 
-// ---------------- Toast（对齐原版：底部居中，最多 3 条，4s 消失） ----------------
+// ---------------- Toast（底部居中，最多 3 条，4s 消失） ----------------
 
 export interface ToastItem {
   id: number;
@@ -312,7 +312,7 @@ export function SectionHeader({ title, desc, right }: { title: string; desc?: st
   );
 }
 
-/** 设置行（原版 Tz：图标 + 标题 + 描述 + 控件） */
+/** 设置行（图标 + 标题 + 描述 + 控件） */
 export function SettingRow({
   icon,
   title,

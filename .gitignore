@@ -27,22 +27,22 @@ public/pyodide/
 *.sln
 *.sw?
 
-# 本机路径引用与逆向产物不入库
+# 本机路径引用与本地研究产物不入库
 _recon/
-analysis_mianling/
+_local_analysis/
 docs/native-osd-and-dual-screen.md
-docs/original-app-gap-analysis.md
+docs/product-scope-notes.md
 src-tauri/target
 tools/update-verifier/target/
 src-tauri/gen/schemas
 
-# Private local product comparison research
-/docs/audit/ai-vs-official-comparison.md
+# Local research notes
+/docs/audit/ai-provider-comparison.md
 /docs/audit/gap-analysis.md
-/docs/audit/official-code-verification.md
+/docs/audit/code-verification-review.md
 /docs/audit/bug-findings.md
 /docs/audit/bug-revalidation.md
-/docs/design/ai/official-reference-review.md
+/docs/design/ai/model-capability-review.md
 /docs/design/ai/README.md
 /docs/design/ai/architecture.md
 /docs/design/ai/implementation-plan.md
@@ -50,7 +50,7 @@ src-tauri/gen/schemas
 /docs/macos-implementation.md
 /docs/macos-next-steps.md
 /docs/macos-rust-vs-swift.md
-/docs/audit/official-macos-fullscreen-space.md
+/docs/audit/macos-fullscreen-space.md
 
 # Local promo material (not part of the product)
 /promo-mianxu/

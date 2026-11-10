@@ -182,7 +182,7 @@ pub async fn cmd_code_run(
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| e.to_string())?
             .as_nanos();
-        let name = format!("mianling-check-{}-{id}", std::process::id());
+        let name = format!("mianxu-check-{}-{id}", std::process::id());
         let create = create_args(&name, &language, &code)?;
         let created = process(&create, "", Duration::from_secs(5));
         let result = (|| {
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn execution_uses_a_restricted_container_without_host_mounts_or_shell_interpolation() {
         let code = "print('$(do not execute on host)')";
-        let args = create_args("mianling-test", "python", code).unwrap();
+        let args = create_args("mianxu-test", "python", code).unwrap();
         for flag in [
             "--network=none",
             "--read-only",
@@ -244,7 +244,7 @@ mod tests {
                 || arg.starts_with("--mount"))
         );
         assert_eq!(args.last().unwrap(), code);
-        assert!(create_args("mianling-test", "shell", "echo unsafe").is_err());
-        assert!(create_args("mianling-test", "python", &"x".repeat(64001)).is_err());
+        assert!(create_args("mianxu-test", "shell", "echo unsafe").is_err());
+        assert!(create_args("mianxu-test", "python", &"x".repeat(64001)).is_err());
     }
 }

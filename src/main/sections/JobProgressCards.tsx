@@ -1,7 +1,7 @@
 /*
- * 求职进展回访（1:1 对齐原版 yB/dB/gB/_B，BS:37639-37796）：
+ * 求职进展回访：
  * 回访卡（最近一场未标结果的会话）+ 打卡卡（每 5 场问 offer/OC 数）+ 未过推广卡。
- * 原版走服务端 jobProgress.followUp/submitCheckin；这里用本地会话数据驱动同一套交互。
+ * 用本地会话数据驱动同一套交互。
  */
 import { useState } from 'react';
 import { CalendarCheck, MessageCircleQuestion } from 'lucide-react';

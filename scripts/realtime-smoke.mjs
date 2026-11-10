@@ -9,7 +9,7 @@ import { WebSocketServer } from 'ws';
 import { DesktopCdp, delay } from './desktop-cdp.mjs';
 
 const executable = path.resolve('artifacts/audio-smoke.exe');
-assert.ok((await readFile(executable)).includes(Buffer.from('com.mianlingai.clone.audiosmoke')));
+assert.ok((await readFile(executable)).includes(Buffer.from('com.luoyaosheng.mianxu.audiosmoke')));
 const requests = [], frames = [];
 let closed = 0;
 const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });

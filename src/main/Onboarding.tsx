@@ -1,5 +1,5 @@
 /*
- * 首次引导向导（对齐原版 kB）：简历 → 岗位 → 开始体验，三步。
+ * 首次引导向导：简历 → 岗位 → 开始体验，三步。
  */
 import { useRef, useState } from 'react';
 import { Button, Card, Input } from '@/ui/primitives';

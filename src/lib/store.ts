@@ -1,5 +1,5 @@
 /*
- * 设置存储：键名与原版 store.json 完全一致（跨版本兼容）。
+ * 设置存储：键名保持稳定（跨版本兼容）。
  * 内置 useSyncExternalStore 订阅，change 时可选持久化。
  */
 import { useRef, useSyncExternalStore } from 'react';
@@ -145,7 +145,7 @@ export function subscribeStore(cb: Listener): () => void {
   return () => listeners.delete(cb);
 }
 
-// ---------------- 键名与默认值（与原版一致） ----------------
+// ---------------- 键名与默认值 ----------------
 
 export const DEFAULT_OVERLAY_STYLE: OverlayStyle = {
   theme: 'light',
@@ -274,7 +274,7 @@ export const ALL_KEYS = [
   'capture.experimentalSharedSurface',
   'capture.excluded',
   'audio.excludedOutputs',
-  'interviewPreference', // 复刻新增：面试偏好（本地化替代 updateInterviewPreference）
+  'interviewPreference', // 面试偏好（本地化替代 updateInterviewPreference）
   'mac.screenShareNoticeDismissed',
   'desktop.theme', // 主窗口深浅色（'system' | 'light' | 'dark'）
   'desktop.uiScale', // 主窗口界面大小

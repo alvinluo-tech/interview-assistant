@@ -1,6 +1,6 @@
 /*
  * 浮窗快捷键：19 个动作、simple / conflict-free 双方案全表、退役键迁移、
- * 键位捕获与徽标格式化。全部表格对齐原版（BS:25516-25638）。
+ * 键位捕获与徽标格式化。默认键位在此集中定义。
  */
 
 export const ACTIONS = [
@@ -99,7 +99,7 @@ export const SCHEME_DEFAULTS: Record<HotkeyScheme, Record<ActionKey, string>> = 
 
 export const DEFAULT_PANIC_HOTKEY = 'CommandOrControl+Shift+X';
 
-/** 2026-10-17 之后注册的新用户默认 simple（原版分界日） */
+/** 2026-10-17 之后注册的新用户默认 simple */
 const SCHEME_SWITCH_DATE = new Date('2026-10-17T00:00:00+08:00').getTime();
 
 export function defaultSchemeForUser(createdAt?: number | null): HotkeyScheme {
@@ -107,7 +107,7 @@ export function defaultSchemeForUser(createdAt?: number | null): HotkeyScheme {
   return t >= SCHEME_SWITCH_DATE ? 'simple' : 'conflict-free';
 }
 
-/** 退役默认键迁移（原版 SE） */
+/** 退役默认键迁移 */
 const RETIRED_DEFAULTS: Partial<Record<ActionKey, string>> = {
   'scroll-up': 'CmdOrCtrl+Shift+Up',
   'scroll-down': 'CmdOrCtrl+Shift+Down',

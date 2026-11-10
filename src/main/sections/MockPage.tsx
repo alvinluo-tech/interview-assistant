@@ -1,6 +1,6 @@
 import { useAiReady } from '@/lib/aiSettings';
 /*
- * 模拟面试工作台（对齐原版 zU）：配置 → 建会话 → 开独立面试间窗口。
+ * 模拟面试工作台：配置 → 建会话 → 开独立面试间窗口。
  * 会话与复盘全部落 data.json：支持「有一场还没结束」续场与历史回看。
  */
 import { useState } from 'react';

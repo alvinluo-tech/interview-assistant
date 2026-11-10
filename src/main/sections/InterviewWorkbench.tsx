@@ -3,7 +3,7 @@ import { usesLiveSpeech } from '@/lib/aiConfig';
 import { DualCameraSwitch } from '@/lib/dualCamera';
 import { t } from '@/lib/i18n';
 /*
- * 面试工作台（对齐原版 tB）：面试方式、简历/岗位/资料选择、回答风格、
+ * 面试工作台：面试方式、简历/岗位/资料选择、回答风格、
  * 静音门限、自动回答等偏好，开始/结束会话。
  */
 import { useState } from 'react';

@@ -91,7 +91,7 @@ test('Qwen Audio and CosyVoice request PCM at 24kHz, while unsupported region/re
   }
   let requests=0; const fetcher=async()=>{requests++;return sse('');};
   await assert.rejects(requestSpeech(provider('https://dashscope.aliyuncs.com/compatible-mode/v1'),'qwen3-tts-flash-realtime','你好','Cherry',fetcher,1000,undefined,()=>{}),/realtime|实时/);
-  await assert.rejects(requestSpeech(provider(),'mimo-v2.5-tts-voiceclone','你好','苏打',fetcher,1000,undefined,()=>{}),/复刻|克隆/);
+  await assert.rejects(requestSpeech(provider(),'mimo-v2.5-tts-voiceclone','你好','苏打',fetcher,1000,undefined,()=>{}),/克隆/);
   assert.equal(requests,0);
 });
 
@@ -178,7 +178,7 @@ test('native downloads omit authorization, upgrade official HTTP URLs and reject
   },1000,undefined,chunk=>chunks.push(chunk));
   assert.equal(calls,2);assert.equal(chunks[0].format,'encoded');
   for(const url of ['https://evil.example/a','https://user:secret@dashscope-result-bj.oss-cn-beijing.aliyuncs.com/a']) {
-    calls=0;await assert.rejects(requestSpeech(ali,'qwen3-tts-flash','你好','Cherry',async()=>{calls++;return Response.json({output:{audio:{url}}});},1000,undefined,()=>{}),/非官方/);
+    calls=0;await assert.rejects(requestSpeech(ali,'qwen3-tts-flash','你好','Cherry',async()=>{calls++;return Response.json({output:{audio:{url}}});},1000,undefined,()=>{}),/不受信任的/);
     assert.equal(calls,1);
   }
   calls=0;await assert.rejects(requestSpeech(ali,'qwen3-tts-flash','你好','Cherry',async()=>++calls===1?Response.json({output:{audio:{url:'https://dashscope-result-sg.oss-ap-southeast-1.aliyuncs.com/a'}}}):new Response('',{status:403}),1000,undefined,()=>{}),/下载失败/);

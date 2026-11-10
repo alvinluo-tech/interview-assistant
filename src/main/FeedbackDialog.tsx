@@ -17,7 +17,7 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
     <Dialog open onClose={onClose} className="max-w-md">
       <DialogTitle>{t('反馈')}</DialogTitle>
       <p className="mb-3 text-sm text-muted-foreground">
-        {t('本复刻版为本地模式，反馈会保存在本地（不走云端工单）。有问题可以直接改源码。')}
+        {t('本版本为本地模式，反馈会保存在本地（不走云端工单）。有问题可以直接改源码。')}
       </p>
       <Textarea
         rows={5}

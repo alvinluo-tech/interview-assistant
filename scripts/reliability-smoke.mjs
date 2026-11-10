@@ -4,7 +4,7 @@ import {readFile,writeFile,chmod} from 'node:fs/promises';
 import path from 'node:path';
 import {DesktopCdp} from './desktop-cdp.mjs';
 const executable=path.resolve('artifacts/audio-smoke.exe');
-const identifier='com.mianlingai.clone.audiosmoke';
+const identifier='com.luoyaosheng.mianxu.audiosmoke';
 assert.ok((await readFile(executable)).includes(Buffer.from(identifier)));
 const start=()=>spawn(executable,[],{windowsHide:true,stdio:'ignore',env:{...process.env,WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:'--remote-debugging-port=19395'}});
 let child=start();

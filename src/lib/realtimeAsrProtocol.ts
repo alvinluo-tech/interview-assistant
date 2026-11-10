@@ -24,7 +24,7 @@ export function validateRealtimeEndpoint(value: string): string {
   if (url.protocol !== 'wss:' || url.username || url.password || url.search || url.hash || url.port
       || url.pathname !== '/api-ws/v1/inference'
       || !bailianRegion(url.hostname)) {
-    throw new Error(t('实时 ASR 仅支持百炼北京或新加坡地域的官方 WSS 地址，不接受查询参数或 URL 中的密钥。'));
+    throw new Error(t('实时 ASR 仅支持百炼北京或新加坡地域的 WSS 地址，不接受查询参数或 URL 中的密钥。'));
   }
   return url.href;
 }

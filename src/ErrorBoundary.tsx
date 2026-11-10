@@ -1,5 +1,5 @@
 /*
- * 根错误边界（对齐原版 bJ）：渲染崩溃时上报并展示兜底文案；
+ * 根错误边界：渲染崩溃时上报并展示兜底文案；
  * 浮窗崩溃保持透明、主窗口给出重载按钮。
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react';

@@ -98,7 +98,7 @@ fn install_location(app: &AppHandle) -> (InstallMode, bool, Option<String>) {
         let mode = install_policy::windows_mode(cfg!(debug_assertions), installed, false);
         let reason = match mode {
             InstallMode::Installer if cfg!(debug_assertions) => Some("当前是开发版，下载并验证后可通过安装向导安装正式版。".into()),
-            InstallMode::Installer => Some("当前是免安装版，下载并验证后将打开官方安装向导。".into()),
+            InstallMode::Installer => Some("当前是免安装版，下载并验证后将打开安装向导。".into()),
             _ => None,
         };
         (mode, false, reason)
@@ -155,8 +155,8 @@ fn fail(app: &AppHandle, message: String) -> Snapshot {
 fn error_text(error: tauri_plugin_updater::Error) -> String {
     use tauri_plugin_updater::Error;
     match error {
-        Error::ReleaseNotFound => "尚未发布可用的自动更新清单，请前往官方发布页查看。".into(),
-        Error::Minisign(_) | Error::SignedVersionMismatch { .. } | Error::MissingSignedVersion => "更新签名或签名版本验证失败，已阻止安装，请重新下载或前往官方发布页。".into(),
+        Error::ReleaseNotFound => "尚未发布可用的自动更新清单，请前往发布页查看。".into(),
+        Error::Minisign(_) | Error::SignedVersionMismatch { .. } | Error::MissingSignedVersion => "更新签名或签名版本验证失败，已阻止安装，请重新下载或前往发布页。".into(),
         other => format!("更新失败，请检查网络或稍后重试：{other}"),
     }
 }
@@ -194,7 +194,7 @@ pub async fn cmd_updater_check(app: AppHandle, window: WebviewWindow, manual: bo
         match result {
             Ok(Some(update)) => {
                 if !official_artifact(&update.download_url, &update.version) {
-                    drop(core); return Ok(fail(&app, "更新下载地址不属于官方 HTTPS 发布路径，已停止。".into()));
+                    drop(core); return Ok(fail(&app, "更新下载地址不属于 HTTPS 发布路径，已停止。".into()));
                 }
                 core.view.phase = "available".into(); core.view.version = Some(update.version.clone());
                 core.view.notes = update.body.clone(); core.view.date = update.date.map(|d| d.to_string());

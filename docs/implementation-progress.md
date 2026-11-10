@@ -31,8 +31,8 @@
 ## 验证与交付
 
 - 新增四个核心模块组合覆盖率：行 98.07%、分支 83.61%、函数 85.25%，CI 均设 80% 门槛；并非全应用覆盖率。
-- TypeScript/生产构建/actionlint 通过；生产依赖官方 npm registry 审计无已知漏洞，镜像站不支持 audit。
-- 隔离测试使用独立目标输出，实时传输测试适配仅测试构建启用，正式构建使用官方通道。
+- TypeScript/生产构建/actionlint 通过；生产依赖在公共 npm registry 审计无已知漏洞，镜像站不支持 audit。
+- 隔离测试使用独立目标输出，实时传输测试适配仅测试构建启用，正式构建使用正式通道。
 - Windows 正式 EXE/NSIS 已构建并校验，位于 `artifacts/mianshi-copilot-enhanced.exe` 和 `artifacts/mianshi-copilot-enhanced-setup.exe`，SHA-256 见 `artifacts/enhanced-SHA256SUMS.txt`。身份为正常应用，正式前端不含本机测试适配。未关闭或覆盖运行中的旧程序。
 - 共 83 项 JavaScript 与 22 项原生单元测试通过；桌面检查共 25 项（原有收音 12、文档/题库 4、实时通道/模拟窗口 3、可靠性 6），真实百炼和容器执行限制如上。
 - macOS CI 配置保留但未触发，仍需 Mac 实机验证。

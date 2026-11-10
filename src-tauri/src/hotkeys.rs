@@ -1,6 +1,6 @@
 /*
  * 全局热键：18 个浮窗动作热键 + 应急隐藏（panic）热键。
- * 对齐原版：按下沿/松开沿都上报（scroll/move 需要按住型），panic 在浮窗
+ * 按下沿/松开沿都上报（scroll/move 需要按住型），panic 在浮窗
  * 显示时切换隐藏/恢复，浮窗未显示时上报 panic-hotkey-idle。
  */
 use serde::{Deserialize, Serialize};

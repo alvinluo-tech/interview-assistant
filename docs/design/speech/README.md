@@ -7,7 +7,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [实现记录与验收边界](implementation-2026-10-31.md) | 代码接入、模型来源、实测、隐私与使用流程 |
-| [官方能力核实](provider-capabilities.md) | 小米 MiMo、阿里百炼的语言、方言、说话人和地域差异，含原始链接 |
+| [厂商能力核实](provider-capabilities.md) | 小米 MiMo、阿里百炼的语言、方言、说话人和地域差异，含原始链接 |
 | [产品与适配架构](language-and-speaker-architecture.md) | 语言 UI、播放、电话角色判断、接口和扩展规则 |
 | [实施与验收](implementation-plan.md) | 当前代码缺口、分步交付、测试样本与发布条件 |
 | [ADR 0005](../../adr/0005-speech-capabilities-and-speaker-routing.md) | 为什么把 ASR、TTS、语言策略和说话人判断分开 |

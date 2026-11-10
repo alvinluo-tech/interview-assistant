@@ -1,7 +1,6 @@
 /*
  * 手机副屏（exam-dual 本地版）：在局域网起一个 HTTP+WebSocket 服务，
- * 手机扫码打开托管页，浮窗 UI 状态与动作经此中继（原版走 api.mianlingai.com 的
- * exam.toSecondary/toPrimary 消息族，见 _recon/spec/04-exam.md §8）。
+ * 手机扫码打开托管页，浮窗 UI 状态与动作经此中继（toSecondary/toPrimary 消息族）。
  * - GET（无 Upgrade）→ 返回内嵌手机页 dual_page.html；
  * - WebSocket（路径校验 token）→ 双向消息：手机→“dual-message”事件，宿主→cmd_dual_send；
  * - 连接/断开 → “dual-peer”事件 {count}；同一 token 只允许一台手机（新连顶旧连）。

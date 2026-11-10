@@ -1,9 +1,9 @@
 import {GenerationDetails} from './GenerationDetails';
 import {selectSolverTurn} from '@/lib/examEngine';
 /*
- * 笔试浮窗（原版 gJ + tG 壳）：顶栏（拖拽/品牌/题号/状态/档位）、
+ * 笔试浮窗：顶栏（拖拽/品牌/题号/状态/档位）、
  * 滚动边缘、markdown 正文、追问 chips、底栏（模式/解题/加页/重置/退出、
- * 多页收集态）。文案与悬停时长对齐原版。
+ * 多页收集态）。文案与悬停时长集中定义。
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Copy, Puzzle } from 'lucide-react';
@@ -86,7 +86,7 @@ export function ExamOverlay({ preview }: { preview?: boolean }) {
     };
   }, [preview]);
 
-  // 全局热键：答题 / 截屏加页 / 复制答案 / 打断（原版 exam 的绑定 + 应急打断）
+  // 全局热键：答题 / 截屏加页 / 复制答案 / 打断（含应急打断）
   useEffect(() => {
     if (preview) return;
     const offAnswer = bindHotkey('answer', () => void solve());

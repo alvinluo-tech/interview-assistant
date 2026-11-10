@@ -1,6 +1,6 @@
 /*
  * 笔试引擎：截屏 → vision LLM 流式作答 → 本地笔试记录。
- * 替代原版 exam.* websocket 云端管线；计费/额度本地化（本地模式不限制）。
+ * 笔试答案走本地 AI 接口；计费/额度本地化（本地模式不限制）。
  */
 import { captureScreen, cmd } from './bridge';
 import { buildExamUserPrompt, chatWithImages, EXAM_SYSTEM_PROMPT } from './ai';
@@ -486,7 +486,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
   } finally { if (current === generation) { if(checkpointTimer!==null){window.clearTimeout(checkpointTimer);checkpointTimer=null;} requestController = null; } }
 }
 
-/** 从答案中提取服务端建议追问（原版 [[FOLLOWUP: a|b|c]] 协议） */
+/** 从答案中提取建议追问（[[FOLLOWUP: …]] 标记） */
 function suggestFollowUps(answer: string): string[] {
   const m = /\[\[FOLLOWUP:\s*([^\]]+)\]\]/.exec(answer);
   if (m) {
@@ -919,7 +919,7 @@ export async function endExamSession(relaunch: boolean): Promise<void> {
   }
 }
 
-// ---------------- 复制（原版 PG/FG/xt） ----------------
+// ---------------- 复制 ----------------
 
 export function extractLastCodeBlock(text: string): string | null {
   const fences = [...text.matchAll(/```[a-zA-Z0-9+#-]*\n([\s\S]*?)```/g)];

@@ -18,7 +18,7 @@ Agent memory for this repository. These rules apply to every commit, push, and r
 
 ## Never Commit
 
-- Local machine paths (e.g. `D:\...`, `E:\code\...`, `C:\Users\...`) — see `.gitignore` for the excluded list (`_recon/`, `analysis_mianling/`, artifacts, generated schemas).
+- Local machine paths (e.g. `D:\...`, `E:\code\...`, `C:\Users\...`) — see `.gitignore` for the excluded list (`_recon/`, `_local_analysis/`, artifacts, generated schemas).
 - Secrets, API keys, or `store.json` / `data.json` user data.
 
 ## Verification Before Push

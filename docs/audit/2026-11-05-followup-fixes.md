@@ -37,7 +37,7 @@ PDF 读取在禁止 JavaScript 动态求值的实际 CSP 下验收通过，保�
 | 新增时序/清理探针 | R01–R04 均为 fixed；deep-review-revalidation 与 second-review-revalidation 的 --verify 通过 |
 | CSP 实际浏览器验收 | PDF 文本/worker、WASM、图片和 Blob 媒体通过；eval、内联脚本、外连拦截通过；artifacts/audit/csp-boundaries.json |
 | 协议与输入分片 | 2,016 组合通过；artifacts/audit/protocol-fuzz.json |
-| 依赖检查 | pnpm audit 使用官方 registry，未报告已知漏洞；未修改用户 registry 配置 |
+| 依赖检查 | pnpm audit 使用公共 registry，未报告已知漏洞；未修改用户 registry 配置 |
 | 构建 | 前端及正常标识的 Windows 开发构建通过；隔离原生验收结束后恢复正常构建 |
 
 模态管理的浏览器覆盖明细位于 artifacts/audit/modal-coverage.json，只代表这个模块和这些场景，不代表全应用覆盖率。源文件指纹及结构化验收摘要见 [本轮证据](2026-11-05-followup-evidence.json)。之前的基线证据保留为历史快照，不用修复后的代码冒充基线未变化。

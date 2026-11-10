@@ -33,7 +33,7 @@ use overlay::OverlayState;
 use tauri::Manager;
 
 /*
- * 复刻自原版的行为要点（见 _recon/spec）：
+ * 关键行为要点：
  * - overlay 窗口：透明/无边框/不进任务栏/不抢焦点，默认点击穿透；
  *   原生侧轮询光标命中「zones」并回发 cursor-zone 事件驱动悬停驻留交互。
  * - 捕获排除与进程身份切换见 protection / disguise；演示模式仅在本次运行生效。

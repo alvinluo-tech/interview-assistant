@@ -3,7 +3,7 @@
 ## 运行范围
 
 - **Check Desktop**：所有拉取请求、main 推送及手动运行。Windows x64、Mac ARM64、Mac Intel 并行执行前端回归与覆盖率门槛、原生单元测试、完整 Release 编译链接和安装包生成。Mac 同时校验权限 plist 与 DMG。产物保留 7 天，不公开发布。
-- **Release Desktop**：推送 `v*` 标签或手动指定已有标签。同步版本、测试、打包并校验校验和后，才创建并公开 Release。构建附件保留 14 天。
+- **Release Desktop**：推送 `v*` 标签或手动指定已有标签。先按 [发布流程](releases.md) 准备中文 Release 草稿，再同步版本、测试、打包并校验签名与校验和，最后上传附件并公开 Release。构建附件保留 14 天。
 - 所有检查步骤分别执行，避免 Windows 中前一个测试失败被后续成功命令覆盖。核心覆盖率套件已经包含文档、实时 ASR 和可靠性测试，不再重复运行这三个套件。
 - 前端在原生测试前构建一次；后续打包显式使用 `src-tauri/tauri.ci.conf.json` 跳过重复 hook。普通本地 `pnpm tauri build` 仍自动构建前端。不要在未执行 `pnpm build` 时使用该 CI 配置。
 - 拉取请求不设置路径过滤，便于将三个平台的稳定检查名用于 required checks。工作流配置本身不会启用分支保护；仓库保护规则需单独配置。

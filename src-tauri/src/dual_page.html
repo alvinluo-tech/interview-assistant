@@ -1,8 +1,8 @@
 <!doctype html>
 <!--
-  面灵AI · 手机副屏（本地 exam-dual）
+  MianXu · 手机副屏（本地 exam-dual）
   由桌面端 dual_screen.rs 托管；token 校验后建立 WebSocket。
-  对齐原版副屏能力：接管显示、光标同步、按钮热区上报、30s 心跳、
+  能力：接管显示、光标同步、按钮热区上报、30s 心跳、
   断线自动重连（期间电脑不弹回浮窗）、iPhone 常亮、光标大小设置（2026-10-28）、
   禁用双指缩放（2026-10-28）、「切回电脑」。
 -->
@@ -214,7 +214,7 @@
   }
   connect();
 
-  // 30s 心跳（对齐原版副屏 ping/pong RTT）
+  // 30s 心跳（ping/pong 计 RTT）
   setInterval(function () { send({ t: 'ping', id: Date.now() }); }, 30000);
 
   // ---- 热区上报：按钮/卡片的归一化矩形（电脑鼠标据此命中） ----

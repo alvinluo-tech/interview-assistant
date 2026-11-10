@@ -251,7 +251,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
                   <label className="text-xs font-medium" htmlFor="ai-auth-mode">{t('认证方式')}<Select id="ai-auth-mode" className="mt-1" value={provider.authMode} disabled={busy === 'save'} onChange={e => patchProvider({ authMode: e.target.value as AiProvider['authMode'] })}><option value="bearer">API Key</option><option value="none">{t('无需密钥')}</option></Select></label>
                   <label className="min-w-0 text-xs font-medium" htmlFor="ai-api-key">API Key<div className="relative mt-1"><Input id="ai-api-key" className="pr-10 font-mono text-xs" type={revealKey ? 'text' : 'password'} autoComplete="off" spellCheck={false} value={provider.apiKey} disabled={busy === 'save' || provider.authMode === 'none'} onChange={e => patchProvider({ apiKey: e.target.value })} placeholder={provider.authMode === 'none' ? t('本地服务不发送认证头') : t('粘贴服务商提供的密钥')} /><button type="button" aria-label={revealKey ? t('隐藏密钥') : t('显示密钥')} className="absolute inset-y-0 right-2 px-1 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setRevealKey(v => !v)}>{revealKey ? <EyeOff size={14} /> : <Eye size={14} />}</button></div></label>
                 </div>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">{t('密钥在本机以当前 Windows 账户加密保存；请求直接发往你设置的接口。百炼官方地址会按地域查询官方模型目录；新加坡目录使用百炼新加坡公共域名。')}</p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">{t('密钥在本机以当前 Windows 账户加密保存；请求直接发往你设置的接口。百炼地址会按地域查询模型目录；新加坡目录使用百炼新加坡公共域名。')}</p>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void networkAction('discover')}><RefreshCw size={13} className={busy === 'discover' ? 'animate-spin' : ''} />{busy === 'discover' ? t('正在获取模型…') : t('连接并获取模型')}</Button>
@@ -312,8 +312,8 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
             <label htmlFor="ai-tts-voice">{t('音色 ID')}<Input id="ai-tts-voice" className="mt-1" value={draft.ttsVoice} disabled={busy === 'save'} onChange={event=>setDraft(value=>({...value,ttsVoice:event.target.value}))} placeholder={defaultTtsVoice(ttsProvider || {baseUrl:''},draft.routes.tts.modelId) || t('填写此模型支持的音色 ID')} /></label>
           </div>}
           <p role="status" className="text-muted-foreground">{voicePhase === 'preparing' ? t('正在连接语音服务，可随时停止…') : voicePhase === 'speaking' ? t('正在试听…') : dirty ? t('保存后可试听；云端试听会调用所选服务，可能产生费用。') : draft.routes.tts ? t('保存的配置将用于试听。音色可用范围取决于模型、地域与账户权限。') : t('无需配置语音模型或密钥。')}</p>
-          {speechService === 'bailian' && <p className="text-muted-foreground">{t('Qwen-Audio-TTS 使用该模型支持的系统或自建音色；CosyVoice HTTP 目前适配北京地域。新加坡请选择 Qwen 系列。复刻音色请填写已创建的音色 ID。')}</p>}
-          {speechService === 'mimo' && <p className="text-muted-foreground">{t('预置音色请选择 mimo-v2.5-tts；音色复刻、设计模型需要额外参数，暂不适用于此入口。')}</p>}
+          {speechService === 'bailian' && <p className="text-muted-foreground">{t('Qwen-Audio-TTS 使用该模型支持的系统或自建音色；CosyVoice HTTP 目前适配北京地域。新加坡请选择 Qwen 系列。克隆音色请填写已创建的音色 ID。')}</p>}
+          {speechService === 'mimo' && <p className="text-muted-foreground">{t('预置音色请选择 mimo-v2.5-tts；音色克隆、设计模型需要额外参数，暂不适用于此入口。')}</p>}
         </div>
         {unsupportedSpeechSelected&&<div role="alert" data-testid="unsupported-speech-model" className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed">{t('当前语音转写选择了 {modelId}。本应用尚未接入此百炼文件识别接口，不能发送到 OpenAI 文件转写地址。请改用当前连接的实时模型并保存。', { modelId: draft.routes.stt?.modelId ?? '' })}<Button size="sm" variant="outline" className="mt-2" disabled={!!busy} onClick={useCurrentConnectionRealtime}>{t('改用当前连接的实时识别')}</Button></div>}
         <details className="mt-3 border-t pt-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t('请求与语音选项')}</summary><div className="mt-3 grid grid-cols-2 gap-3">
@@ -330,7 +330,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
             {realtimeSpeechSelected&&<p>{t('当前模型需要持续实时音频，已自动选择正确通道。更换语音模型后可使用其他输入方式。')}</p>}
             <p>{t('添加对应地域的百炼连接并填写同地域的 Key，将语音转写分配给 fun-asr-realtime。北京另支持 fun-asr-realtime-2026-02-28 和 paraformer-realtime-v2；新加坡请选择稳定版。已有连接可获取模型目录或手动添加模型 ID。持续连接可能按时长计费，暂停会断开连接。')}</p>
             <label className="block">{t('实时 WSS 地址（留空自动匹配）')}<Input aria-label={t('实时 ASR WSS 地址')} className="mt-1 font-mono text-xs" value={draft.realtimeEndpoint ?? ''} placeholder={automaticRealtimeEndpoint} onChange={event => setDraft(value => ({ ...value, realtimeEndpoint: event.target.value.trim() || undefined }))} /></label>
-            <p className="break-all text-muted-foreground">{t('自动地址：{endpoint}。也可填写同地域的官方 WSS 地址；切换地域时清空旧地址，不要把 Key 放入 URL。', { endpoint: automaticRealtimeEndpoint })}</p>
+            <p className="break-all text-muted-foreground">{t('自动地址：{endpoint}。也可填写同地域的 WSS 地址；切换地域时清空旧地址，不要把 Key 放入 URL。', { endpoint: automaticRealtimeEndpoint })}</p>
             <label className="block">{t('热词表 ID（可选）')}<Input aria-label={t('ASR 热词表 ID')} className="mt-1" value={draft.realtimeVocabularyId ?? ''} placeholder={t('百炼已创建的 vocabulary_id')} onChange={event => setDraft(value => ({ ...value, realtimeVocabularyId: event.target.value }))} /></label>
           </div>}
           <label htmlFor="ai-timeout" className="text-xs">{t('请求超时（秒）')}<Input id="ai-timeout" className="mt-1" type="number" min={5} max={300} value={draft.timeoutMs / 1000} disabled={busy === 'save'} onChange={e => setDraft(value => ({ ...value, timeoutMs: Number(e.target.value) * 1000 }))} /></label>

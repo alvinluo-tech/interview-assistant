@@ -1,10 +1,10 @@
 /*
- * 手机副屏宿主端（exam-dual 本地版，对应原版 YG/HG 接管链路，spec 02 §214、04 §8）：
+ * 手机副屏宿主端（exam-dual 本地版）：
  * - 在笔试工作台扫码启动（cmd_dual_start），手机连上后接管浮窗显示：
  *   本地浮窗 DOM 隐身（CSS 类 dual-takeover），全量 UI 状态节流推给手机；
  * - 手机热区（归一化）换算成浮窗像素回设 cmd_set_overlay_zones，
  *   电脑鼠标在浮窗范围内悬停手机按钮（cursor-point 归一化回传手机画光标）；
- * - 断线 15s 宽限内不弹回本地浮窗（原版 KG 语义）；「切回电脑」= exit → released。
+ * - 断线 15s 宽限内不弹回本地浮窗；「切回电脑」= exit → released。
  */
 import { cmd, listenEvent, emitTo, setOverlaySize, setOverlayZones, setCursorPointFeed } from './bridge';
 import { t } from './i18n';
@@ -29,7 +29,7 @@ export interface DualStartInfo {
 }
 
 const DUAL_DWELL_MS = 1200; // 与「解题」悬停一致
-const STATE_PUSH_MS = 100; // 原版 60ms tick，本地 100ms 足够
+const STATE_PUSH_MS = 100; // 100ms 足够，不必更密
 const RECONNECT_GRACE_MS = 15000;
 
 let zonesSuppressed = false;
@@ -182,7 +182,7 @@ export function startDualTakeover(): () => void {
 
   const scheduleRestore = () => {
     if (restoreTimer != null) return;
-    // 原版语义：断线宽限内手机自动重连，期间电脑不弹回浮窗
+    // 断线宽限内手机自动重连，期间电脑不弹回浮窗
     restoreTimer = window.setTimeout(() => {
       restoreTimer = null;
       void restore(false);

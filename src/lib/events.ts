@@ -1,5 +1,5 @@
 /*
- * 极简事件总线（对应原版的全局 mitt，承载 interviewer:utterance、
+ * 极简事件总线（承载 interviewer:utterance、
  * toast、overlay 内部通信等）。
  */
 type Handler<T = unknown> = (payload: T) => void;

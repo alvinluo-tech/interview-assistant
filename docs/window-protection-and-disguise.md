@@ -17,7 +17,7 @@ Windows 10 2004 起支持排除语义；旧版系统可能按 `WDA_MONITOR` 显�
 ## 进程伪装
 
 1. 设置进程名和窗口标题，开启开关，点击「保存设置」。标题和通用程序图标立即应用于两个窗口。
-2. 点击「重启应用使进程名生效」。原始 exe 被复制到 `%LOCALAPPDATA%\com.mianlingai.clone\disguise\<name>.exe`。
+2. 点击「重启应用使进程名生效」。原始 exe 被复制到 `%LOCALAPPDATA%\com.luoyaosheng.mianxu\disguise\<name>.exe`。
 3. 只改写新建副本：文件描述、产品名、内部名、原文件名改为指定名称，版本设为 `1.0.0.0`；枚举并移除全部 `RT_ICON` / `RT_GROUP_ICON` 资源，保留应用清单等其他资源。
 4. 子进程通过 `MIANSHI_DISGUISED=1`、`MIANSHI_REAL_EXE` 记录副本和原始路径；`origin.json` 支持之后直接打开副本时寻找原程序。
 5. 重启子进程等待旧进程结束后再初始化 Tauri 单实例锁。副本或重启失败会保留当前程序，启动错误显示在设置页。
@@ -37,4 +37,4 @@ pnpm tauri build --no-bundle
 
 桌面验收：检查两窗口亲和性为 `0x11` → 开启演示后为 `0` → 关闭恢复；保存伪装配置并重启，检查文件名、版本信息、标题、图标；关闭并重启确认回到原始路径。使用实际录屏软件分别验证窗口捕获和显示器捕获。
 
-`scripts/privacy-smoke.mjs` 是桌面集成验证脚本，通过 WebView2 本地调试端口读取真实原生状态。需先使用 `TAURI_CONFIG={"identifier":"com.mianlingai.clone.smoke"}` 构建独立测试程序至 `artifacts/privacy-smoke.exe`，并开启 `tauri/custom-protocol` feature；然后运行 `node scripts/privacy-smoke.mjs`。脚本校验隔离标识，使用独立数据目录，结果写入 `artifacts/privacy-smoke-result.json`。测试程序退出后调试端口也随之关闭。
+`scripts/privacy-smoke.mjs` 是桌面集成验证脚本，通过 WebView2 本地调试端口读取真实原生状态。需先使用 `TAURI_CONFIG={"identifier":"com.luoyaosheng.mianxu.smoke"}` 构建独立测试程序至 `artifacts/privacy-smoke.exe`，并开启 `tauri/custom-protocol` feature；然后运行 `node scripts/privacy-smoke.mjs`。脚本校验隔离标识，使用独立数据目录，结果写入 `artifacts/privacy-smoke-result.json`。测试程序退出后调试端口也随之关闭。

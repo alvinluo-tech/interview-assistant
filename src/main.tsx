@@ -1,5 +1,5 @@
 /*
- * 应用入口：hash 场景路由（#overlay / #mock / 主窗口），对齐原版 vJ。
+ * 应用入口：hash 场景路由（#overlay / #mock / 主窗口）。
  */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -53,7 +53,7 @@ async function start() {
 }
 void start();
 
-// 全局错误兜底（对齐原版：window.error/unhandledrejection → 上报 + toast）
+// 全局错误兜底（window.error/unhandledrejection → 上报 + toast）
 const errorSink: string[] = [];
 (window as unknown as { __errors: string[] }).__errors = errorSink;
 window.addEventListener('error', (e) => {

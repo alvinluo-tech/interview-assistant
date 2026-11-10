@@ -1,7 +1,7 @@
 /*
  * 浮窗应用根组件：心跳（5s）、overlay-shown/hidden 事件、会话握手、
  * 位置恢复、热键（移动/尺寸/透明度/配色）注册、模式路由。
- * 对齐原版 mJ/hJ 的生命周期与常量。
+ * 生命周期与常量见下。
  */
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow, currentMonitor, availableMonitors } from '@tauri-apps/api/window';
@@ -190,7 +190,7 @@ async function restorePosition() {
   }
 }
 
-/** 浮窗热键注册：移动 / 尺寸 / 透明度 / 一键配色（原版 XE + vK） */
+/** 浮窗热键注册：移动 / 尺寸 / 透明度 / 一键配色 */
 export function useOverlayStyleHotkeys(style: OverlayStyle, mode: OverlayMode) {
   const actions=useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
@@ -292,7 +292,7 @@ async function moveOverlay(action: string) {
     let first = true;
     let x = startPos.x;
     let y = startPos.y;
-    // 持续移动直到该方向热键松开（简化为按一次移动 N 步；原版为按住持续移动）
+    // 持续移动直到该方向热键松开（简化为按一次移动 N 步）
     for (let i = 0; i < 12; i++) {
       const dx = action === 'move-left' ? -step : action === 'move-right' ? step : 0;
       const dy = action === 'move-up' ? -step : action === 'move-down' ? step : 0;

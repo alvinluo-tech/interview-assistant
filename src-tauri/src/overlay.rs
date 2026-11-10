@@ -1,6 +1,6 @@
 /*
  * overlay 窗口控制：显示/隐藏/位置/尺寸、点击穿透与 zones 光标命中、
- * 心跳看护、会话握手。逻辑对齐原版 overlay_watchdog / window_ops。
+ * 心跳看护、会话握手。
  */
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -260,7 +260,7 @@ pub fn cmd_set_drag_active(
     if !active {
         return Ok(());
     }
-    // 悬停进入拖动：窗口跟随光标，光标静止 0.8s 即释放（原版语义）
+    // 悬停进入拖动：窗口跟随光标，光标静止 0.8s 即释放
     let win = win.ok_or("overlay window missing")?;
     #[cfg(any(windows, target_os = "macos"))]
     {
@@ -590,7 +590,7 @@ pub fn spawn_cursor_poller(app: AppHandle) {
             };
             let p = PhysicalPosition::new(x, y);
             if feed {
-                // 仅在移动时上报（原版同样只在变化时喂光标），避免高频事件淹没 WebView2 通道
+                // 仅在移动时上报（只在移动时上报），避免高频事件淹没 WebView2 通道
                 let mut last = state.last_cursor_point.lock().unwrap();
                 if last.map(|(x, y)| x != p.x || y != p.y).unwrap_or(true) {
                     *last = Some((p.x, p.y));

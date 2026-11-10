@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DesktopCdp, delay } from './desktop-cdp.mjs';
 
-const identifier = 'com.mianlingai.clone.audiosmoke';
+const identifier = 'com.luoyaosheng.mianxu.audiosmoke';
 const executable = path.resolve('artifacts/audio-smoke.exe');
 assert.ok((await readFile(executable)).includes(Buffer.from(identifier)), 'Use the isolated smoke binary');
 const directory = path.join(process.env.APPDATA, identifier);

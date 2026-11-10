@@ -1,7 +1,7 @@
 /*
  * 浮窗平台层：OverlayPlatformProvider（穿透/交互切换、zones 注册与全量
  * 上报、cursor-zone 订阅、悬停驻留 hook、热键绑定、原生拖拽/缩放）。
- * 对齐原版 TD/ED/DD/OD + KT/GT 的行为与常量（350ms 扫描、4px 外扩、
+ * 行为与常量（350ms 扫描、4px 外扩、
  * 800ms 冷却）。
  */
 import {
@@ -328,7 +328,7 @@ export function SimulatedPlatform({ mode, children }: { mode: OverlayMode; child
 }
 
 /**
- * 悬停驻留触发（原版 KT）：光标停留在 zone 上，进度条走满即触发，
+ * 悬停驻留触发：光标停留在 zone 上，进度条走满即触发，
  * 触发后同 zone 冷却 800ms。
  */
 export function useDwell(

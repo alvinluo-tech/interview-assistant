@@ -6,7 +6,7 @@ import path from 'node:path';
 import { DesktopCdp, delay } from './desktop-cdp.mjs';
 
 const executable = path.resolve('artifacts/byok-smoke.exe');
-const identifier = 'com.mianlingai.clone.byoksmoke';
+const identifier = 'com.luoyaosheng.mianxu.byoksmoke';
 assert.ok((await readFile(executable)).includes(Buffer.from(identifier)), 'Use the isolated BYOK smoke binary');
 const directory = path.join(process.env.APPDATA, identifier);
 const credential = 'byok-local-test-credential';

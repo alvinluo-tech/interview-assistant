@@ -1,12 +1,12 @@
 /*
- * 浮窗皮肤计算：精确移植原版公式（TC:24976-25218 的 ly/uy/iy/ay/ny 全链）。
+ * 浮窗皮肤计算：把样式参数换算成浮窗用的 CSS 变量。
  * 输入 overlay.style + 模式，输出壳层 inline style 与 CSS 变量表。
  */
 import type { OverlayStyle } from './store';
 
 export type OverlayMode = 'exam' | 'interview';
 
-/** 样式归一化（原版 kb） */
+/** 样式归一化 */
 export function normalizeStyle(style: Partial<OverlayStyle>): OverlayStyle {
   const clamp = (v: number, min: number, max: number, d: number) =>
     Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : d;
@@ -72,7 +72,7 @@ export interface Skin {
   vars: Record<string, string>;
 }
 
-/** 文字光晕（原版 ny） */
+/** 文字光晕 */
 function haloCss(
   textHalo: boolean,
   bgOpacity: number,
@@ -93,7 +93,7 @@ function haloCss(
   ].join(', ');
 }
 
-/** 皮肤（原版 dy → ly/uy） */
+/** 皮肤 */
 export function computeSkin(style: OverlayStyle, mode: OverlayMode): Skin {
   const isDark = style.theme === 'dark';
   const bgOpacity = mode === 'exam' ? style.examBgOpacity : style.interviewBgOpacity;
@@ -195,7 +195,7 @@ export interface PaletteUndo {
   before: Partial<OverlayStyle>;
 }
 
-/** 双机位外观（原版 Nb） */
+/** 双机位外观 */
 export const PARKED_LOOK = { bgOpacity: 0.03, textOpacity: 1, borderOpacity: 0.12 };
-/** 默认 look（原版 Mb） */
+/** 默认 look */
 export const DEFAULT_LOOK = { bgOpacity: 0.85, textOpacity: 1, borderOpacity: 0 };

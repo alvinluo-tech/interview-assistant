@@ -1,5 +1,5 @@
 /*
- * 原生命令桥：cmd_* 封装（与原版 zC 对象同形）+ 事件监听助手。
+ * 原生命令桥：cmd_* 封装 + 事件监听助手。
  */
 import { invoke } from '@tauri-apps/api/core';
 import { listen, emit, emitTo } from '@tauri-apps/api/event';

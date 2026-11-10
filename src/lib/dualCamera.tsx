@@ -28,7 +28,7 @@ export function isDualCameraOn(scope: OverlayScope): boolean {
   return getSetting<boolean>(scopeKey(scope), false) === true;
 }
 
-/** 开/关双机位：停放或还原当前模式外观（原版 DR / Nb） */
+/** 开/关双机位：停放或还原当前模式外观。 */
 export async function setDualCamera(scope: OverlayScope, on: boolean): Promise<void> {
   const style = getSetting<OverlayStyle>('overlay.style', DEFAULT_OVERLAY_STYLE);
   const parked = { ...getSetting<Record<string, ParkedLook>>('overlay.parkedLooks', {}) };
@@ -65,7 +65,7 @@ export async function setDualCamera(scope: OverlayScope, on: boolean): Promise<v
   await setSetting(scopeKey(scope), on);
 }
 
-/** 配色结果落到 overlay.style；双机位开启时保持「几乎全透明」浓度（原版 suggestPalette mode:'dualCamera'） */
+/** 配色结果落到 overlay.style；双机位开启时保持「几乎全透明」浓度 */
 export async function applyPaletteLook(
   scope: OverlayScope,
   palette: { bg: string; fg: string; theme: 'light' | 'dark' },

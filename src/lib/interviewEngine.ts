@@ -1,7 +1,7 @@
 import { getAiSettings } from './aiSettings';
 import { isRoleConfigured, resolveAiRoute } from './aiConfig';
 /*
- * 面试引擎：本地实现原版的「采集 → 分句 → 转写 → AI 作答」管线。
+ * 面试引擎：本地实现「采集 → 分句 → 转写 → AI 作答」管线。
  * - SPEAKER：原生 system-audio-chunk 事件（PCM16/16k/mono base64）；
  * - PHONE / MICROPHONE：getUserMedia 麦克风（脚本处理器降采样到 16k）。
  * - 静音门限 silenceGateMs（300-6000，默认 1600；未说完句 +800ms）分句；
@@ -184,7 +184,7 @@ let lastVoiceAt = 0;
 let speechStarted = false;
 let voicedMs = 0;
 const MIN_VOICED_MS = 250;
-const VOLUME_ON_THRESHOLD = 12; // 原版音量公式 avg|x|*800，静音阈值 15 略放宽
+const VOLUME_ON_THRESHOLD = 12; // 音量公式 avg|x|*800，静音阈值 15 略放宽
 const PREVIEW_SAMPLES = 16000 * 2.5;
 let utteranceSequence = 0;
 interface LiveUtterance { id: number; offset: number; nextPreview: number; prefix: string; controller?: AbortController }
@@ -323,7 +323,7 @@ function retryableCaptureError(error: unknown): boolean {
 
 function effectiveGateMs(): number {
   const base = getSetting('interview.silenceGateMs', DEFAULT_SILENCE_GATE_MS);
-  // 半句明显没说完时 +800ms（原版 Pv/Fv：句尾逗号或连接词）
+  // 半句明显没说完时 +800ms（句尾逗号或连接词）
   const p = state.partial;
   const unfinished = /[，、；：]$/.test(p) || /(那个|这个|就是|然后|因为|所以|比如|还有|emm+|嗯+)$/i.test(p.trim());
   return base + (unfinished ? 800 : 0);
@@ -822,7 +822,7 @@ function priorProgressBlock(goalId: string | null): string {
   return `【该岗位此前的进展（用户标记）】\n${lines.join('\n')}\n回答时可结合这些轮次的结果调整说法。`;
 }
 
-/** 面试中截屏解过的题（原版 2026-10-28「interview-remembers-screen-solves」）：solver 答案进入语音回答上下文 */
+/** 面试中截屏解过的题：solver 答案进入语音回答上下文 */
 function solverMemoryBlock(maxChars = 20000): string {
   const solver=getSolverState();
   if(solver.interviewSessionId!==state.sessionId)return '';
@@ -1309,7 +1309,7 @@ function encodeWavFromPcm(pcm: Int16Array): Blob {
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
-// ---------------- 文本清洗（移植原版 Yp/Xp/$p） ----------------
+// ---------------- 文本清洗 ----------------
 
 const FILLER_WORDS = '嗯啊呃哦噢唔哎诶呀咦嘿哼呵嘛';
 const FILLER_SENTENCES =

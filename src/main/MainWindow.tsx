@@ -1,5 +1,5 @@
 /*
- * 主窗口（对齐原版 SW/dW/fW）：自定义标题栏（Win）、侧边栏（品牌/导航/
+ * 主窗口：自定义标题栏（Win）、侧边栏（品牌/导航/
  * 额度卡/设置/反馈/账号）、内容区 8 个 section、使用须知弹窗、首次引导。
  */
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -260,7 +260,7 @@ function TitleBar() {
         className={`${btn} hover:bg-red-500/90 hover:text-white`}
         aria-label={t('关闭')}
         onClick={() => {
-          // 关闭 = 退出进程（对齐原版）：销毁主窗口后应用退出
+          // 关闭 = 退出进程：销毁主窗口后应用退出
           void getCurrentWindow().destroy();
           void import('@tauri-apps/api/core').then(({ invoke }) => invoke('cmd_exit_app'));
         }}
@@ -398,10 +398,10 @@ function Sidebar({
   );
 }
 
-/** 启动面试/笔试的公共流程（对齐原版 he）：setSessionActive → showOverlay → hideMain */
+/** 启动面试/笔试的公共流程：setSessionActive → showOverlay → hideMain */
 let mainHideTimer: number | undefined;
 
-/** 400ms 后隐藏主窗口（对齐原版时序）；这段时间内退出浮窗可以取消。 */
+/** 400ms 后隐藏主窗口；这段时间内退出浮窗可以取消。 */
 function scheduleMainHide() {
   cancelMainHide();
   mainHideTimer = window.setTimeout(() => {

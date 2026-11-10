@@ -1,8 +1,8 @@
 /*
- * 设置页（对齐原版 sU）：浮窗样式 / 通用 / 快捷键 / 隐蔽 / 更新日志 / 关于
+ * 设置页：浮窗样式 / 通用 / 快捷键 / 隐蔽 / 更新日志 / 关于
  * 六个 tab。浮窗样式包含主题、底色浓度、文字透明度、外框线、字号、滚动速度、
  * 透明度步长、面试/笔试宽高、样式预设、预览按钮。
- * 复刻新增「AI 服务」tab 用于配置本地 AI 接口。
+ * 「AI 服务」tab 用于配置本地 AI 接口。
  */
 import { useEffect, useState } from 'react';
 import { Eye, RotateCcw, Trash2, Plus } from 'lucide-react';
@@ -821,7 +821,7 @@ function AboutTab() {
           label={t('客户端更新')}
           value={
             <div className="flex items-center gap-2">
-              <span>{t('自动检查官方更新，确认后下载与安装。')}</span>
+              <span>{t('自动检查更新，确认后下载与安装。')}</span>
               <UpdateStatusButton />
             </div>
           }

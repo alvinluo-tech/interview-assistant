@@ -1,6 +1,6 @@
 import { useAiReady } from '@/lib/aiSettings';
 /*
- * 笔试工作台（对齐原版 hW）：模式三选卡、岗位、答题偏好折叠、
+ * 笔试工作台：模式三选卡、岗位、答题偏好折叠、
  * 双机位/快捷键提示/复制按钮开关、开始笔试。
  */
 import { useEffect, useState } from 'react';

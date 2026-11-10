@@ -34,7 +34,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 cargo test --locked --manifest-path src-tauri/Cargo.toml --lib audio_windows::tests::hardware_loopback_preserves_test_tone_pitch -- --ignored --nocapture
 ```
 
-`scripts/audio-smoke.mjs` 另包含真实桌面链路检查：WebAudio 播放 440Hz 测试音，经原生回采和面试引擎生成 WAV，发到本机测试服务后检查采样率、声道和频谱；转写返回固定测试文字，因此它不代表云端 ASR 的真实识别准确率。该检查使用 `com.mianlingai.clone.audiosmoke` 隔离数据及本机服务，不读取日常 AI Key。构建和执行示例：
+`scripts/audio-smoke.mjs` 另包含真实桌面链路检查：WebAudio 播放 440Hz 测试音，经原生回采和面试引擎生成 WAV，发到本机测试服务后检查采样率、声道和频谱；转写返回固定测试文字，因此它不代表云端 ASR 的真实识别准确率。该检查使用 `com.luoyaosheng.mianxu.audiosmoke` 隔离数据及本机服务，不读取日常 AI Key。构建和执行示例：
 
 ```powershell
 node node_modules/@tauri-apps/cli/tauri.js build --debug --no-bundle --target x86_64-pc-windows-msvc --config tests/fixtures/tauri.audio-smoke.conf.json -- --locked

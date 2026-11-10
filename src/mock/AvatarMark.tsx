@@ -1,4 +1,4 @@
-/** 面试官头像（原版用 interviewer-avatar.webp，此处用等价的矢量占位） */
+/** 面试官头像（矢量占位） */
 import { t } from '@/lib/i18n';
 
 export function AvatarMark({ size = 32 }: { size?: number }) {

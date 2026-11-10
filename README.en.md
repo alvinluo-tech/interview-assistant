@@ -186,7 +186,7 @@ docs/            design notes, ADRs and implementation records
 ## FAQ
 
 <details>
-<summary>Do I have to use the official OpenAI API?</summary>
+<summary>Do I have to use OpenAI's own API?</summary>
 
 No. Any provider speaking the OpenAI Chat Completions protocol works: OpenAI, DeepSeek, Qwen, Moonshot, a self-hosted gateway, or a local Ollama. Different purposes can even use different providers.
 </details>

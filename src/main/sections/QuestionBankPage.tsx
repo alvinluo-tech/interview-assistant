@@ -1,6 +1,6 @@
 import { useAiReady } from '@/lib/aiSettings';
 /*
- * 面试题库（对齐原版 oW）：按岗位生成定制题目（本地 AI 版），
+ * 面试题库：按岗位生成定制题目（本地 AI 版），
  * 题目卡可展开解析、收藏、存进面试资料。
  */
 import { useState } from 'react';

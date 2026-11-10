@@ -1,78 +1,219 @@
-# 自动打包与发布
+# 发布流程规范
 
-`.github/workflows/release.yml` 在推送 `v*` tag 时运行，同时构建 Windows x64、macOS Apple Silicon 和 macOS Intel。Actions 页面也可手动运行 **Release Desktop**，输入仓库中已经存在的 tag。
+本文是 Mianxu 的发布操作规范。其他 agent 接手提交、发版、续跑或排查发布失败时，按本文逐项核实；以实际仓库和 GitHub 状态为准，不凭聊天中的“已完成”推断结果。
 
-## 首次启用
+## 1. 发布入口与前提
 
-将本次工作流、发布脚本与测试、macOS 配置/权限文件、原生代码和锁文件一起提交到 GitHub 仓库。仓库须允许 GitHub Actions 运行；发布 job 已声明 `contents: write`，使用内置 `GITHUB_TOKEN`，不需要额外的 PAT 或 AI 密钥。
+- 仓库：`alvinluo-tech/interview-assistant`；正式代码分支：`main`。
+- 发布定义：`.github/workflows/release.yml`；版本与产物工具：`scripts/release.mjs`；签名构建配置：`src-tauri/tauri.release.conf.json`。
+- `main` 推送触发 **Check Desktop**，仅检查，不公开发布。推送 `v*` 标签或手动运行 **Release Desktop** 才会进入发布流程。
+- 准备工具：Git、GitHub CLI、项目要求的 Node/pnpm、Rust 和当前平台构建工具。先确认 GitHub 登录账户有仓库发布权限。
+- 修改文档、编译本地 EXE、提交代码与公开发布是不同操作；只有用户明确要求发版后才进入外部发布步骤。
+- 命令逐条执行并检查退出码。失败后先处理原因，不让后续成功命令掩盖错误。
 
-日常检查由 **Check Desktop** 执行，覆盖拉取请求和 main 推送；正式发布只由版本 tag 或指定已有 tag 的手动发布触发。缓存策略及耗时基线见 [CI 与缓存](ci.md)。
+下面带变量的示例使用 PowerShell 7；macOS 可使用 `pwsh` 或转换为等价 shell 命令。`vX.Y.Z` 是占位符，必须替换成核实后的版本号；不直接照搬示例版本。
 
-## 发版本
+## 2. 同步代码并确定发布范围
 
-### 更新说明范围（每次发布必须执行）
+1. 检查当前分支、远程地址和所有工作区改动，区分其他 agent 的工作和本机资料。
+2. 拉取远程分支和标签。远程有新提交时先合并，冲突同时保留两边意图，尤其注意国际化与平台修复修改同一段逻辑的情况。
+3. 在 GitHub 核实上一个**已经公开**的版本。正式版以上一个公开正式版为基线，不使用草稿、未发布标签或单纯按标签名排序的结果。预发布需明确并记录比较基线。
+4. 核对完整提交区间及工作区待提交差异。上个版本以后，其他 agent 已提交的国际化、跨平台修复和功能改动也属于本次范围。
 
-1. 先核实上一个已公开发布版本；正式版以上一个公开正式版为基线，不把尚未发布的标签或草稿当作“上次发版”。
-2. 使用 `git log <上一版本标签>..HEAD` 和 `git diff <上一版本标签>..HEAD`，再结合本次待提交改动，检查整个发布区间。必须包括其他工作已提交的国际化、平台适配和修复，不能只总结最近一次提交或当前对话。
-3. 更新说明默认使用简体中文，按用户可感知的最终行为组织，合并重复修复。已撤回的交互方案、上版已发布的内容、尚未验证的能力不写成新增或已完成。
-4. 将审核后的说明保存到 `docs/release-notes/<标签>.md`，写明上一发布标签和比较范围；不要公开官网对比、差距分析或逆向研究文档及其链接。
-5. 先创建包含该说明的 GitHub Release 草稿，再推送相同版本标签触发构建。发布任务使用草稿正文生成更新清单；三个平台构建、签名校验和附件上传全部完成后才公开 Release。
+```powershell
+git status --short --branch
+git remote -v
+git fetch origin --tags
+gh release list --repo alvinluo-tech/interview-assistant --limit 100 --json tagName,isDraft,isPrerelease,publishedAt
 
-“创建标签/启动 CI”和“版本已公开发布”应分别报告，不能将前者当成发布完成。
-
-先提交本次版本的代码并推送，再创建并推送 tag，例如：
-
-```bash
-git tag -a v0.1.1 -m "Release v0.1.1"
-git push origin v0.1.1
+$repo = "alvinluo-tech/interview-assistant"
+$base = "v上一公开正式版"
+$tag = "vX.Y.Z"
+git log --oneline "$base..HEAD"
+git diff --stat $base HEAD
+git diff
 ```
 
-测试版本可以用 `v0.4.0-beta.1`、`v0.4.0-rc.1`，会自动标记为 Pre-release。tag 必须采用 `v主版本.次版本.补丁版本[-预发布后缀]`，不接受 build metadata；版本数值不能超过 Windows 打包允许的 65535。
+版本采用 `v主版本.次版本.补丁版本`，或 `v主版本.次版本.补丁版本-beta.1` / `-rc.1` 等预发布形式。遵循仓库既有版本顺序，先查本地标签、远程标签和同名 Release，避免重用。版本数值不得超过 Windows 允许的 65535，不使用 build metadata。
 
-CI 会在临时检出目录里同步 `package.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` 的版本，再锁定依赖执行测试和构建。它不向源分支写回版本号，因此只打 tag 也能让程序和安装包显示正确版本。
+## 3. 完成改动与验证
 
-## 下载产物
+- 明确本次提交包含哪些文件；逐项审查差异。其他人的改动保留并适配，不通过整文件回退消除冲突。
+- 其他产品对比、差距分析及本地研究资料留在本地；公开 README 和更新说明也不添加这些资料的链接。检查暂存区，不只依赖 `.gitignore`。
+- 确认没有密钥、个人资料、机器专用路径、缓存或本地安装包进入提交。
+- 前端、原生接口、锁文件、权限或工作流发生变化时执行对应检查；合并远程修复后，重跑受影响检查。
+- 现有通过结果只在代码版本和检查范围仍匹配时复用。与本次变更相关的实机验证情况要明确记录；单元测试通过不等于所有设备已验收。
 
-发布成功后，同名 GitHub Release 包含：
+本地基线检查：
 
-- `Mianxu_0.1.1_x64-setup.exe`：NSIS 安装包。
-- `Mianxu_0.1.1_x64-portable.exe`：免安装 EXE；配置仍保存在系统用户目录，需要已安装 WebView2 Runtime。
-- `Mianxu_0.1.1_arm64.dmg`：Apple Silicon（M 系列芯片）安装镜像。
-- `Mianxu_0.1.1_x64.dmg`：Intel 芯片安装镜像。
-- `SHA256SUMS.txt`：上述四个文件的 SHA-256 校验值。
-
-三个构建任务分别完成版本检查、协议/音频测试、前端编译、原生测试和安装包构建后，才会进入发布 job。macOS 使用 GitHub 的 `macos-latest` runner，安装对应 Rust target，分别构建两种架构；采集产物时检查应用 Mach-O 架构，CI 同时运行 `hdiutil verify` 检查 DMG。先创建草稿、上传全部文件，最后公开，避免构建失败时发布空版本。每个构建任务保存独立校验文件，发布前重新验证，再合并为总 `SHA256SUMS.txt`，防止跨平台文件互相覆盖。
-
-构建或上传失败时，可以在 Actions 中重新运行失败的 job；已经存在的 Release 会复用，上传时替换同名附件。若仓库开启了不可变 Release，已公开版本不能替换附件，应创建新版本 tag。构建产物还会在当前 Actions 运行里保留 14 天，便于发布失败后排查。
-
-自动更新安装包使用发布密钥签名，并在客户端验签；这与 Windows Authenticode 代码签名不同。公开安装包只采集构建产物，不会包含本机的 AI 密钥、会话数据或本地研究文件。
-
-## macOS 安装与功能范围
-
-最低 macOS 13。打开对应架构的 DMG，将「骆耀升老公酱面试助手.app」拖到 Applications 后运行。首次使用麦克风时允许访问；系统收音和截图还需允许屏幕录制权限，可在应用设置中检查并进入系统设置授权。
-
-`src-tauri/Info.plist` 声明麦克风用途，`Entitlements.plist` 声明音频输入权限；`tauri.macos.conf.json` 自动覆盖 macOS 的打包格式、最低系统版本与签名选项。本地 Mac 也可用 `pnpm tauri build --target aarch64-apple-darwin --bundles dmg` 构建（Intel 改用 `x86_64-apple-darwin`）。Windows 无法直接生成本流程的 DMG，需由 macOS runner 构建。
-
-当前使用 **ad-hoc 签名**，无需 Apple 开发者证书，但没有 Developer ID 签名及 Apple 公证，下载后可能被 Gatekeeper 阻止。信任来源后可按系统提示在「隐私与安全性」中选择「仍要打开」。面向普通用户正式分发前，应按 [Tauri macOS 签名文档](https://v2.tauri.app/distribute/sign/macos/) 配置 Developer ID 证书和公证，并替换 `signingIdentity: "-"`；当前工作流尚未接入这些凭据。
-
-| 功能 | macOS 当前状态 |
-| --- | --- |
-| AI 服务、模型发现、自定义模型、流式回答 | 共用现有前端链路；API Key 通过钥匙串中的随机主密钥做 AES-256-GCM 加密，配置文件只存密文 |
-| 模拟练习的麦克风与分段语音识别 | 已补权限声明，仍需在真实 Mac 授权并实测 |
-| 系统声音采集 | 已接入 ScreenCaptureKit，排除自身进程音频；需真机验证权限与会议采集 |
-| 截图识别 | 已接入屏幕与前台窗口截图，排除自身窗口；需真机验收 |
-| 屏幕捕获排除 | 使用共享属性尽力处理，不能保证对所有第三方录屏软件隐藏 |
-| 进程伪装 | 支持窗口标题设置；不支持修改 Mac 进程身份 |
-| 浮窗光标悬停/跟随拖动 | 已实现，需真机多屏、缩放与全屏 Space 验收 |
-
-钥匙串首次访问或应用更新后可能提示授权；拒绝授权时保存会报错，不会退回明文。Windows 的 DPAPI 配置不能直接复制到 Mac，需要重新填写 Key。当前本地验证环境为 Windows，macOS 原生编译、钥匙串集成测试与 DMG 验证由 CI 执行；首次 tag 发布后还需在真实 Mac 检查启动、录音、模型调用与安装体验。
-
-## 本地验证
-
-```bash
+```powershell
+pnpm install --frozen-lockfile
+node --test tests/*.test.mjs
 pnpm test:release
+pnpm test:core-coverage
+pnpm test:ai
+pnpm build
+cargo test --locked --manifest-path src-tauri/Cargo.toml --workspace --lib
+pnpm audit --registry=https://registry.npmjs.org
 ```
 
-这会在独立临时目录验证 tag、版本同步、产物筛选和校验和，不修改当前工作区版本。`node scripts/release.mjs prepare vX.Y.Z` 是实际写入命令，只应在准备版本或 CI 检出目录使用。
+前端须先构建，再执行依赖嵌入资源的原生测试。具体 CI 检查以工作流为准，包括协议/音频、桌面行为、更新器、安装器与覆盖率门槛。Windows 本地验证不能替代 macOS runner 的编译和 Mac 实机验证。
 
-参考：[Tauri GitHub Actions](https://v2.tauri.app/distribute/pipelines/github/)、[GitHub Release CLI](https://cli.github.com/manual/gh_release_create)。
+## 4. 编写中文更新说明
+
+唯一范围规则：**汇总上一公开版本至本次目标提交之间的全部最终改动，不能只总结最近一次提交或当前对话。**
+
+- 默认简体中文，面向用户描述最终行为；建议按“新增与优化 / 修复与稳定性 / 使用说明”组织。
+- 纳入国际化、平台功能和用户能感知的修复；将重复修复合并为同一条。
+- 不把已撤回的方案、上版已公开的内容或尚未验证的能力写成新增或已完成。
+- 写明影响使用的配置、系统要求或已知限制。没有真实测试证据时，不声称所有平台、设备、全屏或网络场景均已验证。
+- 保存为 `docs/release-notes/<标签>.md`，正文注明上一版本，并附上该标签区间的 GitHub compare 链接。
+- Release 草稿正文与本地说明一致；`latest.json` 将使用草稿正文作为应用内更新说明。不要用自动生成的英文提交列表替代已审核中文说明。
+
+参考模板：
+
+```markdown
+# Mianxu vX.Y.Z
+
+本次更新汇总 v上一版本 之后的改动，主要改善……
+
+## 新增与优化
+
+- 用户可感知的最终功能。
+
+## 修复与稳定性
+
+- 问题触发条件与修复后的表现。
+
+## 使用说明
+
+- 配置要求、平台限制及实际验证范围。
+
+完整变更范围：[上一版本…本版本](https://github.com/alvinluo-tech/interview-assistant/compare/上一标签...本次标签)。
+```
+
+## 5. 提交代码并固定目标提交
+
+1. 选择性暂存代码、测试、公开文档和更新说明；检查 `git diff --cached` 与 `git diff --cached --check`。
+2. 提交并推送 `main`。遇到远程更新先合并、验证，不强制覆盖远程。
+3. 取得并记录**完整 40 位提交 SHA**，核实远程 main 已包含该提交。本次标签、Release 目标和后续构建必须指向同一个提交。
+4. 检查该提交的 **Check Desktop** 结果。检查失败先修复并重新固定目标提交，不能用另一个提交的绿色结果代替。
+
+```powershell
+git diff --cached
+git diff --cached --check
+git commit -m "按项目约定填写提交说明"
+git push origin main
+$releaseSha = (git rev-parse HEAD).Trim()
+git ls-remote origin refs/heads/main
+gh run list --repo $repo --workflow desktop-check.yml --commit $releaseSha --limit 5
+```
+
+本地仍有有意排除的改动时，记录排除项，确认不会进入发布。不要为了“工作区干净”而删除或提交私人资料。
+
+## 6. 先创建草稿，再推送标签
+
+**此步骤是公开发布的触发边界。** 在代码、检查、中文说明和目标 SHA 确认后执行。
+
+先查看同名版本状态：
+
+```powershell
+git show-ref --verify "refs/tags/$tag"
+git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}"
+gh release view $tag --repo $repo --json tagName,isDraft,isPrerelease,targetCommitish,url
+```
+
+首次发布时“标签/Release 不存在”是正常结果，但认证失败、连接失败不能当作“不存在”。已有公开版本不重用；已有草稿或标签时，先核对目标，再进入失败恢复流程。
+
+准备草稿：
+
+```powershell
+gh release create $tag --repo $repo --draft --target $releaseSha --title "Mianxu $tag" --notes-file "docs/release-notes/$tag.md"
+gh release view $tag --repo $repo --json isDraft,tagName,targetCommitish,body,url
+```
+
+预发布草稿在 `release create` 中增加 `--prerelease`。必须确认草稿存在、目标正确、正文为审核后的中文，才继续推标签。`--target` 使用已推送的完整 SHA，避免短 SHA 导致 `Release.target_commitish is invalid`；不要在这里使用 `--verify-tag`，首次草稿创建时远程标签尚未推送。
+
+正常情况下远程还没有同名标签，创建并推送带注释标签：
+
+```powershell
+git tag -a $tag $releaseSha -m "Release $tag"
+git rev-parse "$tag^{}"
+git push origin "refs/tags/$tag"
+```
+
+如果创建草稿后发现远程标签已存在，先核实其最终提交与 `$releaseSha` 相同，并检查是否已触发工作流；不要继续重复建标签或强推。同名标签指向不同提交时停止该版本流程，保留证据并明确选择新版本，不静默移动标签。
+
+CI 根据标签在临时检出目录同步 `package.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` 的版本。源分支保留开发版本号；不要为发版在本地执行 `node scripts/release.mjs prepare` 修改版本清单。
+
+## 7. 观察三个平台构建与发布
+
+```powershell
+gh run list --repo $repo --workflow release.yml --limit 10
+gh run view 实际运行ID --repo $repo
+gh run watch 实际运行ID --repo $repo --exit-status
+```
+
+选择运行时核对标签、完整目标 SHA 和触发时间，避免观察同名旧运行。长任务可分次检查，不向用户把“已启动 CI”报告成“已发版”。
+
+发布流程构建 Windows x64、macOS Apple Silicon、macOS Intel；所有构建成功后，发布 job 才校验签名与校验和、读取中文草稿、生成更新清单、上传附件并公开 Release。不要手动提前公开草稿或绕过签名/覆盖率检查。
+
+CI 使用仓库 Secret `TAURI_SIGNING_PRIVATE_KEY` 和可选密码签名；公开密钥来自 `src-tauri/updater-public-key.txt`。只核实配置与结果，不导出密钥、不写入仓库、不为绕过失败更换密钥。更新包签名与 Windows Authenticode、Apple Developer ID/公证是不同机制。
+
+## 8. 发布完成判定
+
+以下全部满足才报告“发版完成”：
+
+- 指定标签最终提交与本次目标 SHA 相同。
+- 对应 **Release Desktop** 运行成功，三个平台及 publish job 全部完成。
+- 同名 Release 已公开，正式/预发布类型正确，正文与审核后的中文说明一致。
+- 附件存在且大小合理，签名/校验和验证已在发布 job 通过。
+- 下载该版本 `latest.json`，核实版本、中文说明、三个平台键和下载地址均对应本次标签；不只检查“文件存在”。
+
+预期附件（把 `<版本>` 替换为不带 `v` 的版本号）：
+
+| 用途 | 文件 |
+| --- | --- |
+| Windows 安装包与直接运行版 | `Mianxu_<版本>_x64-setup.exe`、`Mianxu_<版本>_x64-portable.exe` |
+| Mac 安装镜像 | `Mianxu_<版本>_arm64.dmg`、`Mianxu_<版本>_x64.dmg` |
+| Windows 自动更新签名 | `Mianxu_<版本>_x64-setup.exe.sig` |
+| Mac 自动更新包与签名 | `Mianxu_<版本>_arm64.app.tar.gz`、同名 `.sig`；`Mianxu_<版本>_x64.app.tar.gz`、同名 `.sig` |
+| 更新清单与校验和 | `latest.json`、`SHA256SUMS.txt` |
+
+```powershell
+gh release view $tag --repo $repo --json url,isDraft,isPrerelease,tagName,body,assets
+gh release download $tag --repo $repo --pattern latest.json --pattern SHA256SUMS.txt --dir "artifacts/release-check/$tag"
+```
+
+同目录已有文件时先确认归属，避免把旧下载当作本次结果。`latest.json` 的平台键应为 `windows-x86_64`、`darwin-aarch64`、`darwin-x86_64`，对应安装包及签名均属于当前版本。不要为了看下载次数而反复下载安装包；完整校验以 CI 结果及必要的产物复验为准。
+
+向用户报告：标签、目标提交、Release 链接、验证结果、明确的使用限制；同时说明有意保留的未提交内容。
+
+## 9. 失败恢复与后续交接
+
+| 失败位置 | 处理 |
+| --- | --- |
+| 草稿创建返回 422 | 检查完整 SHA 是否已推送、仓库是否正确；确认错误请求未留下草稿，修正参数后重试，不先推标签 |
+| 认证/网络失败 | 区分权限与连接问题，沿用已有安全凭据和网络配置；不打印凭据、不关闭证书验证、不把失败当作资源不存在 |
+| 构建/测试失败 | 查看具体 job 和失败日志；短暂基础设施故障可重跑失败 job；源码缺陷修复后采用新目标和新版本，不改已推送标签 |
+| 构建成功，发布 job 找不到草稿或中文说明 | 为同一标签、同一目标补齐正确草稿或正文，再重跑失败发布 job，不手动提前公开 |
+| 上传中断，Release 仍是草稿 | 核实构建属于相同标签/目标后重跑失败 job；工作流可覆盖草稿同名附件并重新校验 |
+| 版本已经公开 | 发布脚本拒绝重写公开安装包。二进制或更新包需要修正时发新版本；不替换已公开签名资产或移动标签 |
+
+手动重跑已有标签的整个发布流程时，应先确认该版本尚未公开且目标未变：
+
+```powershell
+gh run rerun 实际运行ID --repo $repo --failed
+# 仅在确需整条重跑且确认上述状态后使用：
+gh workflow run release.yml --repo $repo --ref main -f "tag=$tag"
+```
+
+交接只记录事实，不自动执行下一阶段。最少包含：用户授权范围、版本和上一发布基线、完整目标 SHA、提交/推送情况、标签本地/远程状态、草稿/公开状态、运行 ID 与 job 状态、已通过的检查及适用提交、失败原因、下一步和有意排除的文件。后续 agent 必须重新读取 GitHub 状态后再行动。
+
+## 平台与工具参考
+
+- 缓存及性能口径见 [CI 与缓存](ci.md)；多语言维护见 [国际化](i18n.md)。
+- Windows 本地可使用 `node node_modules/@tauri-apps/cli/tauri.js build --ci --bundles nsis -- --locked`，保留默认前端构建 hook。包管理器可能吞掉 Cargo 参数分隔符，正式 CI 因此直接调用 Node。
+- `tauri.release.conf.json` 会跳过重复前端构建并启用更新签名产物，只在前端已构建且签名凭据齐备时使用。Windows 不能代替 macOS runner 生成与验证 DMG。
+- macOS 最低支持 13，现有包使用 ad-hoc 签名，尚未完成 Developer ID 签名/Apple 公证。正常覆盖安装默认保留本机资料；用户手动选择卸载时删除应用数据会清除资料。
+- 本地协议检查入口：`pnpm test:release`。它使用独立临时目录验证版本同步、产物筛选、签名和校验和，不修改源分支版本号。

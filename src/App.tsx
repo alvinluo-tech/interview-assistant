@@ -1,5 +1,5 @@
 /*
- * 场景分发（对齐原版 vJ/yJ）：#overlay → 浮窗应用；#mock → 模拟面试窗口；
+ * 场景分发：#overlay → 浮窗应用；#mock → 模拟面试窗口；
  * 其余 → 主窗口应用。
  */
 import { useEffect } from 'react';
@@ -11,7 +11,7 @@ import { MainWindow } from './main/MainWindow';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export function App({ scene }: { scene: 'overlay' | 'mock' | 'main' }) {
-  // 语言切换事件：主窗口/模拟面试窗整窗 reload（对齐原版 vt）；
+  // 语言切换事件：主窗口/模拟面试窗整窗 reload；
   // 浮窗不能中途 reload（会杀掉进行中的会话），等会话空闲（浮窗隐藏且引擎无活动
   // 会话）后再刷新，保证浮窗不会遗留旧语言。
   useEffect(() => {

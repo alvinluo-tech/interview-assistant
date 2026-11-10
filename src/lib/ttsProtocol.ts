@@ -56,7 +56,7 @@ async function downloadAudio(value: string, fetcher: AiFetch, signal: AbortSigna
   const url = new URL(value);
   if (!['https:','http:'].includes(url.protocol) || url.username || url.password || url.port
     || !/^dashscope-result[\w-]*\.oss-(?:cn-beijing|ap-southeast-1)\.aliyuncs\.com$/.test(url.hostname)) {
-    throw new Error(t('语音服务返回了非官方音频下载地址，已停止播放。'));
+    throw new Error(t('语音服务返回了不受信任的音频下载地址，已停止播放。'));
   }
   url.protocol = 'https:';
   const response = await fetcher(url.href, {method:'GET',headers:{},credentials:'omit',redirect:'error',signal});
@@ -67,7 +67,7 @@ async function downloadAudio(value: string, fetcher: AiFetch, signal: AbortSigna
 export async function requestSpeech(provider: AiProvider, model: string, text: string, voice: string,
   fetcher: AiFetch, timeoutMs: number, signal: AbortSignal | undefined, onAudio: SpeechConsumer,render?:SpeechRenderSpec,connect?:RealtimeConnect): Promise<void> {
   const normalized = normalizeProvider(provider), service = ttsService(normalized, model);
-  if (/^mimo-.*tts-(?:voiceclone|voicedesign)/i.test(model)) throw new Error(t('此 MiMo 模型需要音色复刻或设计参数；请选择 mimo-v2.5-tts 使用预置音色。'));
+  if (/^mimo-.*tts-(?:voiceclone|voicedesign)/i.test(model)) throw new Error(t('此 MiMo 模型需要音色克隆或设计参数；请选择 mimo-v2.5-tts 使用预置音色。'));
   if (service !== 'compatible' && /(?:^|-)realtime(?:-|$)/i.test(model)) throw new Error(t('此 realtime 模型需要独立的实时接口；请选择同系列不带 realtime 的语音合成模型。'));
   const resolved=render?resolveSpeechVoice(normalized,model,voice,render):undefined;
   const selectedVoice = resolved?.voice || (voice === 'alloy' && service !== 'compatible' ? defaultTtsVoice(normalized,model) : voice.trim());

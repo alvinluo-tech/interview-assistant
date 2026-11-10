@@ -46,6 +46,6 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 pnpm build
 ```
 
-`scripts/byok-smoke.mjs` 使用本机模拟服务和独立应用标识 `com.mianlingai.clone.byoksmoke`，测试原生 HTTP（模拟服务不配置 CORS）、旧配置迁移、加密落盘、模型发现、自定义模型、用途选择和保存恢复。测试程序构建为 `artifacts/byok-smoke.exe`，结果为 `artifacts/byok-smoke-result.json`，页面截图为 `artifacts/byok-settings.png`。
+`scripts/byok-smoke.mjs` 使用本机模拟服务和独立应用标识 `com.luoyaosheng.mianxu.byoksmoke`，测试原生 HTTP（模拟服务不配置 CORS）、旧配置迁移、加密落盘、模型发现、自定义模型、用途选择和保存恢复。测试程序构建为 `artifacts/byok-smoke.exe`，结果为 `artifacts/byok-smoke-result.json`，页面截图为 `artifacts/byok-settings.png`。
 
 协议参考：[OpenAI 模型列表](https://developers.openai.com/api/reference/resources/models/methods/list)、[Ollama OpenAI 兼容接口](https://docs.ollama.com/api/openai-compatibility)、[Tauri HTTP 插件](https://v2.tauri.app/plugin/http/)。

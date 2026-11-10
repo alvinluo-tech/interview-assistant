@@ -65,8 +65,8 @@ export function updatePresentation(state: UpdateSnapshot) {
     upToDate: ['已经是最新版本', '当前版本已是最新，安心继续使用。'],
     downloading: ['正在下载更新', '下载期间可以返回工作台，完成后由你决定安装时间。'],
     verifying: ['正在验证更新文件', '下载已完成，正在检查文件的完整性与来源。'],
-    ready: ['更新已准备就绪', handoff ? '安装包已通过验证。点击后将退出当前应用并打开官方安装向导。' : '安装将重启应用，请先保存正在编辑的内容。'],
-    installing: [handoff ? '正在打开安装向导' : '正在安装更新', handoff ? '请在官方安装向导中完成安装。' : '应用即将退出并更新，请等待安装完成。'],
+    ready: ['更新已准备就绪', handoff ? '安装包已通过验证。点击后将退出当前应用并打开安装向导。' : '安装将重启应用，请先保存正在编辑的内容。'],
+    installing: [handoff ? '正在打开安装向导' : '正在安装更新', handoff ? '请在安装向导中完成安装。' : '应用即将退出并更新，请等待安装完成。'],
     error: [updateFailure(state.error).title, updateFailure(state.error).description],
   };
   let action: 'check' | 'download' | 'install' | 'release' | 'restore' | null;

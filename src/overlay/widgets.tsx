@@ -1,6 +1,6 @@
 /*
  * 浮窗交互控件：驻留按钮（进度条画在底边，交互态直接点击）、
- * 拖拽把手、滚动边缘 pill。悬停时长对齐原版各按钮的 hoverMs。
+ * 拖拽把手、滚动边缘 pill。悬停时长见各按钮的 hoverMs。
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { t } from '@/lib/i18n';
@@ -11,7 +11,7 @@ import { onEvent as onTauriEvent } from '@/lib/bridge';
 import { DEFAULT_OVERLAY_STYLE, useSetting } from '@/lib/store';
 import { normalizeStyle } from '@/lib/overlayStyle';
 
-/** 大悬停按钮（原版 kW） */
+/** 大悬停按钮 */
 export function DwellButton({
   id,
   children,
@@ -111,7 +111,7 @@ export function DwellDisclosure({
   );
 }
 
-/** 图标/紧凑悬停按钮（原版 JW） */
+/** 图标/紧凑悬停按钮 */
 export function DwellIconButton({
   id,
   icon,
@@ -246,7 +246,7 @@ export async function persistPosition() {
   }
 }
 
-/** 边缘滚动 pill（原版 WW/Pq） */
+/** 边缘滚动 pill */
 export function ScrollEdgePill({
   id,
   direction,

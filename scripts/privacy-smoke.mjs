@@ -6,7 +6,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const executable = path.resolve(process.argv[2] ?? 'artifacts/privacy-smoke.exe');
-const identifier = 'com.mianlingai.clone.smoke';
+const identifier = 'com.luoyaosheng.mianxu.smoke';
 const root = path.join(process.env.APPDATA, identifier);
 const port = 19387;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

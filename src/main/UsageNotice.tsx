@@ -1,5 +1,5 @@
 /*
- * 使用须知弹窗（对齐原版 hO）：首次启动强制弹，5 秒倒计时后可确认。
+ * 使用须知弹窗：首次启动强制弹，5 秒倒计时后可确认。
  */
 import { useEffect, useState } from 'react';
 import { Button, Dialog, DialogTitle } from '@/ui/primitives';

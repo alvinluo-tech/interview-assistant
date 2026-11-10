@@ -1,7 +1,7 @@
 /*
- * 手机副屏二维码卡（对齐原版 lB，BS:37325-37426）：
+ * 手机副屏二维码卡：
  * 「答案只显示在手机上，电脑屏幕上什么都不留」——扫码后浮窗画面投到手机网页，
- * 本地浮窗隐身。原版走 getTempToken + 服务端中继；本地版由 Rust 起局域网服务。
+ * 本地浮窗隐身；局域网服务由 Rust 侧启动。
  */
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
@@ -43,7 +43,7 @@ export function DualScreenCard() {
     catch { setError(t('停止副屏失败，请重试。')); }
   };
 
-  // 组件卸载时停服务（回到工作台不影响已连接会话则保留——原版常驻入口，这里保持运行）
+  // 组件卸载时停服务（回到工作台不影响已连接会话则保留，保持运行）
   useEffect(() => {
     return onEvent<{ count: number; reason?: string }>('dual-peer', (p) => {
       setPeers(p.count);

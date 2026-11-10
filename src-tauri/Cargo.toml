@@ -2,7 +2,7 @@
 name = "mianxu"
 version = "0.1.0"
 description = "MianXu 面序：本地优先的 AI 面试与笔试助手"
-authors = ["clone"]
+authors = ["MianXu"]
 edition = "2024"
 # Tauri 用这个字段识别主二进制，保证 macOS .app 里的可执行文件与 CFBundleExecutable 一致。
 default-run = "Mianxu"

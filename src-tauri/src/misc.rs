@@ -1,6 +1,6 @@
 /*
  * 杂项命令：日志读取、崩溃存根、退出、版本查询。重启见 disguise。
- * 崩溃/恢复类命令返回"非恢复启动"（冷启动），与原版语义兼容。
+ * 崩溃/恢复类命令返回"非恢复启动"（冷启动）。
  */
 use std::io::{Read, Seek, SeekFrom};
 use tauri::{AppHandle, Manager};
@@ -8,14 +8,31 @@ use tauri::{AppHandle, Manager};
 #[tauri::command]
 pub fn cmd_read_recent_logs(app: AppHandle, limit: Option<usize>) -> Result<Vec<String>, String> {
     let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
-    // tauri-plugin-log 默认文件名 = productName。产品改名后旧日志仍要能读，
-    // 所以按「当前名 → 历史名」依次找，谁存在用谁。
+    // tauri-plugin-log 默认文件名 = productName。产品改名后旧日志文件名不同，
+    // 所以先找当前名，找不到就取目录里最新的一份 .log。
     let name = app.config().product_name.as_deref().unwrap_or(&app.package_info().name);
-    let path = [name, "骆耀升老公酱面试助手", "面灵AI"]
-        .iter()
-        .map(|candidate| dir.join(format!("{candidate}.log")))
-        .find(|candidate| candidate.exists())
-        .unwrap_or_else(|| dir.join(format!("{name}.log")));
+    let current = dir.join(format!("{name}.log"));
+    let path = if current.exists() {
+        current
+    } else {
+        let newest = std::fs::read_dir(&dir).ok().and_then(|entries| {
+            let mut best: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+            for entry in entries.flatten() {
+                let candidate = entry.path();
+                if candidate.extension().and_then(|value| value.to_str()) != Some("log") {
+                    continue;
+                }
+                let Ok(modified) = entry.metadata().and_then(|meta| meta.modified()) else {
+                    continue;
+                };
+                if best.as_ref().map(|(at, _)| modified > *at).unwrap_or(true) {
+                    best = Some((modified, candidate));
+                }
+            }
+            best.map(|(_, candidate)| candidate)
+        });
+        newest.unwrap_or_else(|| dir.join(format!("{name}.log")))
+    };
     // 日志可能有几十 MB：只读末尾一段，别把整个文件搬进内存、卡住同步 IPC 命令。
     const TAIL_BYTES: u64 = 256 * 1024;
     let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;

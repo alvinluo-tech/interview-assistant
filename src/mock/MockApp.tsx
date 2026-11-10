@@ -3,7 +3,7 @@ import { openMicrophone, type MicrophoneCapture } from '@/lib/microphone';
 import { getSetting, useSetting } from '@/lib/store';
 import type { RealtimeCapture } from '@/lib/realtimeAsr';
 /*
- * 模拟面试窗口（#mock，对齐原版 LT/NT 的服务端行为）：
+ * 模拟面试窗口（#mock）：
  * - 动态对话：面试官按简历/岗位出题，答完根据回答决定追问或换新题；
  * - 全部对话与复盘落 session（data.json），跨重启可续场；
  * - 语音播报 TTS、空格键录音 → STT、静音提示、AI 辅助提示。

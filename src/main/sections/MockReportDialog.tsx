@@ -1,5 +1,5 @@
 /*
- * 复盘报告弹窗：Records 与 MockPage 共用（对齐原版「复盘报告」查看入口）。
+ * 复盘报告弹窗：历史记录与模拟面试共用。
  */
 import { Dialog, DialogTitle, DialogDesc, Button } from '@/ui/primitives';
 import { Md } from '@/overlay/Md';
