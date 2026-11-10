@@ -28,8 +28,7 @@ public/pyodide/
 *.sw?
 
 # 本机路径引用与本地研究产物不入库
-_recon/
-_local_analysis/
+_*/
 docs/native-osd-and-dual-screen.md
 docs/product-scope-notes.md
 src-tauri/target

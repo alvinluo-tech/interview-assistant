@@ -173,5 +173,5 @@ else { $CaptureAudit::Hits | ForEach-Object { Write-Output $_ } }
 - `Windows.Graphics.Capture`（WinRT）与 DXGI Desktop Duplication 的差异；
 - Authenticode 签名校验与发布者信息读取；
 - 反作弊产品的公开威胁模型文章（进程回调、镜像加载回调、句柄扫描）；
-- 本仓库 `_recon/spec/02-overlay.md`：浮窗「可见部分」的完整行为规格（穿透、zones、
-  悬停驻留、样式公式），这些都不涉及规避监控。
+- 本仓库浮窗规格：浮窗「可见部分」的完整行为规格（穿透、zones、悬停驻留、样式公式），
+  这些都不涉及规避监控。
