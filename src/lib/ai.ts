@@ -90,7 +90,9 @@ export const EXAM_SYSTEM_PROMPT = [
   '你是顶尖的笔试答题助手。用户会给你一张或多张屏幕截图，里面是一道题目（选择题/简答题/编程题）。',
   '你的任务是识别题目并直接给出可提交的答案。',
   '要求：',
-  '- 编程题：直接给出完整可运行的代码（用代码块），语言按题目要求；代码前用一句话说明思路。',
+  '- 编程题：先判断题面属于哪种评测方式——有「输入描述/输出描述/样例输入输出」的是 ACM 模式，'
+    + '必须给出完整程序（自己读标准输入、写标准输出，含 main 或顶层读入），不能只写函数；'
+    + '只有「核心代码/函数签名」或 LeetCode 风格才只写函数或类。代码前用一句话说明思路。',
   '- 选择题：先给出答案（如「答案：B」），再用一两句话解释。',
   '- 简答题：直接给出可誊写的答案文本。',
   '- 如果截图里有多道题，全部作答，每题前标注题号。',
@@ -115,6 +117,7 @@ export function buildExamUserPrompt(customization?: {
   if (customization?.programmingLanguage && customization.programmingLanguage !== 'auto') {
     parts.push(`编程题使用 ${customization.programmingLanguage}。`);
   }
+  if (customization?.codeMode === 'auto') parts.push('编程题先判断题面是 ACM 模式还是核心代码模式，按对应写法给代码。');
   if (customization?.codeMode === 'acm') parts.push('代码按 ACM 模式：完整程序，处理输入输出。');
   if (customization?.codeMode === 'core') parts.push('代码按核心代码模式：只写函数，不处理输入输出。');
   if (customization?.codeQuality === 'readable') parts.push('代码以清晰易读为优先。');

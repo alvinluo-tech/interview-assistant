@@ -13,6 +13,7 @@
  */
 import { getQuickJS } from 'quickjs-emscripten';
 import { normalizeOutput, type CodeSample } from './codeQuestion';
+import { buildJsPrelude } from './jsRunnerPrelude';
 import { matchesExpected } from './codeScaffold';
 
 export type Verdict = 'passed' | 'failed' | 'unverified';
@@ -46,36 +47,6 @@ export function judgedSamples(samples: CodeSample[]): CodeSample[] {
 
 // ---------------- JavaScript：QuickJS ----------------
 
-const READLINE_SHIM = `
-globalThis.require = function (name) {
-  if (name === 'fs') {
-    return { readFileSync: function () { return __stdin; } };
-  }
-  if (name === 'readline') {
-    return {
-      createInterface: function () {
-        var lineHandlers = [];
-        var closeHandlers = [];
-        var api = {
-          on: function (event, handler) {
-            if (event === 'line') lineHandlers.push(handler);
-            if (event === 'close') closeHandlers.push(handler);
-            return api;
-          },
-          close: function () {},
-          question: function (_q, cb) { cb(__stdin); },
-        };
-        Promise.resolve().then(function () {
-          __stdin.split('\\n').forEach(function (line) { lineHandlers.forEach(function (fn) { fn(line); }); });
-          closeHandlers.forEach(function (fn) { fn(); });
-        });
-        return api;
-      },
-    };
-  }
-  throw new Error("require('" + name + "') is not available in the local runner");
-};
-`;
 
 /** 用户代码的输出上限：死循环里 print 会把桌面端内存吃光。 */
 const MAX_OUTPUT_CHARS = 64 * 1024;
@@ -99,6 +70,17 @@ async function runJavaScript(code: string, stdin: string, timeoutMs: number): Pr
   const context = runtime.newContext();
   let stdout = '';
   let stderr = '';
+  const drainPendingJobs = () => {
+    for (let round = 0; round < 1000 && runtime.hasPendingJob(); round += 1) {
+      const job = runtime.executePendingJobs();
+      if (job.error) {
+        const dumped = context.dump(job.error);
+        job.error.dispose();
+        stderr = appendOutput(stderr, formatValue(dumped) + '\n');
+        return;
+      }
+    }
+  };
   try {
     const log = context.newFunction('__log', (...args) => {
       stdout = appendOutput(stdout, args.map((arg) => context.dump(arg)).map(formatValue).join(' ') + '\n');
@@ -110,15 +92,7 @@ async function runJavaScript(code: string, stdin: string, timeoutMs: number): Pr
     context.setProp(context.global, '__error', error);
     log.dispose();
     error.dispose();
-    const prelude = `
-      const __stdin = ${JSON.stringify(stdin)};
-      globalThis.console = {
-        log: (...a) => __log(...a), info: (...a) => __log(...a), debug: (...a) => __log(...a),
-        warn: (...a) => __error(...a), error: (...a) => __error(...a),
-      };
-      globalThis.print = (...a) => __log(...a);
-      ${READLINE_SHIM}
-    `;
+    const prelude = buildJsPrelude(stdin);
     const preludeResult = context.evalCode(prelude, 'prelude.js');
     if (preludeResult.error) {
       const dumped = context.dump(preludeResult.error);
@@ -134,6 +108,9 @@ async function runJavaScript(code: string, stdin: string, timeoutMs: number): Pr
     } else {
       result.value.dispose();
     }
+    // readline 垫片用 Promise.resolve().then 派发行事件：不抽微任务队列，
+    // 「rl.on('line')」类题解会一行都跑不到，输出为空还判成没通过。
+    drainPendingJobs();
   } catch (caught) {
     stderr = appendOutput(stderr, (caught instanceof Error ? caught.message : String(caught)) + '\n');
   } finally {

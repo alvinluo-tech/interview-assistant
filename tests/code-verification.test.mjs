@@ -58,6 +58,20 @@ test('parses Huawei style (样例1 输入:/输出:) and English Sample Input/Out
   assert.equal(parseSamples('没有样例的题目描述。').length, 0);
 });
 
+test('parses colon-less and compact ACM statements from Chinese job platforms', () => {
+  const { parseSamples } = question();
+  // 字节/美团题面：标记单独一行、不带冒号
+  const bytedance = ['样例输入', '3', '1 2 3', '样例输出', '6'].join('\n');
+  // 沙箱里的数组跨 realm，assert.deepEqual 会因原型不同失败，所以比字符串。
+  const pairs = (text) => parseSamples(text).map((sample) => `${sample.input} => ${sample.output}`).join(' | ');
+  assert.equal(pairs(bytedance), '3\n1 2 3 => 6');
+  // 截图转写常见的紧凑写法：标题 + 标记 + 内容挤在同一行
+  assert.equal(pairs('示例1：输入：5\n输出：3'), '5 => 3');
+  assert.equal(pairs(['输入示例', '1 2', '输出示例', '3'].join('\n')), '1 2 => 3');
+  // 不能把「样例输入说明」这种正文当成标记
+  assert.equal(parseSamples('样例输入说明：本题没有样例。').length, 0);
+});
+
 test('picks the longest tagged code block and normalizes language aliases', () => {
   const { extractCodeBlock, normalizeLanguage } = question();
   const answer = [
@@ -84,6 +98,16 @@ test('separates ACM mode from core-code mode', () => {
   assert.equal(detectRunMode('function solve(){}', '核心代码模式，实现 solve 函数'), 'core');
   assert.equal(detectLanguage({ language: '', code: '#include <iostream>\nint main(){}' }), 'cpp');
   assert.equal(detectLanguage({ language: '', code: 'public class Main { public static void main(String[] a){} }' }), 'java');
+});
+
+test('an ACM statement wins over a class-shaped answer', () => {
+  const { detectRunMode } = question();
+  const statement = ['输入描述：第一行一个整数 n。', '输出描述：输出这 n 个数的和。'].join('\n');
+  const classAnswer = 'class Solution:\n    def solve(self, nums):\n        return sum(nums)';
+  // 只按代码特征判会得到 core，接着拿「参数表」去解析整段 stdin，必然判失败。
+  assert.equal(detectRunMode(classAnswer, statement), 'acm');
+  // 题面明说核心代码时仍然让给 core
+  assert.equal(detectRunMode(classAnswer, '核心代码模式：实现 solve 函数，输入描述见函数签名。'), 'core');
 });
 
 test('scaffold keeps ACM answers as-is and adds a driver for core-code Python', () => {

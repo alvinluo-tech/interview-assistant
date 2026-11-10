@@ -71,16 +71,21 @@ export function detectRunMode(code: string, questionText = ''): RunMode {
     /\breadline\b/, /process\.stdin/, /\bstd::cin\b/, /bufio\.NewScanner/,
   ];
   if (acm.some((pattern) => pattern.test(code))) return 'acm';
+  // 题面写了「输入描述/输出描述/标准输入」就是 ACM：即使答案只给了函数，也按 ACM 处理。
+  // 顺序很重要——先按代码特征判 core 的话，这里永远看不到题面，ACM 的整段 stdin
+  // 会被当成「k = v」参数表去解析，必判失败。
+  if (/ACM\s*模式|标准输入|输入描述|输出描述/.test(questionText) && !/核心代码|函数签名/.test(questionText)) return 'acm';
   if (/class\s+Solution|^\s*def\s+\w+\s*\(self/m.test(code)) return 'core';
-  // 题面明确写了 ACM 但答案没写 main：仍然按 ACM 处理，脚手架要补 IO。
-  if (/ACM\s*模式|标准输入|从标准输入|读入|输入描述/.test(questionText) && !/核心代码/.test(questionText)) return 'acm';
   return 'core';
 }
 
 // 中文标记必须带冒号（否则「输出描述:」会被误当成样例输出）；
 // 英文的「Sample Input 0」不带冒号，单独一条规则。
-const MARKER = /^(样例输入|样例输出|输入例子|输出例子|示例输入|示例输出|输入|输出|sample\s*input|sample\s*output|input|output)\s*(\d+)?\s*[:：]\s*(.*)$/i;
-const SAMPLE_ONLY = /^(sample\s*input|sample\s*output)\s*(\d+)?\s*$/i;
+const MARKER = /^(样例输入|样例输出|输入例子|输出例子|示例输入|示例输出|输入示例|输出示例|输入|输出|sample\s*input|sample\s*output|input|output)\s*(\d+)?\s*[:：]\s*(.*)$/i;
+// 无冒号写法：字节/美团题面的「样例输入」「样例输出」单独占一行，值在下一行。
+const SAMPLE_ONLY = /^(sample\s*input|sample\s*output|样例输入|样例输出|输入示例|输出示例)\s*(\d+)?\s*$/i;
+// 紧凑写法：「示例1：输入：5」——标题、标记、内容挤在同一行。
+const COMPACT = /^(?:示例|样例|例子|example)\s*\d*\s*[:：]?\s*(样例输入|样例输出|输入例子|输出例子|示例输入|示例输出|输入示例|输出示例|输入|输出|sample\s*input|sample\s*output|input|output)\s*[:：]\s*(.*)$/i;
 const HEADER = /^(示例|样例|例子|example)\s*\d*\s*[:：]?\s*$/i;
 
 function normalize(text: string): string {
@@ -110,13 +115,14 @@ export function parseSamples(questionText: string): CodeSample[] {
   for (const raw of lines) {
     const line = raw.trim();
     if (HEADER.test(line)) { flush(); continue; }
-    const marker = MARKER.exec(line);
-    const sampleOnly = marker ? null : SAMPLE_ONLY.exec(line);
-    if (marker || sampleOnly) {
+    const compact = COMPACT.exec(line);
+    const marker = compact ? null : MARKER.exec(line);
+    const sampleOnly = compact || marker ? null : SAMPLE_ONLY.exec(line);
+    if (compact || marker || sampleOnly) {
       flush();
-      const name = (marker ?? sampleOnly)![1];
+      const name = (compact ?? marker ?? sampleOnly)![1];
       const kind = /输入|input/i.test(name) ? 'input' : 'output';
-      const rest = marker?.[3] ?? '';
+      const rest = compact ? compact[2] : marker?.[3] ?? '';
       current = { kind, lines: rest ? [rest] : [] };
       continue;
     }
