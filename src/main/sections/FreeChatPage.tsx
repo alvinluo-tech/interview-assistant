@@ -1,16 +1,18 @@
 import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties,type RefObject} from 'react';
 import {createPortal} from 'react-dom';
 import {ActionBarPrimitive, AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime, unstable_useComposerInput, type ChatModelAdapter, type ThreadMessage} from '@assistant-ui/react';
-import {ArrowUp, AudioLines, LoaderCircle, Mic, Phone, PhoneOff, Plus, Square, Trash2, Volume2, VolumeX} from 'lucide-react';
-import {readData, useData, writeData} from '@/lib/backend';
-import {askFreeChat, saveFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession} from '@/lib/freeChat';
+import {ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, LoaderCircle, Mic, Phone, PhoneOff, Plus, Search, ShieldQuestion, Square, Trash2, Volume2, VolumeX, X} from 'lucide-react';
+import {useData} from '@/lib/backend';
+import {askFreeChat, saveFreeChat, setFreeChatModel, renameFreeChat, deleteFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession, type FreeChatApproval, type FreeChatApprovalRequest} from '@/lib/freeChat';
+import {ModelPicker, describeRoute} from './ModelPicker';
+import type {AiRoute} from '@/lib/aiConfig';
 import {openMicrophone, type MicrophoneCapture} from '@/lib/microphone';
 import {encodeWav, transcribeAudio} from '@/lib/ai';
 import {questionSpeaker} from '@/lib/questionSpeech';
 import {Md} from '@/overlay/Md';
 import {createVoiceCall, type VoiceCallPhase} from '@/lib/voiceCall';
 import {useAiReady, useAiSettings} from '@/lib/aiSettings';
-import {showToast} from '@/ui/primitives';
+import {showToast, useClickOutside} from '@/ui/primitives';
 import { t } from '@/lib/i18n';
 import './voice-call.css';
 import {useModalFocus} from '@/ui/useModalFocus';
@@ -30,27 +32,82 @@ export function FreeChatPage() {
   const [id,setId]=useState<string>(()=>crypto.randomUUID());
   const [revision,setRevision]=useState(0);
   const [permission,setPermission]=useState<LocalPermission>({allowLocal:false,categories:[...LOCAL_DATA_CATEGORIES]});
-  const openSession=(next:string)=>{setPermission({allowLocal:false,categories:[...LOCAL_DATA_CATEGORIES]});setId(next);};
+  const [query,setQuery]=useState('');
+  const [renaming,setRenaming]=useState<string|null>(null);
+  const [draft,setDraft]=useState('');
+  const openSession=(next:string)=>{setPermission({allowLocal:false,categories:[...LOCAL_DATA_CATEGORIES]});setQuery('');setId(next);};
   const callEnded=useCallback(()=>setRevision(value=>value+1),[]);
   const current=sessions.find(session=>session.id===id);
+  const visible=useMemo(()=>{
+    const needle=query.trim().toLowerCase();
+    return needle?sessions.filter(session=>session.title.toLowerCase().includes(needle)):sessions;
+  },[sessions,query]);
+  const commitRename=async(session:FreeChatSession)=>{
+    const title=draft.trim();
+    setRenaming(null);
+    if(!title||title===session.title)return;
+    try{await renameFreeChat(session.id,title);}catch{showToast({type:'error',title:t('重命名失败')});}
+  };
+  const remove=async(session:FreeChatSession)=>{
+    if(!window.confirm(t('删除「{title}」？此操作无法撤销。',{title:session.title})))return;
+    try{await deleteFreeChat(session.id);if(session.id===id)openSession(crypto.randomUUID());}
+    catch{showToast({type:'error',title:t('删除失败')});}
+  };
   return <div className="-mx-7 -my-7 flex h-[calc(100vh-6rem)] min-h-[520px] bg-background">
-    <aside className="hidden w-48 shrink-0 flex-col border-r bg-muted/20 p-3 md:flex">
-      <button className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button>
-      <div className="px-2 pb-2 pt-5 text-[11px] font-medium text-muted-foreground">{t('最近对话')}</div>
-      <div className="space-y-1 overflow-y-auto">{sessions.map(session=><button key={session.id} onClick={()=>{if(id!==session.id)openSession(session.id);}} className={`w-full truncate rounded-md px-2 py-2 text-left text-xs ${id===session.id?'bg-primary/10 text-primary':'hover:bg-muted'}`}>{session.title}</button>)}</div>
+    <aside className="hidden w-60 shrink-0 flex-col border-r bg-muted/20 md:flex">
+      <div className="p-3"><button className="flex w-full items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button></div>
+      <div className="px-3">
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"/>
+          <input value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('搜索对话')} aria-label={t('搜索对话')} className="w-full rounded-lg border bg-background py-1.5 pl-8 pr-7 text-xs outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/30"/>
+          {query&&<button onClick={()=>setQuery('')} aria-label={t('清除搜索')} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted"><X size={12}/></button>}
+        </div>
+      </div>
+      <div className="px-3 pb-1 pt-4 text-[11px] font-medium text-muted-foreground">{t('最近对话')}</div>
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+        {visible.map(session=>renaming===session.id
+          ? <input key={session.id} autoFocus value={draft} onChange={event=>setDraft(event.target.value)} onBlur={()=>void commitRename(session)} onKeyDown={event=>{if(event.key==='Enter')void commitRename(session);if(event.key==='Escape')setRenaming(null);}} className="w-full rounded-md border border-primary/40 bg-background px-2 py-1.5 text-xs outline-none"/>
+          : <div key={session.id} className={`group flex items-center gap-1 rounded-md pr-1 ${id===session.id?'bg-primary/10 text-primary':'hover:bg-muted'}`}>
+              <button onClick={()=>{if(id!==session.id)openSession(session.id);}} onDoubleClick={()=>{setDraft(session.title);setRenaming(session.id);}} title={t('双击可重命名')} className="min-w-0 flex-1 truncate px-2 py-2 text-left text-xs">{session.title}</button>
+              <button onClick={()=>void remove(session)} aria-label={t('删除对话')} className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:bg-background hover:text-destructive group-hover:opacity-100 focus:opacity-100"><Trash2 size={12}/></button>
+            </div>)}
+        {visible.length===0&&<p className="px-2 py-6 text-center text-xs text-muted-foreground">{query?t('没有匹配的对话'):t('还没有对话，说点什么开始吧。')}</p>}
+      </div>
     </aside>
-    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} permission={permission} onPermissionChange={setPermission} onCallEnd={callEnded} onDelete={async()=>{
+    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} permission={permission} onPermissionChange={setPermission} onCallEnd={callEnded} onDelete={async()=>{
       if(!window.confirm(t('删除这段对话？此操作无法撤销。')))return;
-      await writeData('freeChats',readData<FreeChatSession[]>('freeChats',[]).filter(session=>session.id!==id));
+      await deleteFreeChat(id);
       openSession(crypto.randomUUID());
     }}/>
   </div>;
 }
 
-function ChatThread({id,initial,permission,onPermissionChange,onDelete,onCallEnd}:{id:string;initial:FreeChatMessage[];permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;onDelete:()=>Promise<void>;onCallEnd:()=>void}) {
+function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDelete,onCallEnd}:{id:string;initial:FreeChatMessage[];initialModel:AiRoute|null;permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;onDelete:()=>Promise<void>;onCallEnd:()=>void}) {
   const {allowLocal,categories}=permission;
   const [speak,setSpeak]=useState(false),[speaking,setSpeaking]=useState(false),[tool,setTool]=useState(''),[error,setError]=useState('');
+  const [model,setModel]=useState<AiRoute|null>(initialModel);
+  const modelRef=useRef<AiRoute|null>(initialModel);modelRef.current=model;
   const [toolsUsed,setToolsUsed]=useState<string[]>([]);
+  const [approval,setApproval]=useState<FreeChatApprovalRequest|null>(null);
+  const [receipt,setReceipt]=useState('');
+  const approvalRef=useRef<FreeChatApprovalRequest|null>(null);approvalRef.current=approval;
+  const approvalResolve=useRef<((decision:FreeChatApproval)=>void)|null>(null);
+  const grants=useRef<Set<string>>(new Set());
+  const askApproval=useCallback((request:FreeChatApprovalRequest)=>new Promise<FreeChatApproval>(resolve=>{
+    if(request.category&&grants.current.has(request.category)){resolve('once');return;}
+    setReceipt('');setApproval(request);approvalResolve.current=resolve;
+  }),[]);
+  const decideApproval=useCallback((decision:FreeChatApproval)=>{
+    const settle=approvalResolve.current,request=approvalRef.current;
+    approvalResolve.current=null;approvalRef.current=null;setApproval(null);
+    if(decision==='always'&&request?.category)grants.current.add(request.category);
+    setReceipt(decision==='deny'
+      ?t('已拒绝读取：{title}',{title:request?.title || t('本地资料')})
+      :decision==='always'&&request?.category
+        ?t('已允许：{title}（本对话不再询问同类读取）',{title:request.title})
+        :t('已允许读取：{title}',{title:request?.title || t('本地资料')}));
+    settle?.(decision);
+  },[]);
   const recordTool=useCallback((name:string)=>{const label=name==='app_guide'?t('应用功能'):name==='list_local_data'?t('本地记录清单'):name==='read_local_record'?t('本地记录详情'):name==='search_local_knowledge'?t('本地资料搜索'):t('未知工具');setToolsUsed(items=>items.includes(label)?items:[...items,label]);setTool(t('正在查询{label}…',{label}));},[]);
   const [callPhase,setCallPhase]=useState<VoiceCallPhase>('idle');
   const [closingCall,setClosingCall]=useState(false);
@@ -77,7 +134,7 @@ function ChatThread({id,initial,permission,onPermissionChange,onDelete,onCallEnd
     const history=savedMessages(messages);
     try {
       try {
-        await saveFreeChat(id,history);
+        await saveFreeChat(id,history,modelRef.current);
       } catch(e) {
         const message=t('对话保存失败：{message}',{message:String((e as Error).message || e)});
         yield {status:{type:'incomplete',reason:'error',error:message}};
@@ -87,10 +144,10 @@ function ChatThread({id,initial,permission,onPermissionChange,onDelete,onCallEnd
       let full='', complete=false, wake:(()=>void)|undefined;
       const queries:FreeChatQuery[]=[];
       const work=askFreeChat(history,{
-        signal:controller.signal,allowLocal:grant.allowLocal,categories:grant.categories,
+        signal:controller.signal,allowLocal:grant.allowLocal,categories:grant.categories,...(modelRef.current?{model:modelRef.current}:{}),
         canQueryLocal:()=>permissionEpoch.current===epoch&&config.current.allowLocal,
         onDelta:delta=>{if(!controller.signal.aborted){full+=delta;wake?.();}},
-        onTool:recordTool,onToolResult:query=>queries.push(query),
+        onTool:recordTool,onToolResult:query=>queries.push(query),requestApproval:askApproval,
       });
       let failure:unknown;
       void work.then(()=>{complete=true;wake?.();},e=>{failure=e;complete=true;wake?.();});
@@ -113,9 +170,10 @@ function ChatThread({id,initial,permission,onPermissionChange,onDelete,onCallEnd
     } finally {
       abortSignal.removeEventListener('abort',cancel);
       if(textRequest.current===controller)textRequest.current=null;
+      approvalResolve.current?.('deny');approvalResolve.current=null;
       controller.abort();
     }
-  }}),[id,speaker,recordTool]);
+  }}),[id,speaker,recordTool,askApproval]);
   const runtime=useLocalRuntime(adapter,{initialMessages:initial.map(message=>({role:message.role,content:[{type:'text' as const,text:message.content}],metadata:{custom:{localQueries:readFreeChatQueries(message.queries)}},...(message.role==='assistant'&&message.status?{status:{type:'incomplete' as const,reason:'error' as const,error:message.error || t('上次回答未完成，请重试。')}}:{})}))});
   const changePermission=(next:LocalPermission)=>{permissionEpoch.current++;config.current={...config.current,...next};textRequest.current?.abort();runtime.thread.cancelRun();voiceRequest.current?.abort();speaker.stop();setTool('');onPermissionChange(next);};
   const voiceCall=useMemo(()=>createVoiceCall({
@@ -138,7 +196,7 @@ function ChatThread({id,initial,permission,onPermissionChange,onDelete,onCallEnd
         voiceSave.current=saveFreeChat(id,history);await voiceSave.current;
         await askFreeChat(history,{signal:controller.signal,allowLocal:grant.allowLocal,categories:grant.categories,canQueryLocal:()=>permissionEpoch.current===epoch&&config.current.allowLocal,voice:true,
           onDelta:delta=>{if(controller.signal.aborted)return;answer+=delta;setVoiceMessages([...history.slice(voiceStartIndex.current),{role:'assistant',content:answer}]);},
-          onTool:recordTool,onToolResult:query=>queries.push(query)});
+          onTool:recordTool,onToolResult:query=>queries.push(query),requestApproval:askApproval});
         if(controller.signal.aborted)return;
         const completed:FreeChatMessage[]=[...history,{role:'assistant',content:answer,queries}];voiceHistory.current=completed;
         voiceSave.current=saveFreeChat(id,completed);await voiceSave.current;
@@ -151,31 +209,38 @@ function ChatThread({id,initial,permission,onPermissionChange,onDelete,onCallEnd
           if(!controller.signal.aborted)call.current?.answerFailed(error);
         }
       }
-      finally {if(voiceRequest.current===controller)voiceRequest.current=null;setTool('');}
+      finally {approvalResolve.current?.('deny');approvalResolve.current=null;if(voiceRequest.current===controller)voiceRequest.current=null;setTool('');}
     },
     speak:(text,finished,failed)=>{playback.current={started:false,finished,failed};void speaker.speak(text);},
     stopSpeech:()=>{playback.current=null;speaker.stop();},
     cancelAnswer:()=>{voiceRequest.current?.abort();voiceRequest.current=null;},
     state:phase=>{if(phase==='idle'&&inputOwner.current==='call')inputOwner.current=null;setCallPhase(phase);},
     error:message=>{showToast({type:'error',title:t('语音通话已停止'),description:message});refreshAfterVoice();},
-  }),[speaker,id,refreshAfterVoice,speechInputMode,recordTool]);
+  }),[speaker,id,refreshAfterVoice,speechInputMode,recordTool,askApproval]);
   call.current=voiceCall;
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
   return <AssistantRuntimeProvider runtime={runtime}><ThreadPrimitive.Root inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
     <div className="flex items-center gap-3 border-b px-6 py-4"><div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{t('自由对话')}</div><div className="text-xs text-muted-foreground">{t('文字、语音与本地资料')}</div></div>
+      <ModelPicker settings={aiSettings} value={model} onChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}}/>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?t('关闭语音回复'):t('开启语音回复')} title={speak?t('关闭语音回复'):t('开启语音回复')}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
       <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError(t('请先在「设置 → AI 服务」配置对话模型和语音转写模型。'));return;}inputOwner.current='call';voiceHistory.current=savedMessages(runtime.thread.getState().messages);voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
       <DeleteButton onDelete={onDelete} onError={setError}/>
       {speaking&&<button className="text-xs text-primary" onClick={()=>speaker.stop()}>{t('停止播放')}</button>}
     </div>
     <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-      <div className="mx-auto max-w-2xl"><ThreadPrimitive.Empty><div className="flex min-h-64 flex-col justify-center"><p className="text-xs font-medium tracking-wide text-primary">{t('MIANXU · 对话')}</p><h2 className="mt-3 text-2xl font-semibold">{t('今天想聊点什么？')}</h2><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{t('可以问我知识、梳理思路，也可以开启本地资料查询，了解自己的岗位和面试记录。')}</p></div></ThreadPrimitive.Empty>
+      <div className="mx-auto max-w-2xl"><ThreadPrimitive.Empty><div className="flex min-h-[18rem] flex-col justify-center">
+          <p className="text-[11px] font-medium tracking-[0.18em] text-primary">{t('MIANXU · 对话')}</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight">{t('今天想聊点什么？')}</h2>
+          <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{t('可以问我知识、梳理思路，也可以开启本地资料查询，了解自己的岗位和面试记录。')}</p>
+          <div className="mt-6 grid gap-2 sm:grid-cols-2">{[t('帮我梳理一下最近的项目经历'),t('面试官问「为什么离职」怎么答？'),t('把这段技术方案讲得更清楚些'),t('我有哪些本地资料可以查询？')].map(item=><ThreadPrimitive.Suggestion key={item} prompt={item} send className="rounded-xl border bg-card px-3 py-2.5 text-left text-xs leading-5 text-muted-foreground shadow-xs transition hover:border-primary/40 hover:text-foreground">{item}</ThreadPrimitive.Suggestion>)}</div>
+        </div></ThreadPrimitive.Empty>
         <ThreadPrimitive.Messages>{({message})=><ChatMessage role={message.role}/>}</ThreadPrimitive.Messages>
+        <div className="sticky bottom-2 flex justify-center pb-1"><ThreadPrimitive.ScrollToBottom className="flex size-9 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-md hover:text-foreground" aria-label={t('滚动到底部')}><ArrowDown size={16}/></ThreadPrimitive.ScrollToBottom></div>
         {tool&&<p className="py-2 text-xs text-muted-foreground">{tool}</p>}{!tool&&toolsUsed.length>0&&<p className="py-2 text-xs text-muted-foreground">{t('本轮请求的工具：{tools}',{tools:toolsUsed.join('、')})}</p>}{error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
       </div>
     </ThreadPrimitive.Viewport>
-    <div className="mx-auto w-full max-w-2xl px-5 pb-5"><Composer permission={permission} onPermissionChange={changePermission} destination={provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
+    <div className="mx-auto w-full max-w-2xl px-5 pb-4">{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer permission={permission} onPermissionChange={changePermission} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
   </ThreadPrimitive.Root></AssistantRuntimeProvider>;
 }
@@ -221,8 +286,25 @@ function ChatMessage({role}:{role:string}) {
   const failed=role==='assistant'&&status?.type==='incomplete'&&status.reason==='error';
   const waiting=role==='assistant'&&status?.type==='running'&&!text;
   return <MessagePrimitive.Root className={`mb-5 flex ${role==='user'?'justify-end':'justify-start'}`}><div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 ${role==='user'?'bg-primary text-primary-foreground':'border bg-card text-foreground'}`}>
-    {role==='assistant'?<>{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer">{t('本次查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{status?.type!=='running'&&<ActionBarPrimitive.Reload className="mt-2 text-xs text-primary hover:underline disabled:opacity-40">{t('重试回答')}</ActionBarPrimitive.Reload>}</>:<div className="whitespace-pre-wrap break-words">{text}</div>}
+    {role==='assistant'?<>{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><ActionBarPrimitive.Copy className="transition hover:text-foreground data-[copied=true]:text-primary">{t('复制')}</ActionBarPrimitive.Copy><ActionBarPrimitive.Reload disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40">{t('重新生成')}</ActionBarPrimitive.Reload></ActionBarPrimitive.Root>}</>:<div className="whitespace-pre-wrap break-words">{text}</div>}
   </div></MessagePrimitive.Root>;
+}
+
+function ApprovalCard({request,onDecide}:{request:FreeChatApprovalRequest;onDecide:(decision:FreeChatApproval)=>void}) {
+  return <div role="group" aria-label={t('需要你确认')} className="mb-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+    <div className="flex items-start gap-2">
+      <ShieldQuestion size={16} className="mt-0.5 shrink-0 text-primary"/>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium">{t('要读取本地资料：{title}',{title:request.title})}</p>
+        {request.summary&&<p className="mt-1 line-clamp-2 break-all text-[11px] leading-5 text-muted-foreground">{request.summary}</p>}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={()=>onDecide('once')} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">{t('允许一次')}</button>
+          {request.category&&<button type="button" onClick={()=>onDecide('always')} className="rounded-lg border bg-background px-3 py-1.5 text-xs hover:bg-muted">{t('本对话始终允许')}</button>}
+          <button type="button" onClick={()=>onDecide('deny')} className="rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:text-destructive">{t('拒绝')}</button>
+        </div>
+      </div>
+    </div>
+  </div>;
 }
 
 function Composer({permission,onPermissionChange,destination,setError,speakerStop,inputOwner,blocked,onInputBusy}:{permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;destination:string;setError:(v:string)=>void;speakerStop:()=>void;inputOwner:RefObject<'call'|'manual'|null>;blocked:boolean;onInputBusy:(busy:boolean)=>void}) {
@@ -253,13 +335,24 @@ function Composer({permission,onPermissionChange,destination,setError,speakerSto
       if(!alive.current){await mic.close();return;}capture.current=mic;setRecording(true);
     }catch(e){release();if(alive.current)setError(t('无法录音：{message}',{message:String((e as Error).message || e)}));}finally{opening.current=false;if(alive.current)setBusy(false);}
   };
-  return <ComposerPrimitive.Root onKeyDownCapture={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&(busy||recording||blocked)){event.preventDefault();event.stopPropagation();}}} className="rounded-2xl border bg-card p-3 shadow-sm">
-    <ComposerPrimitive.Input rows={2} placeholder={t('输入消息，Enter 发送，Shift + Enter 换行')} className="w-full resize-none bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" />
-    <div className="mt-2 flex items-center gap-2"><label className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={allowLocal} disabled={blocked||categories.length===0} onChange={event=>onPermissionChange({...permission,allowLocal:event.target.checked})}/>{t('允许查询本地资料')}</label>
-      <button type="button" onClick={()=>void record()} disabled={busy||blocked||running} className={`rounded-lg p-2 ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?t('结束录音'):t('语音输入')} title={recording?t('结束录音'):t('语音输入')}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
+  const [permOpen,setPermOpen]=useState(false);
+  const permRef=useClickOutside(()=>setPermOpen(false));
+  return <ComposerPrimitive.Root onKeyDownCapture={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&(busy||recording||blocked)){event.preventDefault();event.stopPropagation();}}} className="rounded-2xl border bg-card shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20">
+    <ComposerPrimitive.Input rows={2} placeholder={t('输入消息，Enter 发送，Shift + Enter 换行')} className="max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-6 outline-none placeholder:text-muted-foreground"/>
+    <div className="flex items-center gap-1.5 px-2 pb-2">
+      <div className="relative" ref={permRef}>
+        <button type="button" onClick={()=>setPermOpen(value=>!value)} aria-expanded={permOpen} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition ${allowLocal?'border-primary/40 bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted'}`}><ShieldQuestion size={13}/>{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}<ChevronDown size={12}/></button>
+        {permOpen&&<div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border bg-popover p-3 shadow-xl">
+          <label className="flex items-center justify-between gap-3 text-xs font-medium"><span>{t('允许查询本地资料')}</span><input type="checkbox" checked={allowLocal} disabled={blocked||categories.length===0} onChange={event=>onPermissionChange({...permission,allowLocal:event.target.checked})}/></label>
+          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">{LOCAL_DATA_CATEGORIES.map(category=><label key={category} className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><input type="checkbox" checked={categories.includes(category)} disabled={blocked} onChange={event=>{const selected=event.target.checked?[...categories,category]:categories.filter(item=>item!==category);onPermissionChange({allowLocal:allowLocal&&selected.length>0,categories:selected});}}/>{t(LOCAL_DATA_LABELS[category])}</label>)}</div>
+          <p className="mt-2 text-[11px] leading-5 text-muted-foreground">{allowLocal?t('每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。',{destination}):t('本轮不查询本地资料，已有对话仍会作为上下文发送。')}</p>
+          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。')}</p>
+        </div>}
+      </div>
+      <span className="min-w-0 flex-1 truncate px-1 text-[11px] text-muted-foreground">{recording?t('正在录音，再点一次结束'):busy?t('正在识别…'):''}</span>
+      <button type="button" onClick={()=>void record()} disabled={busy||blocked||running} className={`rounded-lg p-2 transition ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?t('结束录音'):t('语音输入')} title={recording?t('结束录音'):t('语音输入')}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
       <ComposerPrimitive.Cancel className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={t('停止生成')}><Square size={16}/></ComposerPrimitive.Cancel>
-      <ComposerPrimitive.Send disabled={busy||recording||blocked} className="rounded-lg bg-primary p-2 text-primary-foreground disabled:opacity-40" aria-label={t('发送')}><ArrowUp size={17}/></ComposerPrimitive.Send>
-    </div><p className="mt-2 text-[11px] leading-5 text-muted-foreground">{allowLocal?t('本对话可按需查询已勾选的资料；关闭开关会停止当前查询。'):t('本轮不查询本地资料；已有对话内容仍会作为聊天上下文发送。')}{t('录音结束后可先编辑文字。')}</p>
-    <details className="mt-1 text-[11px] leading-5 text-muted-foreground"><summary className="cursor-pointer">{t('查询范围与数据说明')}</summary><div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">{LOCAL_DATA_CATEGORIES.map(category=><label key={category} className="flex items-center gap-1"><input type="checkbox" checked={categories.includes(category)} disabled={blocked} onChange={event=>{const selected=event.target.checked?[...categories,category]:categories.filter(item=>item!==category);onPermissionChange({allowLocal:allowLocal&&selected.length>0,categories:selected});}}/>{t(LOCAL_DATA_LABELS[category])}</label>)}</div><p className="mt-2">{t('读取到的文字片段将发送至：{destination}。只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。已有对话及回答保存在本机；已发送给服务商的内容无法通过关闭开关撤回。切换对话或离开此页面后需重新授权。',{destination})}</p></details>
+      <ComposerPrimitive.Send disabled={busy||recording||blocked} className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition disabled:opacity-40" aria-label={t('发送')}><ArrowUp size={16}/></ComposerPrimitive.Send>
+    </div>
   </ComposerPrimitive.Root>;
 }

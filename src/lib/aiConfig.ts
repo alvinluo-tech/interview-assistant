@@ -182,11 +182,17 @@ export function usesLiveSpeech(settings: AiSettings): boolean {
   if (settings.speechInputMode === 'segmented') return true;
   return !!settings.routes.stt && speechProtocol(settings.routes.stt.modelId) === 'mimo';
 }
-export function resolveAiRoute(settings: AiSettings, role: AiRole) {
-  const route = settings.routes[role] ?? (role === 'vision' ? settings.routes.chat : null);
+/**
+ * Resolve the provider and model for a role. `override` lets one conversation pick its
+ * own model (free chat) without touching the global route; every check below still runs,
+ * so a deleted provider or renamed model fails the same way instead of silently falling back.
+ */
+export function resolveAiRoute(settings: AiSettings, role: AiRole, override?: AiRoute | null) {
+  const route = override ?? settings.routes[role] ?? (role === 'vision' ? settings.routes.chat : null);
   if (!route) throw new Error(t('请先在「设置 → AI 服务」为{role}选择模型', { role: t(ROLE_LABELS[role]) }));
   const provider = settings.providers.find(p => p.id === route.providerId);
   if (!provider) throw new Error(t('{role}使用的连接已被删除，请重新选择', { role: t(ROLE_LABELS[role]) }));
+  if (override && !provider.models.some(model => model.id === route.modelId)) throw new Error(t('{role}使用的模型已不存在，请重新选择', { role: t(ROLE_LABELS[role]) }));
   if (role === 'stt') assertSpeechModelSupported(provider, route.modelId);
   if (provider.authMode === 'bearer' && !provider.apiKey.trim()) throw new Error(t('{name}缺少 API Key', { name: provider.name }));
   return { provider: normalizeProvider(provider), modelId: validateModelId(route.modelId) };

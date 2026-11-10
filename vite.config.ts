@@ -44,7 +44,8 @@ export default defineConfig(() => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**", "**/artifacts/**"],
+      // Local research clones (`_refs/` 等) 里的 tsconfig 会触发整页刷新，与开发无关。
+      ignored: ["**/src-tauri/**", "**/artifacts/**", "**/_*/**"],
     },
   },
 

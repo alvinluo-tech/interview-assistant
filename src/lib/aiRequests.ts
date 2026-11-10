@@ -1,5 +1,5 @@
 import { getAiSettings, getAiLoadError } from './aiSettings';
-import { resolveAiRoute, usesLiveSpeech, type AiRole } from './aiConfig';
+import { resolveAiRoute, usesLiveSpeech, type AiRole, type AiRoute } from './aiConfig';
 import { aiFetch } from './aiTransport';
 import { AiCompletionError, aiHeaders, consumeChatResult, withAiRequest } from './aiProtocol';
 import {PROMPT_VERSION,outputLimit,checkInputBudget,retryDelay,type AiTask,type AiRequestTrace} from './aiTaskPolicy';
@@ -25,11 +25,13 @@ export interface ChatOptions {
   task?:AiTask;
   schema?:{name:string;schema:Record<string,unknown>};
   onTrace?:(trace:AiRequestTrace)=>void;
+  /** One-off route for this request (free chat lets each conversation pick a model). */
+  model?:AiRoute;
 }
-function route(role: AiRole) {
+function route(role: AiRole, override?:AiRoute) {
   if (getAiLoadError()) throw new Error(t('AI 配置读取失败，请到「设置 → AI 服务」查看并重试'));
   const settings = getAiSettings();
-  return { settings, ...resolveAiRoute(settings, role) };
+  return { settings, ...resolveAiRoute(settings, role, override) };
 }
 function waitForRetry(ms:number,signal?:AbortSignal):Promise<void> {
   return new Promise((resolve,reject)=>{
@@ -39,7 +41,7 @@ function waitForRetry(ms:number,signal?:AbortSignal):Promise<void> {
   });
 }
 async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<string> {
-  const { settings, provider, modelId } = route(role);
+  const { settings, provider, modelId } = route(role, opts.model);
   const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
   const task=opts.task || (role==='vision'?'exam-solve':'interview-answer');
   const messages=applyTaskInstructions(opts.messages,task,getSetting<TaskPreferences>('ai.taskPreferences',{}));
