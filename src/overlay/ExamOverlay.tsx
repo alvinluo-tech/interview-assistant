@@ -193,6 +193,8 @@ function ExamShell({
 
   // 恢复会话与流式输出时贴底：followBottom 关掉后不再自动滚动。
   const followBottom = useRef(true);
+  // 箭头会出现光标正下方：刚滚过就让驻留跳过一次，否则往上翻会被它拽回去。
+  const lastScrollAt = useRef(0);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
 
@@ -201,7 +203,8 @@ function ExamShell({
     return () => registerOverlayList(null);
   }, []);
 
-  const jumpToBottom = () => {
+  const jumpToBottom = (auto = false) => {
+    if (!auto && performance.now() - lastScrollAt.current < 1200) return;
     followBottom.current = true;
     setAwayFromBottom(false);
     const el = listRef.current;
@@ -213,7 +216,7 @@ function ExamShell({
 
   // 新的一轮答案出现时回到最新：用户可能正翻着旧题按了「解题」。
   useEffect(() => {
-    if (solver.turns.length > 0) jumpToBottom();
+    if (solver.turns.length > 0) jumpToBottom(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solver.turns.length]);
 
@@ -251,31 +254,34 @@ function ExamShell({
   };
 
   const empty = solver.turns.length === 0 && !multiPage && !solving && !solver.errorMessage;
-  // 恢复会话时吸到底部；之后只要用户没往上翻，内容变高（流式输出、图片解码）也继续贴底。
+  // 恢复会话时吸到底部；之后只在内容变高时贴底，用户的长滚动永远不被抢回来。
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
     let frame = 0;
-    const measure = () => {
+    const paint = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-        setAwayFromBottom(gap > 24);
-        if (followBottom.current && gap > 1) el.scrollTop = el.scrollHeight;
+        setAwayFromBottom(el.scrollHeight - el.clientHeight - el.scrollTop > 24);
       });
     };
+    // 只记录跟随意图，不改滚动位置：滚动事件里贴底会和用户的滚轮打架。
     const onScroll = () => {
-      const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-      // 用户主动往上翻就停止跟随；滚回底部附近再恢复。
-      if (gap <= 24) followBottom.current = true;
-      else if (gap > 160) followBottom.current = false;
-      measure();
+      lastScrollAt.current = performance.now();
+      followBottom.current = el.scrollHeight - el.clientHeight - el.scrollTop <= 24;
+      paint();
     };
-    measure();
+    // 内容变高（流式输出、图片解码）才主动贴底。
+    const stick = () => {
+      if (followBottom.current) el.scrollTop = el.scrollHeight;
+      paint();
+    };
+    el.scrollTop = el.scrollHeight;
     el.addEventListener('scroll', onScroll, { passive: true });
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(stick);
     if (contentRef.current) observer.observe(contentRef.current);
+    paint();
     return () => {
       el.removeEventListener('scroll', onScroll);
       observer.disconnect();
@@ -375,7 +381,7 @@ function ExamShell({
             </div>
           )}
         </div>
-        {awayFromBottom && <ScrollToBottomButton onJump={jumpToBottom} />}
+        {awayFromBottom && <ScrollToBottomButton onJump={() => jumpToBottom()} />}
       </div>
 
       <ScrollEdgePillProxy id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
