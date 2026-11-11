@@ -51,6 +51,8 @@ export interface MicrophoneCapture {
 /** The workbench test and interview use the same capture path. Test audio stays local. */
 export async function openMicrophone(options: {
   deviceId?: string;
+  /** Barge-in listens while the answer plays, so it needs the browser to cancel its own audio. */
+  echoCancellation?: boolean;
   onPcm: (pcm: Int16Array, volume: number) => void;
   onError: (message: string, code?: string) => void;
 }): Promise<MicrophoneCapture> {
@@ -71,7 +73,7 @@ export async function openMicrophone(options: {
   };
   try {
     const request = navigator.mediaDevices.getUserMedia({ audio: {
-      channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true,
+      channelCount: 1, echoCancellation: options.echoCancellation === true, noiseSuppression: true, autoGainControl: true,
       ...(options.deviceId ? { deviceId: { exact: options.deviceId } } : {}),
     } });
     void request.then(late => { if (closed) late.getTracks().forEach(track => track.stop()); }, () => {});

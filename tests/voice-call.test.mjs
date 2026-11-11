@@ -54,3 +54,34 @@ test('ending while realtime recognition connects aborts and closes the late conn
   api.start();api.stop();resolve({push:()=>{},finish:async()=>'',close:async()=>{closed++;}});await flush();
   assert.equal(aborted,true);assert.equal(closed,1);assert.equal(api.getPhase(),'idle');
 });
+
+function speechHarness() {
+  let pcm,resolveTranscription,monitorInput,monitorClosed=0;const spoken=[],phases=[],stopped=[];
+  const api=createVoiceCall({open:async input=>{pcm=input;return {close:async()=>{}};},
+    openMonitor:async onPcm=>{monitorInput=onPcm;return {close:async()=>{monitorClosed++;}};},
+    transcribe:(_audio,signal)=>new Promise(resolve=>{resolveTranscription=resolve;signal.addEventListener('abort',()=>{});}),
+    send:()=>{},speak:(text,done)=>{spoken.push(text);api.__done=done;},stopSpeech:()=>stopped.push('stop'),cancelAnswer:()=>stopped.push('cancel'),
+    state:value=>phases.push(value),error:()=>{}});
+  return {api,phases,spoken,stopped,input:(duration,volume)=>pcm(new Int16Array(duration*16),volume),resolve:text=>resolveTranscription(text),
+    monitor:(duration,volume)=>monitorInput?.(new Int16Array(duration*16),volume),done:()=>api.__done?.(),monitorClosed:()=>monitorClosed};
+}
+test('streamed sentences start playing before the answer finishes',async()=>{
+  const h=speechHarness();h.api.start();await flush();h.input(400,30);h.input(800,0);await flush();
+  assert.equal(h.api.getPhase(),'transcribing');h.resolve('问题');await flush();assert.equal(h.api.getPhase(),'thinking');
+  h.api.beginAnswer();h.api.pushAnswer('第一句。');h.api.pushAnswer('第二句。');
+  assert.equal(h.api.getPhase(),'speaking');assert.deepEqual(h.spoken,['第一句。']);
+  h.done();h.api.endAnswer();assert.deepEqual(h.spoken,['第一句。','第二句。']);assert.equal(h.api.getPhase(),'speaking');
+  h.done();await flush();assert.equal(h.api.getPhase(),'listening');assert.equal(h.monitorClosed(),1);h.api.stop();
+});
+test('speaking during playback interrupts the answer early',async()=>{
+  const h=speechHarness();h.api.start();await flush();h.input(400,30);h.input(800,0);await flush();h.resolve('问题');await flush();
+  h.api.beginAnswer();h.api.pushAnswer('很长的一段回答。');assert.deepEqual(h.stopped,[]);
+  h.monitor(100,30);h.monitor(100,30);h.monitor(100,30);assert.deepEqual(h.stopped,[]);
+  h.monitor(100,30);await flush();
+  assert.deepEqual(h.stopped,['stop','cancel']);assert.equal(h.api.getPhase(),'listening');
+  h.done();assert.equal(h.api.getPhase(),'listening');h.api.stop();
+});
+test('a shorter pause ends the turn within the realtime window',async()=>{
+  const h=speechHarness();h.api.start();await flush();h.input(400,30);h.input(800,0);await flush();
+  assert.equal(h.api.getPhase(),'transcribing');h.api.stop();
+});

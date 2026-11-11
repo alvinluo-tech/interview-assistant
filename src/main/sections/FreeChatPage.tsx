@@ -11,6 +11,7 @@ import {encodeWav, transcribeAudio} from '@/lib/ai';
 import {questionSpeaker} from '@/lib/questionSpeech';
 import {Md} from '@/overlay/Md';
 import {createVoiceCall, type VoiceCallPhase} from '@/lib/voiceCall';
+import {takeSentences} from '@/lib/speechChunks';
 import {useAiReady, useAiSettings} from '@/lib/aiSettings';
 import {showToast, useClickOutside, useEscapeKey} from '@/ui/primitives';
 import { t } from '@/lib/i18n';
@@ -269,22 +270,38 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
     }}:{}),
     preview:setVoicePreview,
     open:(onPcm,onError)=>openMicrophone({onPcm:(pcm,volume)=>{onPcm(pcm,volume);if(performance.now()-lastMeter.current>100){lastMeter.current=performance.now();setVoiceLevel(Math.min(1,volume/45));}},onError}),
+    openMonitor:(onPcm,onError)=>openMicrophone({echoCancellation:true,onPcm,onError}),
     transcribe:(pcm,signal)=>transcribeAudio(encodeWav(pcm),{signal}),
     send:async text=>{
       const controller=new AbortController();voiceRequest.current=controller;
       const epoch=permissionEpoch.current,grant=config.current,queries:FreeChatQuery[]=[];
       const history:FreeChatMessage[]=[...voiceHistory.current,{role:'user',content:text}];
       voiceHistory.current=history;setVoiceMessages(history.slice(voiceStartIndex.current));
-      let answer='';
+      let answer='',pending='',speaking=false;
+      const say=(text:string)=>{
+        if(controller.signal.aborted||!text.trim())return;
+        if(!speaking){speaking=true;call.current?.beginAnswer();}
+        call.current?.pushAnswer(text);
+      };
       try {
         voiceSave.current=saveFreeChat(id,history);await voiceSave.current;
         await askFreeChat(history,{signal:controller.signal,allowLocal:grant.allowLocal,categories:grant.categories,canQueryLocal:()=>permissionEpoch.current===epoch&&config.current.allowLocal,voice:true,
-          onDelta:delta=>{if(controller.signal.aborted)return;answer+=delta;setVoiceMessages([...history.slice(voiceStartIndex.current),{role:'assistant',content:answer}]);},
+          onDelta:delta=>{
+            if(controller.signal.aborted)return;
+            answer+=delta;
+            setVoiceMessages([...history.slice(voiceStartIndex.current),{role:'assistant',content:answer}]);
+            // Speak each finished sentence while the rest of the answer is still streaming.
+            pending+=delta;const {ready,rest}=takeSentences(pending);pending=rest;
+            for(const sentence of ready)say(sentence);
+          },
           onTool:recordTool,onToolResult:query=>queries.push(query),requestApproval:askApproval});
         if(controller.signal.aborted)return;
         const completed:FreeChatMessage[]=[...history,{role:'assistant',content:answer,queries}];voiceHistory.current=completed;
         voiceSave.current=saveFreeChat(id,completed);await voiceSave.current;
-        if(!controller.signal.aborted)call.current?.answer(answer);
+        if(controller.signal.aborted)return;
+        if(!speaking){call.current?.answer(answer);return;}
+        say(pending);pending='';
+        call.current?.endAnswer();
       } catch(error) {
         if(!controller.signal.aborted){
           const failed:FreeChatMessage[]=[...history,{role:'assistant',content:answer,queries,status:answer?'partial':'failed',error:t('语音对话失败：{message}',{message:String((error as Error).message || error)})}];
