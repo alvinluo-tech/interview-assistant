@@ -247,7 +247,7 @@ async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider
 export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOptions):Promise<string> {
   options.signal.throwIfAborted();
   if(messages.length>100 || messages.some(message=>message.content.length>30000))throw new Error(t('对话内容过长，请开始新对话。'));
-  const instruction=options.voice?'这是实时语音对话，请自然口语化地直接回答，默认简短，适合朗读；用户要求详细解释时再展开。避免 Markdown 表格、代码围栏和难以朗读的符号。':'已进入文字对话。';
+  const instruction=options.voice?'这是实时语音对话，回答会被朗读出来：要像当面说话，用短句和口语词，先给结论再补必要说明。长度跟着问题走——简单问题两三句说完，复杂问题可以讲清楚，但不要念清单、长表格、大段代码或文件名。避免 Markdown 标记、代码围栏、括号补充与难以朗读的符号；数字和单位按口语读法表达。':'已进入文字对话。';
   const categories=options.categories || LOCAL_DATA_CATEGORIES;
   const history:ChatMessage[]=[{role:'system',content:`${SYSTEM}\n${instruction}\n${options.allowLocal?`用户仅授权本轮按需查询以下本地资料：${categories.map(category=>LOCAL_DATA_LABELS[category]).join('、')}。先列清单再读取必要详情；不要反复读取相同页；最近几场默认最多三场，明确说明覆盖范围和来源。`:'本轮未授权查询本地资料。可以使用用户消息与已有对话；不要声称执行了新的本地查询。'}`},...messages.filter(message=>message.role!=='assistant'||(!message.status&&!hasInternalToolMarkup(message.content)))];
   const assertActive=()=>{options.signal.throwIfAborted();if(options.allowLocal&&options.canQueryLocal&&!options.canQueryLocal())throw new Error(t('本地资料查询授权已撤销，请重新发送消息。'));};
