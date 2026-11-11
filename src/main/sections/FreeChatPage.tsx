@@ -479,6 +479,12 @@ function messagePreview(message: ThreadMessage): string {
 }
 
 /** Right-edge outline: one tick per message, hover previews it, click scrolls to it. */
+function threadScroller(node: HTMLElement | null): HTMLElement | null {
+  const viewport = node?.parentElement?.querySelector('.chat-scroll');
+  if (viewport instanceof HTMLElement) return viewport;
+  return scrollHost(node);
+}
+
 function clipPlain(text: string) {
   return text
     .replace(/```[\s\S]*?```/g, ' ')
@@ -511,7 +517,7 @@ function ConversationRail({ visible }: { visible: boolean }) {
   useEffect(() => {
     const node = track.current;
     if (!node) return;
-    const scroller = scrollHost(node);
+    const scroller = threadScroller(node);
     if (!scroller) return;
     const update = () => {
       const frame = scroller.getBoundingClientRect();
@@ -536,7 +542,7 @@ function ConversationRail({ visible }: { visible: boolean }) {
   const activeIndex = pairs.findIndex(pair => pair.messages.has(active));
   const hovered = hover ? pairs[hover.index] : null;
   const jump = (messageId: string) => {
-    const scroller = scrollHost(track.current);
+    const scroller = threadScroller(track.current);
     const target = scroller?.querySelector(`[data-message-id="${messageId}"]`) as HTMLElement | null;
     if (!scroller || !target) return;
     const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
