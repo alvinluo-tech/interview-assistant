@@ -37,3 +37,11 @@ export function formatClock(at: number | undefined): string {
   const date = new Date(at);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
+
+export type ChatTextSize = 'sm' | 'md' | 'lg';
+
+export const CHAT_TEXT_PX: Record<ChatTextSize, number> = { sm: 14, md: 15, lg: 17 };
+
+export function chatTextSize(value: unknown): ChatTextSize {
+  return value === 'sm' || value === 'lg' ? value : 'md';
+}

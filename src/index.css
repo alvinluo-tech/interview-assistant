@@ -319,6 +319,32 @@ html.ov-palette-fade body.overlay #root * {
   font-family: 'JetBrains Mono', Consolas, monospace;
 }
 
+/* 自由对话正文：跟随「对话字号」设置，比浮窗的紧凑排版更适合长文阅读 */
+.chat-md .overlay-md {
+  font-size: var(--chat-text, 15px);
+  line-height: 1.8;
+  color: inherit;
+  text-shadow: none;
+}
+.chat-md .overlay-md p,
+.chat-md .overlay-md li {
+  margin: 6px 0;
+}
+.chat-md .overlay-md h1 { font-size: 1.32em; }
+.chat-md .overlay-md h2 { font-size: 1.2em; }
+.chat-md .overlay-md h3 { font-size: 1.08em; }
+.chat-md .overlay-md h4,
+.chat-md .overlay-md h5,
+.chat-md .overlay-md h6 { font-size: 1em; }
+.chat-md .overlay-md table { font-size: 0.94em; }
+/* 代码块的字号写在容器 .overlay-code 上（calc(11.5px * …)），只覆盖 pre 会变成 11.5 × 0.92 */
+.chat-md .overlay-code-block {
+  font-size: calc(var(--chat-text, 15px) * 0.88);
+}
+.chat-md .overlay-md code.inline-code {
+  font-size: 0.92em;
+}
+
 /* 对话滚动条：更细、更轻，悬停才显影 */
 .chat-scroll {
   scrollbar-width: thin;

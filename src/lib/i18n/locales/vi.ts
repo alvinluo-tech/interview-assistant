@@ -4,6 +4,11 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const vi: Record<string, string> = {
+  "大": 'Lớn',
+  "标准": 'Tiêu chuẩn',
+  "小": 'Nhỏ',
+  "只影响自由对话的正文，觉得小就调大一档。": 'Chỉ áp dụng cho nội dung trò chuyện tự do. Tăng một mức nếu thấy nhỏ.',
+  "对话字号": 'Cỡ chữ trò chuyện',
   "思考": "Suy nghĩ",
   "工具调用": "Gọi công cụ",
   "已调用 {count} 个工具": "Đã gọi {count} công cụ",

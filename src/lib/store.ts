@@ -217,6 +217,7 @@ export const ALL_KEYS = [
   'updates.repository',
   'updates.reminder',
   'update.dismissedVersion',
+  'chat.textSize',
   'freechat.listWidth','freechat.resourcesWidth',
   'mock.speechEnabled',
   'capture.mode',

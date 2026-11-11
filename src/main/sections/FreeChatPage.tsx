@@ -16,7 +16,7 @@ import {showToast, useClickOutside} from '@/ui/primitives';
 import { t } from '@/lib/i18n';
 import {CHAT_ATTACH_ACCEPT, CHAT_ATTACH_MAX, IMAGE_MARKER, chatFileKind, composeAttachmentContent, conversationFiles, formatFileSize, readChatAttachment, splitAttachments, stripAttachmentBlocks, type ChatAttachment, type ParsedFile} from '@/lib/chatFiles';
 import {useSetting} from '@/lib/store';
-import {formatClock} from '@/lib/chatText';
+import {CHAT_TEXT_PX,chatTextSize,formatClock} from '@/lib/chatText';
 import {useCopyFeedback} from '@/lib/clipboard';
 import './voice-call.css';
 import {useModalFocus} from '@/ui/useModalFocus';
@@ -70,10 +70,10 @@ export function FreeChatPage() {
     try{await deleteFreeChat(session.id);if(session.id===id)openSession(crypto.randomUUID());}
     catch{showToast({type:'error',title:t('删除失败')});}
   };
-  return <div className="flex h-full min-h-0 w-full bg-background">
+  const [textSize]=useSetting<'sm'|'md'|'lg'>('chat.textSize','md');
+  return <div style={{['--chat-text' as string]:`${CHAT_TEXT_PX[chatTextSize(textSize)]}px`}} className="flex h-full min-h-0 w-full bg-background">
     <aside style={collapsed?undefined:{width:list.width}} className={`hidden shrink-0 flex-col bg-muted/20 md:flex ${collapsed?'w-14 border-r':''}`}>
       {collapsed?<div className="flex flex-col items-center gap-1 p-2">
-        <button onClick={()=>setCollapsed(false)} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>
         <button onClick={()=>openSession(crypto.randomUUID())} aria-label={t('新对话')} title={t('新对话')} className="rounded-lg border bg-background p-2 shadow-xs hover:bg-muted"><Plus size={16}/></button>
       </div>:<>
       <div className="flex items-center gap-1 p-3"><button className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button><button onClick={()=>setCollapsed(true)} aria-label={t('收起侧栏')} title={t('收起侧栏')} className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftClose size={15}/></button></div>
@@ -97,7 +97,7 @@ export function FreeChatPage() {
       </>}
     </aside>
     {!collapsed&&<ResizeHandle label={t('调整对话列表宽度')} dragging={list.dragging} onPointerDown={list.onPointerDown}/>}
-    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} permission={permission} onPermissionChange={setPermission} onCallEnd={callEnded} onDelete={async()=>{
+    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} listCollapsed={collapsed} onExpandList={()=>setCollapsed(false)} permission={permission} onPermissionChange={setPermission} onCallEnd={callEnded} onDelete={async()=>{
       if(!window.confirm(t('删除这段对话？此操作无法撤销。')))return;
       await deleteFreeChat(id);
       openSession(crypto.randomUUID());
@@ -105,7 +105,7 @@ export function FreeChatPage() {
   </div>;
 }
 
-function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDelete,onCallEnd}:{id:string;initial:FreeChatMessage[];initialModel:AiRoute|null;permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;onDelete:()=>Promise<void>;onCallEnd:()=>void}) {
+function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permission,onPermissionChange,onDelete,onCallEnd}:{id:string;initial:FreeChatMessage[];initialModel:AiRoute|null;listCollapsed:boolean;onExpandList:()=>void;permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;onDelete:()=>Promise<void>;onCallEnd:()=>void}) {
   const {allowLocal,categories}=permission;
   const [speak,setSpeak]=useState(false),[speaking,setSpeaking]=useState(false),[tool,setTool]=useState(''),[error,setError]=useState('');
   const [model,setModel]=useState<AiRoute|null>(initialModel);
@@ -296,7 +296,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
   return <AssistantRuntimeProvider runtime={runtime}><div className="flex min-w-0 flex-1"><ThreadPrimitive.Root ref={columnRef} inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
-    <div className={`flex items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}><div className={`${cramped?'hidden':''} flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary`}><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div>{!cramped&&<div className="truncate text-xs text-muted-foreground">{t('文字、语音与本地资料')}</div>}</div>
+    <div className={`flex items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}>{listCollapsed&&<button onClick={onExpandList} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="shrink-0 rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>}<div className={`${cramped?'hidden':''} flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary`}><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div>{!cramped&&<div className="truncate text-xs text-muted-foreground">{t('文字、语音与本地资料')}</div>}</div>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?t('关闭语音回复'):t('开启语音回复')} title={speak?t('关闭语音回复'):t('开启语音回复')}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
       <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError(t('请先在「设置 → AI 服务」配置对话模型和语音转写模型。'));return;}inputOwner.current='call';voiceHistory.current=savedMessages(runtime.thread.getState().messages);voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
       <DeleteButton onDelete={onDelete} onError={setError}/>
@@ -637,7 +637,7 @@ function ChatMessage({role}:{role:string}) {
   const queries=readFreeChatQueries(rawQueries);
   const failed=role==='assistant'&&status?.type==='incomplete'&&status.reason==='error';
   const waiting=role==='assistant'&&status?.type==='running'&&!text;
-  return <MessagePrimitive.Root className={`group mb-5 flex flex-col ${role==='user'?'items-end':'items-start'}`}><div className={role==='user'?'max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-sm leading-6 text-primary-foreground':'w-full text-sm leading-6 text-foreground'}>
+  return <MessagePrimitive.Root className={`group mb-5 flex flex-col ${role==='user'?'items-end':'items-start'}`}><div className={role==='user'?'max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-[length:var(--chat-text,15px)] leading-7 text-primary-foreground':'chat-md w-full text-[length:var(--chat-text,15px)] leading-[1.8] text-foreground'}>
     {role==='assistant'?<>{steps.length>0&&<StepsView steps={steps} elapsedMs={elapsedMs}/>}{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><MessageCopyButton text={displayFreeChatText(text)}/><ActionBarPrimitive.Reload title={t('重新生成')} aria-label={t('重新生成')} disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40"><RotateCcw size={13}/></ActionBarPrimitive.Reload>{clock&&<time className="tabular-nums">{clock}</time>}</div>}</>:<>{parsed.text&&<div className="whitespace-pre-wrap break-words">{parsed.text}</div>}{files.length>0&&<ul className="mt-2 space-y-1">{files.map(file=><li key={file.name} className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 opacity-70">{file.image ? t('图片') : t('{count} 字',{count:file.chars})}</span></li>)}</ul>}</>}
   </div>
   {role==='user'&&<div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">{clock&&<time className="tabular-nums">{clock}</time>}<MessageCopyButton text={parsed.text}/></div>}

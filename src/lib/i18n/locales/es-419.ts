@@ -4,6 +4,11 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const es419: Record<string, string> = {
+  "大": 'Grande',
+  "标准": 'Estándar',
+  "小": 'Pequeño',
+  "只影响自由对话的正文，觉得小就调大一档。": 'Solo afecta el texto del chat libre. Sube un nivel si lo ves pequeño.',
+  "对话字号": 'Tamaño del texto del chat',
   "思考": "Pensamiento",
   "工具调用": "Llamada de herramienta",
   "已调用 {count} 个工具": "Se usaron {count} herramientas",

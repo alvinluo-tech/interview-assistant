@@ -4,6 +4,11 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const ptBr: Record<string, string> = {
+  "大": 'Grande',
+  "标准": 'Padrão',
+  "小": 'Pequeno',
+  "只影响自由对话的正文，觉得小就调大一档。": 'Afeta apenas o texto do chat livre. Suba um nível se estiver pequeno.',
+  "对话字号": 'Tamanho do texto do chat',
   "思考": "Pensamento",
   "工具调用": "Chamada de ferramenta",
   "已调用 {count} 个工具": "{count} ferramentas chamadas",

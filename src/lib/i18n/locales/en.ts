@@ -4,6 +4,11 @@
  * 新增词条时同步补齐其余 locale 字典（tests/i18n.test.mjs 会校验 key 对齐）。
  */
 export const en: Record<string, string> = {
+  "大": 'Large',
+  "标准": 'Default',
+  "小": 'Small',
+  "只影响自由对话的正文，觉得小就调大一档。": 'Only affects the body text in free chat. Pick the next size up if it feels small.',
+  "对话字号": 'Chat text size',
   "思考": "Thinking",
   "工具调用": "Tool call",
   "已调用 {count} 个工具": "Called {count} tools",

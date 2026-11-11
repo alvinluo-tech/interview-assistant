@@ -4,6 +4,11 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const tr: Record<string, string> = {
+  "大": 'Büyük',
+  "标准": 'Standart',
+  "小": 'Küçük',
+  "只影响自由对话的正文，觉得小就调大一档。": 'Yalnızca serbest sohbet metnini etkiler. Küçük geliyorsa bir kademe artırın.',
+  "对话字号": 'Sohbet yazı boyutu',
   "思考": "Düşünce",
   "工具调用": "Araç çağrısı",
   "已调用 {count} 个工具": "{count} araç çağrıldı",

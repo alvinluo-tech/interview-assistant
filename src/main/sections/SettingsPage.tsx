@@ -101,6 +101,7 @@ export function SettingsPage() {
 
 function GeneralTab() {
   const [uiScale, setUiScale] = useSetting('desktop.uiScale', 1);
+  const [chatTextSize, setChatTextSize] = useSetting<'sm' | 'md' | 'lg'>('chat.textSize', 'md');
   const [theme, setTheme] = useSetting<DesktopTheme>('desktop.theme', 'system');
   const [locale, setLocale] = useState(currentLocale());
   const [expandLangs, setExpandLangs] = useState(false);
@@ -190,6 +191,23 @@ function GeneralTab() {
         >
           {t('恢复默认 100%')}
         </button>
+
+        <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">{t('对话字号')}</div>
+        <p className="mb-2 text-xs text-muted-foreground">{t('只影响自由对话的正文，觉得小就调大一档。')}</p>
+        <div className="flex gap-2">
+          {(['sm', 'md', 'lg'] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setChatTextSize(key)}
+              className={`rounded-md border px-4 py-2 text-[13px] transition-colors ${
+                chatTextSize === key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
+              }`}
+            >
+              {t(key === 'sm' ? '小' : key === 'md' ? '标准' : '大')}
+            </button>
+          ))}
+        </div>
       </Card>
     </div>
   );
