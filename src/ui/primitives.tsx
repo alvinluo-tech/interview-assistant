@@ -108,7 +108,7 @@ export function Switch({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
-      className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent shadow-sm transition-colors disabled:opacity-50 ${
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent shadow-sm transition-colors before:absolute before:-inset-x-1.5 before:-inset-y-2 before:content-[''] disabled:opacity-50 ${
         checked ? 'bg-primary' : 'bg-input'
       }`}
     >
@@ -144,20 +144,26 @@ export function Slider({
 }) {
   const progress = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
-    <input
-      type="range"
-      value={value}
-      min={min}
-      max={max}
-      step={step}
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onChange={(e) => onChange(Number(e.target.value))}
-      style={{
-        background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%, hsl(var(--muted)) 100%)`,
-      }}
-      className={`h-1.5 w-full cursor-pointer appearance-none rounded-full disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow ${className}`}
-    />
+    <div className={`relative flex h-6 w-full items-center ${className}`}>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 h-1.5 rounded-full"
+        style={{
+          background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%, hsl(var(--muted)) 100%)`,
+        }}
+      />
+      <input
+        type="range"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        aria-label={ariaLabel}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="relative h-6 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow"
+      />
+    </div>
   );
 }
 
@@ -382,6 +388,15 @@ export function ConfirmDialog({
 }
 
 /** 点击外部关闭的容器 */
+export function useEscapeKey(enabled: boolean, onEscape: () => void) {
+  useEffect(() => {
+    if (!enabled) return;
+    const handler = (event: KeyboardEvent) => { if (event.key === 'Escape') onEscape(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [enabled, onEscape]);
+}
+
 export function useClickOutside(onOutside: () => void) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {

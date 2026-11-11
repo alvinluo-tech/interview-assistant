@@ -261,10 +261,10 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
 
       <Card className="px-5 py-1">
         <SettingRow title={t('显示复制按钮')} desc={t('答案里有代码就复制代码，没有就复制文字。部分考试平台会记录粘贴内容，也有平台禁止粘贴。')}>
-          <Switch checked={showCopyCode} onCheckedChange={setShowCopyCode} />
+          <Switch ariaLabel={t('显示复制按钮')} checked={showCopyCode} onCheckedChange={setShowCopyCode} />
         </SettingRow>
         <SettingRow title={t('快捷键提示')} desc={t('在浮窗按钮上显示对应键位。')}>
-          <Switch checked={showHints} onCheckedChange={setShowHints} />
+          <Switch ariaLabel={t('快捷键提示')} checked={showHints} onCheckedChange={setShowHints} />
         </SettingRow>
         <SettingRow
           title={t('双机位笔试')}
@@ -276,7 +276,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
           <Select value={captureMode} disabled={platform?.screenCapture === false} title={platform?.screenCapture === false ? t('当前系统或权限不支持截图，无法选择截图范围') : undefined} onChange={e=>setCaptureMode(e.target.value)}><option value="screen">{t('屏幕')}</option><option value="window">{t('前台窗口')}</option></Select>
         </SettingRow>
         <SettingRow title={t('截图兼容模式（Windows）')} desc={t('优先读取前台窗口，失败后回退屏幕截图。默认模式会在屏幕黑屏时尝试窗口读取。')}>
-          <Switch checked={platform?.platform === 'windows' && compatibility} disabled={platform?.platform !== 'windows'} onCheckedChange={setCompatibility} />
+          <Switch ariaLabel={t('截图兼容模式（Windows）')} checked={platform?.platform === 'windows' && compatibility} disabled={platform?.platform !== 'windows'} onCheckedChange={setCompatibility} />
         </SettingRow>
       </Card>
 

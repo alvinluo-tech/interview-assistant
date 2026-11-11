@@ -5,6 +5,7 @@
  * 关闭 → 从 parkedLooks 还原；一键配色在双机位下选更淡配色（这里实现为保持极低底色）。
  */
 import { Switch } from '@/ui/primitives';
+import { t } from './i18n';
 import { DEFAULT_LOOK, PARKED_LOOK } from './overlayStyle';
 import { DEFAULT_OVERLAY_STYLE, getSetting, setSetting, useSetting, type OverlayStyle } from './store';
 
@@ -89,5 +90,5 @@ export async function applyPaletteLook(
 /** 工作台里的双机位开关（本地状态由 store 订阅自动回填） */
 export function DualCameraSwitch({ scope }: { scope: OverlayScope }) {
   const [on] = useSetting<boolean>(scope === 'exam' ? 'exam.dualCamera' : 'interview.dualCamera', false);
-  return <Switch checked={on} onCheckedChange={(v: boolean) => void setDualCamera(scope, v)} />;
+  return <Switch ariaLabel={t('双机位')} checked={on} onCheckedChange={(v: boolean) => void setDualCamera(scope, v)} />;
 }

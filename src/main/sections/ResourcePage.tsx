@@ -200,6 +200,8 @@ export function ResourcePage() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  aria-label={t('删除资料：{name}', { name: m.name })}
+                  title={t('删除资料：{name}', { name: m.name })}
                   onClick={() => setDeleting({ kind: 'material', id: m.id, name: m.name })}
                 >
                   <Trash2 size={13} />

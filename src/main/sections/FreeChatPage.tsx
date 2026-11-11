@@ -12,7 +12,7 @@ import {questionSpeaker} from '@/lib/questionSpeech';
 import {Md} from '@/overlay/Md';
 import {createVoiceCall, type VoiceCallPhase} from '@/lib/voiceCall';
 import {useAiReady, useAiSettings} from '@/lib/aiSettings';
-import {showToast, useClickOutside} from '@/ui/primitives';
+import {showToast, useClickOutside, useEscapeKey} from '@/ui/primitives';
 import { t } from '@/lib/i18n';
 import {CHAT_ATTACH_ACCEPT, CHAT_ATTACH_MAX, IMAGE_MARKER, chatFileKind, composeAttachmentContent, conversationFiles, formatFileSize, readChatAttachment, splitAttachments, stripAttachmentBlocks, type ChatAttachment, type ParsedFile} from '@/lib/chatFiles';
 import {useSetting} from '@/lib/store';
@@ -698,6 +698,7 @@ function Composer({compact,onPreview,settings,model,onModelChange,permission,onP
   };
   const [permOpen,setPermOpen]=useState(false);
   const permRef=useClickOutside(()=>setPermOpen(false));
+  useEscapeKey(permOpen, () => setPermOpen(false));
   const [parsing,setParsing]=useState(0);
   const fileInput=useRef<HTMLInputElement|null>(null);
   const attach=async(files:FileList|null)=>{
@@ -732,7 +733,7 @@ function Composer({compact,onPreview,settings,model,onModelChange,permission,onP
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
       <div className="relative" ref={permRef}>
         <button type="button" onClick={()=>setPermOpen(value=>!value)} aria-expanded={permOpen} aria-label={allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')} title={allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition ${allowLocal?'border-primary/40 bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted'}`}><ShieldQuestion size={13}/>{!compact&&<span className="truncate">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span>}<ChevronDown size={12}/></button>
-        {permOpen&&<div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border bg-[hsl(var(--popover))] p-3 shadow-xl">
+        {permOpen&&<div onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();setPermOpen(false);}}} className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border bg-[hsl(var(--popover))] p-3 shadow-xl">
           <label className="flex items-center justify-between gap-3 text-xs font-medium"><span>{t('允许查询本地资料')}</span><input type="checkbox" checked={allowLocal} disabled={blocked||categories.length===0} onChange={event=>onPermissionChange({...permission,allowLocal:event.target.checked})}/></label>
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">{LOCAL_DATA_CATEGORIES.map(category=><label key={category} className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><input type="checkbox" checked={categories.includes(category)} disabled={blocked} onChange={event=>{const selected=event.target.checked?[...categories,category]:categories.filter(item=>item!==category);onPermissionChange({allowLocal:allowLocal&&selected.length>0,categories:selected});}}/>{t(LOCAL_DATA_LABELS[category])}</label>)}</div>
           <label className="mt-2 flex items-center justify-between gap-3 border-t pt-2 text-[11px] text-muted-foreground"><span>{t('每次读取前询问')}</span><input type="checkbox" checked={askBeforeRead} onChange={event=>onAskBeforeReadChange(event.target.checked)}/></label>

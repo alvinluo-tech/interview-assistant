@@ -884,6 +884,8 @@ export const ptBr: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Falha ao ler os dados; a substituição foi bloqueada: {message}",
   "刷新设备": "Atualizar dispositivos",
   "刷新状态": "Atualizar estado",
+  "删除资料：{name}": "Excluir material: {name}",
+  "双机位": "Câmera dupla",
   "双机位笔试": "Prova com câmera dupla",
   "双机位面试": "Entrevista com câmera dupla",
   "说话过程中更新字幕，定稿后生成参考答案": "As legendas atualizam enquanto você fala; ao finalizar, a resposta sugerida é gerada",

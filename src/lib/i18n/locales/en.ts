@@ -884,6 +884,8 @@ export const en: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Failed to read data; overwriting was blocked: {message}",
   "刷新设备": "Refresh devices",
   "刷新状态": "Refresh status",
+  "删除资料：{name}": "Delete material: {name}",
+  "双机位": "Dual camera",
   "双机位笔试": "Dual-camera written test",
   "双机位面试": "Dual-camera interview",
   "说话过程中更新字幕，定稿后生成参考答案": "Captions update while you speak; the suggested answer is generated once finalized",

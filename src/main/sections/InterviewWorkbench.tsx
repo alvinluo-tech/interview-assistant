@@ -248,7 +248,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
       <Card className="p-5">
         <SectionHeader title={t('回答策略')} desc={t('控制 AI 回答的样子；开始面试后也可以在浮窗里热键操作。')} />
         <SettingRow title={t('自动回答')} desc={t('面试官说完自动出参考回答；关闭后需按「立即回答」或快捷键。')}>
-          <Switch checked={autoAnswer} onCheckedChange={setAutoAnswer} />
+          <Switch ariaLabel={t('自动回答')} checked={autoAnswer} onCheckedChange={setAutoAnswer} />
         </SettingRow>
         <SettingRow
           title={t('双机位面试')}

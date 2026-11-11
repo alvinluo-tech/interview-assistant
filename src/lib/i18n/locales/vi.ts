@@ -884,6 +884,8 @@ export const vi: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Đọc dữ liệu thất bại nên đã chặn ghi đè: {message}",
   "刷新设备": "Làm mới thiết bị",
   "刷新状态": "Làm mới trạng thái",
+  "删除资料：{name}": "Xóa tài liệu: {name}",
+  "双机位": "Hai camera",
   "双机位笔试": "Thi viết hai camera",
   "双机位面试": "Phỏng vấn hai camera",
   "说话过程中更新字幕，定稿后生成参考答案": "Phụ đề cập nhật trong lúc nói, chốt xong sẽ tạo câu trả lời tham khảo",

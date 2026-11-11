@@ -427,10 +427,10 @@ function OverlayStyleTab() {
 
         <div className="mt-3 flex flex-col gap-1">
           <SettingRow title={t('文字描边')} desc={t('底色越透，文字描边越强，保证在任意画面上都看得清。')}>
-            <Switch checked={style.textHalo} onCheckedChange={(v) => patch({ textHalo: v })} />
+            <Switch ariaLabel={t('文字描边')} checked={style.textHalo} onCheckedChange={(v) => patch({ textHalo: v })} />
           </SettingRow>
           <SettingRow title={t('文字加粗')} desc={t('正文加粗，适合投影或小屏。')}>
-            <Switch checked={style.textBold} onCheckedChange={(v) => patch({ textBold: v })} />
+            <Switch ariaLabel={t('文字加粗')} checked={style.textBold} onCheckedChange={(v) => patch({ textBold: v })} />
           </SettingRow>
         </div>
 

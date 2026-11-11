@@ -884,6 +884,8 @@ export const tr: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Veri okunamadı; üzerine yazma engellendi: {message}",
   "刷新设备": "Cihazları yenile",
   "刷新状态": "Durumu yenile",
+  "删除资料：{name}": "Materyali sil: {name}",
+  "双机位": "Çift kamera",
   "双机位笔试": "Çift kameralı yazılı sınav",
   "双机位面试": "Çift kameralı mülakat",
   "说话过程中更新字幕，定稿后生成参考答案": "Konuşurken altyazı güncellenir; kesinleşince örnek cevap oluşturulur",

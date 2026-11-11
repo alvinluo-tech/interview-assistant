@@ -316,7 +316,7 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
 
         <div className="mt-3 border-t pt-1">
           <SettingRow title={t('AI 辅助提示')} desc={t('开启后，每个问题旁会给出提示要点（练手用，正式面试别开）。')}>
-            <Switch checked={assistMode} onCheckedChange={setAssistMode} />
+            <Switch ariaLabel={t('AI 辅助提示')} checked={assistMode} onCheckedChange={setAssistMode} />
           </SettingRow>
         </div>
 

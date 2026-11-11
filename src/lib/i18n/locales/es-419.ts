@@ -884,6 +884,8 @@ export const es419: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "No se pudieron leer los datos; se bloqueó la sobrescritura: {message}",
   "刷新设备": "Actualizar dispositivos",
   "刷新状态": "Actualizar estado",
+  "删除资料：{name}": "Eliminar material: {name}",
+  "双机位": "Cámara doble",
   "双机位笔试": "Examen con doble cámara",
   "双机位面试": "Entrevista con doble cámara",
   "说话过程中更新字幕，定稿后生成参考答案": "Los subtítulos se actualizan mientras hablas; la respuesta sugerida se genera al finalizar",
