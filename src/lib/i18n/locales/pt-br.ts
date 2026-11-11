@@ -341,6 +341,8 @@ export const ptBr: Record<string, string> = {
   "复用本轮结果": "Reaproveitado desta rodada",
   "复杂内容按纯文本显示": "Conteúdo complexo aparece como texto simples",
   "复制": "Copiar",
+  "已复制": "Copiado",
+  "忽略此版本更新": "Ignorar esta versão",
   "复制代码": "Copiar código",
   "复制失败": "Falha ao copiar",
   "复制失败，请再按一次": "Falha ao copiar; pressione de novo",

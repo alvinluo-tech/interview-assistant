@@ -30,3 +30,10 @@ export function chatTitle(text: string, limit = 32): string {
   const cleaned = stripAttachmentBlocks(text.replace(FENCED_CODE, ' ')).replace(/\s+/g, ' ').trim();
   return cleaned.slice(0, limit);
 }
+
+/** Clock label (local time, 24h) for a message, or an empty string when unknown. */
+export function formatClock(at: number | undefined): string {
+  if (!at || !Number.isFinite(at)) return '';
+  const date = new Date(at);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}

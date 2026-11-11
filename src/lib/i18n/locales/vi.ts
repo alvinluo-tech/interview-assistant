@@ -341,6 +341,8 @@ export const vi: Record<string, string> = {
   "复用本轮结果": "Dùng lại kết quả lượt này",
   "复杂内容按纯文本显示": "Nội dung phức tạp hiển thị dạng văn bản thuần",
   "复制": "Sao chép",
+  "已复制": "Đã sao chép",
+  "忽略此版本更新": "Bỏ qua phiên bản này",
   "复制代码": "Sao chép code",
   "复制失败": "Sao chép thất bại",
   "复制失败，请再按一次": "Sao chép thất bại, hãy bấm lại",

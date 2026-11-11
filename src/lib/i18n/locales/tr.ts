@@ -341,6 +341,8 @@ export const tr: Record<string, string> = {
   "复用本轮结果": "Bu turda yeniden kullanıldı",
   "复杂内容按纯文本显示": "Zengin içerik düz metin olarak gösterilir",
   "复制": "Kopyala",
+  "已复制": "Kopyalandı",
+  "忽略此版本更新": "Bu sürümü yoksay",
   "复制代码": "Kodu kopyala",
   "复制失败": "Kopyalama başarısız",
   "复制失败，请再按一次": "Kopyalama başarısız — tekrar bas",

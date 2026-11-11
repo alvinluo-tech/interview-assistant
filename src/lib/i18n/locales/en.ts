@@ -341,6 +341,8 @@ export const en: Record<string, string> = {
   "复用本轮结果": "Reused this round",
   "复杂内容按纯文本显示": "Rich content shown as plain text",
   "复制": "Copy",
+  "已复制": "Copied",
+  "忽略此版本更新": "Ignore this version",
   "复制代码": "Copy code",
   "复制失败": "Copy failed",
   "复制失败，请再按一次": "Copy failed — press again",

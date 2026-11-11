@@ -186,6 +186,14 @@ test('a conversation title drops attachment blocks and code fences',async()=>{
   assert.equal(h.data.freeChats[0].title,'你可以读取图片吗');
 });
 
+test('message clocks use local 24-hour time and stay blank without a timestamp',async()=>{
+  const {formatClock}=evaluateModuleFixture('src/lib/chatText.ts');
+  assert.equal(formatClock(new Date(2026,0,2,9,7).getTime()),'09:07');
+  assert.equal(formatClock(new Date(2026,0,2,23,59).getTime()),'23:59');
+  assert.equal(formatClock(undefined),'');
+  assert.equal(formatClock(0),'');
+});
+
 test('conversation history persists locally and a second save updates the same thread',async()=>{
   const h=harness();await h.api.saveFreeChat('id',[{role:'user',content:'你好'}]);
   await h.api.saveFreeChat('id',[{role:'user',content:'你好'},{role:'assistant',content:'您好'}]);

@@ -341,6 +341,8 @@ export const es419: Record<string, string> = {
   "复用本轮结果": "Reutilizado en esta ronda",
   "复杂内容按纯文本显示": "El contenido enriquecido se muestra como texto plano",
   "复制": "Copiar",
+  "已复制": "Copiado",
+  "忽略此版本更新": "Ignorar esta versión",
   "复制代码": "Copiar código",
   "复制失败": "No se pudo copiar",
   "复制失败，请再按一次": "No se pudo copiar; presiona de nuevo",

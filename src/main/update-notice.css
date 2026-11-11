@@ -1,6 +1,8 @@
 .update-banner { display: flex; align-items: center; gap: 9px; padding: 9px 20px; border-bottom: 1px solid hsl(var(--border)); background: hsl(var(--primary) / .045); font-size: 12px; }
 .update-banner-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: hsl(var(--primary)); }
 .update-banner > button { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: hsl(var(--primary)); font-weight: 600; }
+.update-banner > .update-banner-close { margin-left: 2px; width: 20px; height: 20px; justify-content: center; color: hsl(var(--muted-foreground)); font-weight: 500; border-radius: 5px; }
+.update-banner > .update-banner-close:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
 .update-backdrop { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 24px; background: #0b203b65; backdrop-filter: blur(5px); animation: update-fade .18s ease-out; }
 .update-card { --update-ink: hsl(var(--foreground)); width: min(100%, 560px); max-height: calc(100dvh - 48px); overflow: auto; color: var(--update-ink); border: 1px solid hsl(var(--border)); border-top: 3px solid hsl(var(--primary)); border-radius: 18px; outline: none; background: hsl(var(--card)); box-shadow: 0 28px 100px #081e3b33, 0 4px 14px #081e3b12; padding: 28px 30px 0; animation: update-arrive .22s ease-out; font-family: 'Segoe UI Variable', 'PingFang SC', 'Microsoft YaHei UI', sans-serif; }
 .update-brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; }

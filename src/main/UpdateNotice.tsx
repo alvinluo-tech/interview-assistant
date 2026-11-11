@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useSetting } from '@/lib/store';
 import { createPortal } from 'react-dom';
 import { ArrowDownToLine, ArrowRight, Check, CheckCircle2, ChevronDown, ExternalLink, LoaderCircle, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { Button, showToast } from '@/ui/primitives';
@@ -19,6 +20,7 @@ export function UpdateStatusButton() {
 export function UpdateNotice() {
   const state = useUpdater();
   const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useSetting<string>('update.dismissedVersion', '');
   const manual = useRef(false);
   const announced = useRef(false);
   const dialog = useRef<HTMLElement>(null);
@@ -71,9 +73,10 @@ export function UpdateNotice() {
   };
   const step = state.phase === 'installing' ? 3 : state.phase === 'ready' ? 2 : state.phase === 'verifying' ? 1 : 0;
   return <>
-    {state.version && ['available', 'ready'].includes(state.phase) && <div className="update-banner">
+    {state.version && state.version !== dismissed && ['available', 'ready'].includes(state.phase) && <div className="update-banner">
       <span className="update-banner-dot" /><span>{t(state.phase === 'ready' ? '更新已就绪' : '发现新版本')} {state.version}{state.busy ? t(' · 会话结束后可安装') : ''}</span>
       <button onClick={openUpdateDialog}>{t('查看更新')} <ArrowRight size={13} /></button>
+      <button className="update-banner-close" onClick={() => setDismissed(state.version || '')} aria-label={t('忽略此版本更新')} title={t('忽略此版本更新')}><X size={13} /></button>
     </div>}
     {open && createPortal(<div ref={backdrop} className="update-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} tabIndex={-1} className="update-card" data-phase={state.phase}>

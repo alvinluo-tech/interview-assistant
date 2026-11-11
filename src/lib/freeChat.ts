@@ -14,7 +14,7 @@ export const LOCAL_DATA_LABELS:Record<LocalDataCategory,string> = {resumes:'简�
 export interface FreeChatQuery {name:string;status:'success'|'error'|'cached';category?:string;title?:string;recordId?:string;count?:number}
 /** One entry of the visible work log: thinking, a tool call, or its result. */
 export interface FreeChatStep { id:string; kind:'reasoning'|'tool'; label:string; text:string; status?:'running'|'done'|'error'; input?:string; output?:string }
-export interface FreeChatMessage { role:'user'|'assistant'; content:string; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[]; steps?:FreeChatStep[]; elapsedMs?:number }
+export interface FreeChatMessage { role:'user'|'assistant'; content:string; /** Milliseconds since epoch, for the message clock. */ at?:number; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[]; steps?:FreeChatStep[]; elapsedMs?:number }
 export interface FreeChatSession { id:string; title:string; updatedAt:number; messages:FreeChatMessage[]; /** Per-conversation model; absent means the global chat route. */ model?:AiRoute }
 /** 语音对话仍要短答，但上限必须给思考模型留出思维链预算，否则会在正文前被截断。 */
 const VOICE_OUTPUT_LIMIT = 2048;

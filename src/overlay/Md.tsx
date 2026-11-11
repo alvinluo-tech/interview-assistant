@@ -13,6 +13,7 @@ import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } fr
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { t } from '@/lib/i18n';
+import { useCopyFeedback } from '@/lib/clipboard';
 import { DwellButton } from './widgets';
 import { usePlatformOptional } from './platform';
 
@@ -77,45 +78,37 @@ function useThrottled(value: string, ms: number): string {
   return shown;
 }
 
-function writeClipboard(text: string) {
-  void import('@tauri-apps/plugin-clipboard-manager')
-    .then(({ writeText }) => writeText(text))
-    .catch(() => {});
-}
-
-/** 代码块右上角的复制按钮：浮窗走驻留按钮，主窗口（无平台容器）退化成普通按钮。 */
 function CopyCodeButton({ code }: { code: string }) {
   const platform = usePlatformOptional();
   // 每块代码一个唯一 zone id，否则多个代码块会抢同一个热区。
   const id = `md-copy-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  const copy = () => writeClipboard(code);
+  const { copied, copy } = useCopyFeedback(() => code);
+  const label = copied ? t('已复制') : t('复制');
   if (!platform) {
-    return <button type="button" className="overlay-code-copy" onClick={copy}>{t('复制')}</button>;
+    return <button type="button" className="overlay-code-copy" data-copied={copied} onClick={copy}>{label}</button>;
   }
-  return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{t('复制')}</DwellButton>;
+  return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{label}</DwellButton>;
 }
 
-/**
- * 表格复制：按 TSV 拼，粘进 Excel / 飞书表格能直接分列；纯文本粘贴也还算可读。
- * 用 DOM 而不是 hast 取单元格文本，行内代码、加粗之类渲染后的结果才能原样带过去。
- */
 function CopyTableButton({ target }: { target: RefObject<HTMLDivElement | null> }) {
   const platform = usePlatformOptional();
   const id = `md-table-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  const copy = () => {
+  const { copied, copy } = useCopyFeedback(() => {
     const table = target.current?.querySelector('table');
-    if (!table) return;
-    const rows = Array.from(table.querySelectorAll('tr')).map((row) =>
-      Array.from(row.querySelectorAll('th, td'))
-        .map((cell) => (cell.textContent ?? '').replace(/\s+/g, ' ').trim())
-        .join('\t'),
-    );
-    writeClipboard(rows.join('\n'));
-  };
+    if (!table) return '';
+    return Array.from(table.querySelectorAll('tr'))
+      .map((row) =>
+        Array.from(row.querySelectorAll('th, td'))
+          .map((cell) => (cell.textContent ?? '').replace(/\s+/g, ' ').trim())
+          .join('\t'),
+      )
+      .join('\n');
+  });
+  const label = copied ? t('已复制') : t('复制');
   if (!platform) {
-    return <button type="button" className="overlay-code-copy" onClick={copy}>{t('复制')}</button>;
+    return <button type="button" className="overlay-code-copy" data-copied={copied} onClick={copy}>{label}</button>;
   }
-  return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{t('复制')}</DwellButton>;
+  return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{label}</DwellButton>;
 }
 
 function TableBlock({ children }: { children?: ReactNode }) {

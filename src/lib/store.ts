@@ -216,6 +216,7 @@ export const ALL_KEYS = [
   'ai.taskPreferences',
   'updates.repository',
   'updates.reminder',
+  'update.dismissedVersion',
   'mock.speechEnabled',
   'capture.mode',
   'capture.compatibilityMode',
