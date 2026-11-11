@@ -110,6 +110,8 @@ export function SettingsPage() {
 function GeneralTab() {
   const [uiScale, setUiScale] = useSetting('desktop.uiScale', 1);
   const [chatTextSize, setChatTextSize] = useSetting<'sm' | 'md' | 'lg'>('chat.textSize', 'md');
+  const [bargeIn, setBargeIn] = useSetting<boolean>('voice.bargeIn', true);
+  const [endSilenceMs, setEndSilenceMs] = useSetting<number>('voice.endSilenceMs', 800);
   const [theme, setTheme] = useSetting<DesktopTheme>('desktop.theme', 'system');
   const [locale, setLocale] = useState<Locale | null>(storedLocale());
   // 深浅色与界面大小的实际应用在 lib/desktopAppearance：启动、设置变更、
@@ -190,6 +192,25 @@ function GeneralTab() {
               {t(key === 'sm' ? '小' : key === 'md' ? '标准' : '大')}
             </button>
           ))}
+        </div>
+
+        <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">{t('语音通话')}</div>
+        <div className="flex items-start justify-between gap-4 rounded-lg border px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="text-[13px]">{t('说话打断回答')}</div>
+            <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{t('播放回答时保留麦克风，你一开口就停下来。外放时如果会被自己的声音打断，关掉它。')}</p>
+          </div>
+          <Switch checked={bargeIn} onCheckedChange={setBargeIn} ariaLabel={t('说话打断回答')} />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="text-[13px]">{t('停顿多久算说完')}</div>
+            <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{t('越大越不容易把一句话切成两段，但每轮要多等一会。')}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="tabular-nums text-[11px] text-muted-foreground">{endSilenceMs}ms</span>
+            <Slider className="w-36" min={400} max={2000} step={100} value={endSilenceMs} onChange={setEndSilenceMs} ariaLabel={t('停顿多久算说完')} />
+          </div>
         </div>
       </Card>
     </div>

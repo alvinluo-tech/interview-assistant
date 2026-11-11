@@ -1,7 +1,7 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject} from 'react';
 import {createPortal} from 'react-dom';
 import {ActionBarPrimitive, AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime, unstable_useComposerInput, type ChatModelAdapter, type ThreadMessage} from '@assistant-ui/react';
-import {ArrowDown, ArrowUp, AudioLines, Brain, Check, ChevronDown, Copy as CopyIcon, FileText, Image as ImageIcon, LoaderCircle, Mic, Paperclip, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Phone, PhoneOff, Plus, RotateCcw, Search, ShieldQuestion, Square, Trash2, Volume2, VolumeX, Wrench, X} from 'lucide-react';
+import {ArrowDown, ArrowUp, AudioLines, Brain, Check, ChevronDown, Copy as CopyIcon, FileText, Image as ImageIcon, LoaderCircle, Mic, MicOff, Paperclip, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Phone, PhoneOff, Plus, RotateCcw, Search, ShieldQuestion, Square, Trash2, Volume2, VolumeX, Wrench, X} from 'lucide-react';
 import {useData} from '@/lib/backend';
 import {askFreeChat, saveFreeChat, setFreeChatModel, setFreeChatPermission, renameFreeChat, deleteFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession, type FreeChatApproval, type FreeChatApprovalRequest, type FreeChatStep} from '@/lib/freeChat';
 import {ModelPicker, describeRoute} from './ModelPicker';
@@ -176,7 +176,11 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
   const chatReady=useAiReady('chat'),sttReady=useAiReady('stt');
   const aiSettings=useAiSettings(),speechInputMode=aiSettings.speechInputMode;
   const provider=aiSettings.providers.find(item=>item.id===aiSettings.routes.chat?.providerId);
+  const [bargeIn]=useSetting<boolean>('voice.bargeIn',true);
+  const [endSilenceMs]=useSetting<number>('voice.endSilenceMs',800);
   const call=useRef<ReturnType<typeof createVoiceCall>|null>(null);
+  const voicePrefs=useRef({bargeIn,endSilenceMs}); voicePrefs.current={bargeIn,endSilenceMs};
+  const [muted,setMuted]=useState(false);
   const playback=useRef<{started:boolean;finished:()=>void;failed:(error:unknown)=>void}|null>(null);
   const config=useRef({allowLocal,categories,speak}); config.current={allowLocal,categories,speak};
   const permissionEpoch=useRef(0),textRequest=useRef<AbortController|null>(null),reasoningRef=useRef('');
@@ -318,7 +322,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
     state:phase=>{if(phase==='idle'&&inputOwner.current==='call')inputOwner.current=null;setCallPhase(phase);},
     error:message=>{showToast({type:'error',title:t('语音通话已停止'),description:message});refreshAfterVoice();},
     notice:message=>{showToast({type:'info',title:t('语音识别中断，已自动重连'),description:message});},
-  }),[speaker,id,refreshAfterVoice,speechInputMode,recordTool,askApproval]);
+  },()=>voicePrefs.current),[speaker,id,refreshAfterVoice,speechInputMode,recordTool,askApproval]);
   call.current=voiceCall;
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
@@ -344,7 +348,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
     </ThreadPrimitive.Viewport><ConversationRail visible={!roomy || !resourcesOpen}/></div>
     <div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} onPreview={setPreview} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {preview&&<ImageLightbox src={preview} onClose={()=>setPreview(null)}/>}
-    {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
+    {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} muted={muted} onToggleMute={()=>{setMuted(next=>{voiceCall.setMuted(!next);return !next;});}} bargeIn={bargeIn} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
   </ThreadPrimitive.Root>
     {roomy&&resourcesOpen&&<><ResizeHandle border label={t('调整资源栏宽度')} dragging={resources.dragging} onPointerDown={resources.onPointerDown}/><ResourcePanel width={resources.width} onPreview={setPreview} files={files} pending={attachments} onClose={()=>setResourcesOpen(false)} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/></>}
   </div></AssistantRuntimeProvider>;
@@ -355,15 +359,18 @@ function CallButton({disabled,onStart}:{disabled:boolean;onStart:()=>void}) {
   return <button disabled={disabled||running} onClick={onStart} className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-40"><Phone size={14}/>{t('语音通话')}</button>;
 }
 
-export function VoiceCallDialog({phase,messages,level,tool,onStop,onInterrupt,localAccess,onRevokeLocal}:{phase:VoiceCallPhase;messages:FreeChatMessage[];level:number;tool:string;onStop:()=>void;onInterrupt:()=>void;localAccess?:string;onRevokeLocal?:()=>void}) {
+export function VoiceCallDialog({phase,messages,level,tool,onStop,onInterrupt,muted,onToggleMute,bargeIn,localAccess,onRevokeLocal}:{phase:VoiceCallPhase;messages:FreeChatMessage[];level:number;tool:string;onStop:()=>void;onInterrupt:()=>void;muted:boolean;onToggleMute:()=>void;bargeIn:boolean;localAccess?:string;onRevokeLocal?:()=>void}) {
   const transcript=useRef<HTMLDivElement>(null),endButton=useRef<HTMLButtonElement>(null),dialog=useRef<HTMLDivElement>(null);
+  const [seconds,setSeconds]=useState(0);
+  useEffect(()=>{const timer=window.setInterval(()=>setSeconds(value=>value+1),1000);return()=>window.clearInterval(timer);},[]);
+  const clock=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
   useModalFocus(dialog,true,onStop,endButton);
   useEffect(()=>{const element=transcript.current;if(element)element.scrollTop=element.scrollHeight;},[messages]);
   const status={connecting:t('正在连接'),listening:t('正在聆听'),transcribing:t('正在识别'),thinking:t('正在思考'),speaking:t('正在回答'),idle:''}[phase];
-  const hint={connecting:t('请允许麦克风访问'),listening:t('你可以直接说话，说完稍作停顿'),transcribing:t('正在将你的声音转换成文字'),thinking:tool || t('正在整理回答'),speaking:t('播放时麦克风暂停，避免回声'),idle:''}[phase];
+  const hint={connecting:t('请允许麦克风访问'),listening:t('你可以直接说话，说完稍作停顿'),transcribing:t('正在将你的声音转换成文字'),thinking:tool || t('正在整理回答'),speaking:bargeIn?t('直接开口就能打断，说完停顿一下'):t('播放时麦克风暂停，避免回声'),idle:''}[phase];
   return <div ref={dialog} tabIndex={-1} className="voice-backdrop" role="dialog" aria-modal="true" aria-label={t('语音通话')}>
     <div className="voice-dialog" data-phase={phase}>
-      <header className="voice-header"><span className="voice-brand"><span className="voice-brand-mark"><AudioLines size={15}/></span>{t('语音对话')}</span><span className="voice-live"><span/> {status}</span></header>
+      <header className="voice-header"><span className="voice-brand"><span className="voice-brand-mark"><AudioLines size={15}/></span>{t('语音对话')}</span><span className="voice-time" aria-label={t('通话时长')}>{clock}</span><span className="voice-live"><span/> {status}</span></header>
       <div className="voice-body">
         <div className="voice-visual" aria-hidden="true" style={{'--voice-level':phase==='listening'?level:0} as CSSProperties}>
           <div className="voice-orbit voice-orbit-outer"/><div className="voice-orbit voice-orbit-inner"/><div className="voice-glow"/><div className="voice-orb"><span/></div>
@@ -374,7 +381,7 @@ export function VoiceCallDialog({phase,messages,level,tool,onStop,onInterrupt,lo
           {phase==='thinking' && messages[messages.length-1]?.role==='user' && <div className="voice-line voice-line-assistant"><span>{t('助手')}</span><p className="voice-wait">{t('正在思考')}<span> · · ·</span></p></div>}
         </div>
       </div>
-      <footer className="voice-footer"><p>{t('语音会发送至你配置的识别服务')}{localAccess&&<><br/>{t('已允许查询：{access}',{access:localAccess})} <button onClick={onRevokeLocal} className="underline">{t('关闭资料查询并结束通话')}</button></>}</p><div className="voice-actions">{(phase==='speaking'||phase==='thinking')&&<button onClick={onInterrupt} className="voice-interrupt"><Mic size={16}/>{t('打断并说话')}</button>}<button ref={endButton} onClick={onStop} className="voice-end"><PhoneOff size={17}/>{t('结束通话')}</button></div></footer>
+      <footer className="voice-footer"><p>{t('语音会发送至你配置的识别服务')}{localAccess&&<><br/>{t('已允许查询：{access}',{access:localAccess})} <button onClick={onRevokeLocal} className="underline">{t('关闭资料查询并结束通话')}</button></>}</p><div className="voice-actions">{(phase==='speaking'||phase==='thinking')&&<button onClick={onInterrupt} className="voice-interrupt"><Mic size={16}/>{t('打断并说话')}</button>}<button onClick={onToggleMute} className="voice-mute" aria-pressed={muted} aria-label={muted?t('取消静音'):t('静音')} title={muted?t('取消静音'):t('静音')}>{muted?<MicOff size={16}/>:<Mic size={16}/>}</button><button ref={endButton} onClick={onStop} className="voice-end"><PhoneOff size={17}/>{t('结束通话')}</button></div></footer>
     </div>
   </div>;
 }

@@ -44,6 +44,10 @@
 .voice-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 18px; border-radius: 13px; font-size: 13px; font-weight: 600; transition: background .2s, transform .2s; }
 .voice-actions button:focus-visible { outline: 2px solid #b8fff2; outline-offset: 3px; }
 .voice-actions button:active { transform: scale(.97); }
+.voice-time { margin-left: auto; color: #7f9aa0; font-size: 11px; font-variant-numeric: tabular-nums; }
+.voice-mute { color: #cfe6e8; border: 1px solid rgba(204,237,239,.18); background: transparent; }
+.voice-mute:hover { background: rgba(255,255,255,.1); }
+.voice-mute[aria-pressed='true'] { color: #ffd8a8; border-color: rgba(255,190,120,.45); }
 .voice-interrupt { color: #e8f6f5; border: 1px solid rgba(204,237,239,.22); background: rgba(255,255,255,.06); }
 .voice-interrupt:hover { background: rgba(255,255,255,.12); }
 .voice-end { color: white; background: #cf5555; }

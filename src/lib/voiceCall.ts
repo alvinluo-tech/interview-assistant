@@ -1,9 +1,9 @@
 import { t } from './i18n';
 export type VoiceCallPhase = 'idle'|'connecting'|'listening'|'transcribing'|'thinking'|'speaking';
 export interface VoiceCallDrivers {
-  open(onPcm:(pcm:Int16Array,volume:number)=>void,onError:(message:string)=>void):Promise<{close():Promise<void>}>;
+  open(onPcm:(pcm:Int16Array,volume:number)=>void,onError:(message:string)=>void):Promise<VoiceCallMic>;
   /** Optional barge-in capture: it keeps listening while the answer plays so speech can cut it short. */
-  openMonitor?(onPcm:(pcm:Int16Array,volume:number)=>void,onError:(message:string)=>void):Promise<{close():Promise<void>}>;
+  openMonitor?(onPcm:(pcm:Int16Array,volume:number)=>void,onError:(message:string)=>void):Promise<VoiceCallMic>;
   openRealtime?(onPreview:(text:string)=>void,onError:(message:string)=>void,signal:AbortSignal):Promise<{push(pcm:Int16Array):void;finish():Promise<string>;close():Promise<void>}>;
   preview?(text:string):void;
   transcribe(pcm:Int16Array,signal:AbortSignal):Promise<string>;
@@ -28,11 +28,14 @@ const BARGE_IN_MS = 400;
 const BARGE_IN_VOLUME = 22;
 
 /** Turn-taking avoids transcribing the speaker's own output. Audio is never retained across turns. */
-export function createVoiceCall(drivers:VoiceCallDrivers) {
-  let phase:VoiceCallPhase='idle',generation=0,mic:{close():Promise<void>}|undefined,request:AbortController|undefined;
+/** Live preferences: the settings page can change them while a call is running. */
+export interface VoiceCallPreferences { endSilenceMs?: number; bargeIn?: boolean }
+export interface VoiceCallMic { close(): Promise<void>; setPaused?(paused: boolean): Promise<void> }
+export function createVoiceCall(drivers:VoiceCallDrivers, preferences?: () => VoiceCallPreferences) {
+  let phase:VoiceCallPhase='idle',generation=0,mic:VoiceCallMic|undefined,request:AbortController|undefined;
   let realtime:Awaited<ReturnType<NonNullable<VoiceCallDrivers['openRealtime']>>>|undefined,realtimeAbort:AbortController|undefined;
   let chunks:Int16Array[]=[],samples=0,voiced=0,silence=0,pre:Int16Array[]=[];
-  let queue:string[]=[],playing=false,answerDone=true,monitor:{close():Promise<void>}|undefined,bargeVoiced=0,retries=0;
+  let queue:string[]=[],playing=false,answerDone=true,monitor:VoiceCallMic|undefined,bargeVoiced=0,retries=0,muted=false;
   const change=(next:VoiceCallPhase)=>{phase=next;drivers.state(next);};
   const reset=()=>{chunks=[];samples=0;voiced=0;silence=0;pre=[];};
   const resetSpeech=()=>{queue=[];playing=false;answerDone=true;bargeVoiced=0;};
@@ -56,7 +59,9 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
       }
       const opened=await drivers.open(push,message=>{if(current===generation)fail(message);});
       if(current!==generation){await opened.close();return;}
-      mic=opened;retries=0;change('listening');
+      mic=opened;retries=0;
+      if(muted)await opened.setPaused?.(true);
+      change('listening');
     } catch(error) {if(current===generation)fail(error);}
   }
   async function finish(current:number) {
@@ -93,7 +98,7 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
   }
   /** Keeps a second capture open during playback; sustained speech cuts the answer short. */
   async function startMonitor(current:number) {
-    if(!drivers.openMonitor)return;
+    if(!drivers.openMonitor||preferences?.().bargeIn===false)return;
     try {
       const opened=await drivers.openMonitor((pcm,volume)=>{
         if(phase!=='speaking'||current!==generation)return;
@@ -102,6 +107,7 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
       },()=>{bargeVoiced=0;});
       if(phase!=='speaking'||current!==generation){await opened.close();return;}
       monitor=opened;
+      if(muted)await opened.setPaused?.(true);
     } catch { /* Barge-in is a convenience: a blocked monitor must not end the call. */ }
   }
   function interruptCall() {
@@ -143,11 +149,14 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
     if(!samples){for(const part of pre){chunks.push(part);samples+=part.length;}pre=[];}
     chunks.push(pcm);samples+=pcm.length;
     if(voice){voiced+=pcm.length;silence=0;}else silence+=pcm.length;
-    if(samples>=16000*30 || (silence>=16000*END_SILENCE_MS/1000 && voiced>=3200))void finish(generation);
+    const endSilence=Math.min(5000,Math.max(200,preferences?.().endSilenceMs ?? END_SILENCE_MS));
+    if(samples>=16000*30 || (silence>=16000*endSilence/1000 && voiced>=3200))void finish(generation);
     else if(silence>=16000*2 && voiced<3200)reset();
   }
   return {
     start(){if(phase!=='idle')return;const current=++generation;void listen(current);},
+    /** Muting keeps the call open; it only stops sending microphone audio. */
+    setMuted(next:boolean){muted=next;void mic?.setPaused?.(next);void monitor?.setPaused?.(next);},
     stop,
     interrupt(){if(phase!=='speaking'&&phase!=='thinking')return;generation++;const current=generation;resetSpeech();closeMonitor();drivers.stopSpeech();drivers.cancelAnswer();void listen(current);},
     /** Starts playback so streamed sentences can be queued as they arrive. */

@@ -115,3 +115,34 @@ test('a second failure ends the call with the error',async()=>{
   api.start();await flush();
   assert.ok(attempts>=2);assert.equal(errors.length,1);assert.equal(api.getPhase(),'idle');
 });
+
+test('a longer end-of-turn pause waits before transcribing',async()=>{
+  let pcm,resolveTranscription;const phases=[];
+  const api=createVoiceCall({open:async input=>{pcm=input;return {close:async()=>{}};},
+    transcribe:(_audio,signal)=>new Promise(resolve=>{resolveTranscription=resolve;signal.addEventListener('abort',()=>{});}),
+    send:()=>{},speak:()=>{},stopSpeech:()=>{},cancelAnswer:()=>{},state:value=>phases.push(value),error:()=>{}},
+    ()=>({endSilenceMs:1600}));
+  api.start();await flush();pcm(new Int16Array(400*16),30);
+  pcm(new Int16Array(900*16),0);await flush();assert.equal(api.getPhase(),'listening');
+  pcm(new Int16Array(800*16),0);await flush();assert.equal(api.getPhase(),'transcribing');
+  resolveTranscription('慢一点说');await flush();assert.deepEqual(phases.slice(-1),['thinking']);api.stop();
+});
+test('turning barge-in off keeps the microphone closed while speaking',async()=>{
+  let pcm,resolveTranscription,monitorOpened=0;const spoken=[];
+  const api=createVoiceCall({open:async input=>{pcm=input;return {close:async()=>{}};},
+    openMonitor:async()=>{monitorOpened++;return {close:async()=>{}};},
+    transcribe:(_audio,signal)=>new Promise(resolve=>{resolveTranscription=resolve;signal.addEventListener('abort',()=>{});}),
+    send:()=>{},speak:text=>spoken.push(text),stopSpeech:()=>{},cancelAnswer:()=>{},state:()=>{},error:()=>{}},
+    ()=>({bargeIn:false}));
+  api.start();await flush();pcm(new Int16Array(400*16),30);pcm(new Int16Array(800*16),0);await flush();
+  resolveTranscription('问题');await flush();api.answer('回答');await flush();
+  assert.equal(monitorOpened,0);assert.deepEqual(spoken,['回答']);api.stop();
+});
+test('muting pauses the microphone without ending the call',async()=>{
+  let pcm;const paused=[];const phases=[];
+  const api=createVoiceCall({open:async input=>{pcm=input;return {close:async()=>{},setPaused:async value=>paused.push(value)};},
+    transcribe:async()=>'',send:()=>{},speak:()=>{},stopSpeech:()=>{},cancelAnswer:()=>{},state:value=>phases.push(value),error:()=>{}});
+  api.start();await flush();api.setMuted(true);assert.deepEqual(paused,[true]);
+  api.setMuted(false);assert.deepEqual(paused,[true,false]);
+  assert.equal(api.getPhase(),'listening');api.stop();
+});
