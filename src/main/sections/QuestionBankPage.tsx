@@ -151,7 +151,7 @@ export function QuestionBankPage() {
             {generating ? t('正在准备…') : t('生成我的面试准备')}
           </Button>
         </div>
-        <label className="mt-3 block text-xs font-medium text-muted-foreground">
+        <label className="mt-3 block max-w-xs text-xs font-medium text-muted-foreground">
           {t('存进面试资料')}
           <Select className="mt-1" value={targetMaterialId} onChange={(e) => setTargetMaterialId(e.target.value)}>
             <option value="">{t('面试题库收藏')}</option>
@@ -227,12 +227,10 @@ export function QuestionBankPage() {
       )}
 
       {questions.length === 0 && !generating && (
-        <Card className="flex flex-col items-center gap-2 p-10 text-center">
-          <BookOpen size={26} className="text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            {t('还没有生成题目。选好简历和岗位，点「生成我的面试准备」。')}
-          </p>
-        </Card>
+        <div className="flex items-center gap-2.5 rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
+          <BookOpen size={16} className="shrink-0" />
+          <span>{t('还没有生成题目。选好简历和岗位，点「生成我的面试准备」。')}</span>
+        </div>
       )}
     </div>
   );

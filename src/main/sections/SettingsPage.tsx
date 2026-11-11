@@ -12,6 +12,7 @@ import {
   ConfirmDialog,
   Input,
   SectionHeader,
+  Select,
   SettingRow,
   Slider,
   Switch,
@@ -35,7 +36,7 @@ import { AiServicesTab } from './AiServicesTab';
 import {PromptWorkbench} from './PromptWorkbench';
 import { onEvent, panicHotkeyStatus, setActionHotkeys, setPanicHotkey } from '@/lib/bridge';
 import { APP_VERSION } from '@/lib/env';
-import { LOCALE_NAMES, LOCALES, currentLocale, switchLocale, systemLocale, t } from '@/lib/i18n';
+import { LOCALE_NAMES, LOCALES, storedLocale, switchLocale, systemLocale, t, type Locale } from '@/lib/i18n';
 import { SimulatedPlatform } from '@/overlay/platform';
 import { ExamOverlay } from '@/overlay/ExamOverlay';
 import { InterviewOverlay } from '@/overlay/InterviewOverlay';
@@ -45,6 +46,12 @@ import { UpdateStatusButton } from '../UpdateNotice';
 import { DeveloperInfo } from './DeveloperInfo';
 import { StorageSettings } from './StorageSettings';
 import { isWindows } from '@/lib/env';
+
+const THEMES: { key: DesktopTheme; label: string; desc: string }[] = [
+  { key: 'system', label: '跟随系统', desc: '随操作系统外观切换' },
+  { key: 'light', label: '浅色', desc: '始终浅色' },
+  { key: 'dark', label: '深色', desc: '始终深色' },
+];
 
 type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'prompts' | 'storage' | 'changelog' | 'about';
 
@@ -65,23 +72,24 @@ export function SettingsPage() {
   const [aiDirty, setAiDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<Tab | null>(null);
   return (
-    <div className="flex gap-6">
-      <nav className="sticky top-0 flex h-fit w-[128px] shrink-0 flex-col gap-0.5 pt-1">
-        <div className="mb-2 px-2 text-[13px] font-semibold">{t('设置')}</div>
+    <div className="flex flex-col gap-5">
+      <nav aria-label={t('设置')} className="scroll-thin sticky top-0 z-10 -mx-1 flex gap-0.5 overflow-x-auto border-b bg-background/95 px-1 backdrop-blur">
         {TABS.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => { if ((tab === 'ai' || tab==='prompts') && aiDirty && item.key !== tab) setPendingTab(item.key); else setTab(item.key); }}
-            className={`rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
-              tab === item.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent'
+            className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
+              tab === item.key
+                ? 'border-primary font-medium text-primary'
+                : 'border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground'
             }`}
           >
             {t(item.label)}
           </button>
         ))}
       </nav>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         {tab === 'overlay-style' && <OverlayStyleTab />}
         {tab === 'general' && <GeneralTab />}
         {tab === 'hotkeys' && <HotkeysTab />}
@@ -103,12 +111,9 @@ function GeneralTab() {
   const [uiScale, setUiScale] = useSetting('desktop.uiScale', 1);
   const [chatTextSize, setChatTextSize] = useSetting<'sm' | 'md' | 'lg'>('chat.textSize', 'md');
   const [theme, setTheme] = useSetting<DesktopTheme>('desktop.theme', 'system');
-  const [locale, setLocale] = useState(currentLocale());
-  const [expandLangs, setExpandLangs] = useState(false);
+  const [locale, setLocale] = useState<Locale | null>(storedLocale());
   // 深浅色与界面大小的实际应用在 lib/desktopAppearance：启动、设置变更、
   // 跨窗口广播和系统配色切换都会在那里统一处理，这里只负责选择 UI。
-
-  const langList = expandLangs ? LOCALES : LOCALES.slice(0, 4);
 
   return (
     <div className="flex flex-col gap-4">
@@ -117,63 +122,41 @@ function GeneralTab() {
 
         <div className="mb-2 text-xs font-medium text-muted-foreground">{t('界面语言')}</div>
         <p className="mb-2 text-xs text-muted-foreground">{t('切换语言会刷新窗口让翻译生效。')}</p>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => void switchLocale(systemLocale())}
-            className="rounded-md border p-2.5 text-left text-sm hover:bg-accent"
-          >
-            {t('跟随系统')}
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">{t('当前：{name}', { name: LOCALE_NAMES[systemLocale()] })}</span>
-          </button>
-          {langList.map((l) => (
-            <button
-              key={l}
-              type="button"
-              onClick={() => {
-                setLocale(l);
-                void switchLocale(l);
-              }}
-              className={`rounded-md border p-2.5 text-left text-sm transition-colors ${
-                locale === l ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
-              }`}
-            >
-              {LOCALE_NAMES[l]}
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">{l}</span>
-            </button>
+        <Select
+          aria-label={t('界面语言')}
+          className="max-w-xs"
+          value={locale ?? 'system'}
+          onChange={(event) => {
+            const next = event.target.value === 'system' ? null : (event.target.value as Locale);
+            setLocale(next);
+            void switchLocale(next);
+          }}
+        >
+          <option value="system">{t('跟随系统')} · {LOCALE_NAMES[systemLocale()]}</option>
+          {LOCALES.map((l) => (
+            <option key={l} value={l}>{LOCALE_NAMES[l]} · {l}</option>
           ))}
-        </div>
-        {LOCALES.length > 4 && (
-          <button
-            type="button"
-            className="mt-2 text-xs text-primary hover:underline"
-            onClick={() => setExpandLangs((v) => !v)}
-          >
-            {expandLangs ? t('收起') : t('展开全部语言')}
-          </button>
-        )}
+        </Select>
 
         <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">{t('外观主题')}</div>
         <p className="mb-2 text-xs text-muted-foreground">{t('只影响主窗口；浮窗的明暗在「浮窗样式」里单独选。')}</p>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { key: 'system', label: '跟随系统', desc: '随操作系统外观切换' },
-            { key: 'light', label: '浅色', desc: '始终浅色' },
-            { key: 'dark', label: '深色', desc: '始终深色' },
-          ].map((item) => (
+        <div role="radiogroup" aria-label={t('外观主题')} className="inline-flex rounded-lg border bg-muted/40 p-0.5">
+          {THEMES.map((item) => (
             <button
               key={item.key}
               type="button"
-              onClick={() => setTheme(item.key as DesktopTheme)}
-              className={`rounded-md border p-2.5 text-left transition-colors ${
-                theme === item.key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
+              role="radio"
+              aria-checked={theme === item.key}
+              onClick={() => setTheme(item.key)}
+              className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
+                theme === item.key ? 'bg-background font-medium text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <span className="text-[13px]">{t(item.label)}</span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">{t(item.desc)}</span>
+              {t(item.label)}
             </button>
           ))}
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">{t(THEMES.find((item) => item.key === theme)?.desc ?? '')}</p>
 
         <div className="mt-6 mb-1 flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">{t('界面大小')}</span>

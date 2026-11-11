@@ -2,7 +2,7 @@
  * 历史记录：面试问答记录 + 笔试题目答案，支持展开、
  * 重命名、删除、导出 markdown；模拟面试附复盘报告（查看/重新生成）。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Download, FileSearch, Pencil, Trash2 } from 'lucide-react';
 import {
   Badge,
@@ -28,6 +28,35 @@ import { mdToPlain, Md } from '@/overlay/Md';
 import { MockReportDialog } from './MockReportDialog';
 import { cmd } from '@/lib/bridge';
 import { t } from '@/lib/i18n';
+import { useSetting } from '@/lib/store';
+
+const DAY_ORDER = ['today', 'yesterday', 'earlier'] as const;
+type DayBucket = (typeof DAY_ORDER)[number];
+
+function dayLabel(key: DayBucket): string {
+  return key === 'today' ? t('今天') : key === 'yesterday' ? t('昨天') : t('更早');
+}
+
+/** 历史列表按天分组：只显示时分，完整日期留在导出里。 */
+function dayBucket(at: number): DayBucket {
+  const day = new Date(at);
+  const today = new Date();
+  const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((start(today) - start(day)) / 86400000);
+  if (diff <= 0) return 'today';
+  if (diff === 1) return 'yesterday';
+  return 'earlier';
+}
+
+/** 会话标题在创建时拼了「 · 11/9 18:22」，分组头与副行已经显示时间，这里去掉重复段。 */
+function cleanTitle(title: string): string {
+  return title.replace(/\s*·\s*\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}\s*$/, '').trim() || title;
+}
+
+function clockOf(at: number): string {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 export function RecordsPage() {
   const [tab, setTab] = useState<'interview' | 'mock' | 'exam'>('interview');
@@ -73,6 +102,19 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [renaming]);
   const sessions = allSessions.filter(s => kind === 'mock' ? s.type === 'MOCK_INTERVIEW' : s.type !== 'MOCK_INTERVIEW');
+  const [showEmpty, setShowEmpty] = useSetting<boolean>('history.showEmpty', false);
+  const emptyCount = sessions.filter(s => s.messages.length === 0).length;
+  const visible = useMemo(() => (showEmpty ? sessions : sessions.filter(s => s.messages.length > 0)), [sessions, showEmpty]);
+  const grouped = useMemo(() => {
+    const buckets = new Map<DayBucket, InterviewSession[]>();
+    for (const session of visible) {
+      const key = dayBucket(session.createdAt);
+      const list = buckets.get(key) ?? [];
+      list.push(session);
+      buckets.set(key, list);
+    }
+    return DAY_ORDER.flatMap(key => (buckets.has(key) ? [{ key, rows: buckets.get(key) as InterviewSession[] }] : []));
+  }, [visible]);
   const aiReady = useAiReady('chat');
   const reportViewing = sessions.find((s) => s.id === reportViewingId) ?? null;
 
@@ -131,7 +173,30 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
 
   return (
     <div className="flex flex-col gap-2">
-      {sessions.map((s) => {
+      {(emptyCount > 0 || showEmpty) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+          <span>{t('共 {count} 场，其中 {empty} 场没有问答记录。', { count: sessions.length, empty: emptyCount })}</span>
+          <button type="button" className="text-primary hover:underline" onClick={() => setShowEmpty(!showEmpty)}>
+            {showEmpty ? t('隐藏空记录') : t('显示空记录')}
+          </button>
+          {emptyCount > 0 && (
+            <button
+              type="button"
+              className="text-destructive hover:underline"
+              onClick={() => setSessions(prev => prev.filter(session => session.messages.length > 0))}
+            >
+              {t('清理 {count} 场空记录', { count: emptyCount })}
+            </button>
+          )}
+        </div>
+      )}
+      {visible.length === 0 && (
+        <Card className="p-8 text-center text-sm text-muted-foreground">{t('没有可显示的记录。')}</Card>
+      )}
+      {grouped.map((group) => (
+        <div key={group.key} className="flex flex-col gap-2">
+          <div className="mt-1 px-1 text-[11px] font-medium text-muted-foreground">{dayLabel(group.key)}</div>
+          {group.rows.map((s) => {
         const meta = mockMeta(s);
         const open = openId === s.id;
         const reportReady = Boolean(meta?.report);
@@ -154,11 +219,11 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-sm font-medium">
-                    <span className="truncate">{s.title}</span>
+                    <span className="truncate" title={s.title}>{cleanTitle(s.title)}</span>
                     {s.status === 'ACTIVE' && <Badge variant="default">{t('进行中')}</Badge>}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {new Date(s.createdAt).toLocaleString('zh-CN')} · {t('{count} 条', { count: s.messages.length })} ·{' '}
+                  <div className="text-[11px] tabular-nums text-muted-foreground">
+                    {clockOf(s.createdAt)} · {t('{count} 条', { count: s.messages.length })} ·{' '}
                     {s.type === 'MOCK_INTERVIEW' ? t('模拟面试') : t('真实面试')}
                   </div>
                 </div>
@@ -228,6 +293,8 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
           </Card>
         );
       })}
+        </div>
+      ))}
 
       {renaming && (
         <div role="dialog" aria-modal="true" aria-label={t('重命名')} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
@@ -278,6 +345,19 @@ function ExamRecords() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<ExamSessionRecord | null>(null);
   const [images, setImages] = useState<string[] | null>(null);
+  const [showEmpty, setShowEmpty] = useSetting<boolean>('history.showEmpty', false);
+  const emptyCount = records.filter(r => r.questions.length === 0).length;
+  const visible = useMemo(() => (showEmpty ? records : records.filter(r => r.questions.length > 0)), [records, showEmpty]);
+  const grouped = useMemo(() => {
+    const buckets = new Map<DayBucket, ExamSessionRecord[]>();
+    for (const record of visible) {
+      const key = dayBucket(record.createdAt);
+      const list = buckets.get(key) ?? [];
+      list.push(record);
+      buckets.set(key, list);
+    }
+    return DAY_ORDER.flatMap(key => (buckets.has(key) ? [{ key, rows: buckets.get(key) as ExamSessionRecord[] }] : []));
+  }, [visible]);
 
   if (records.length === 0) {
     return (
@@ -289,7 +369,30 @@ function ExamRecords() {
 
   return (
     <div className="flex flex-col gap-2">
-      {records.map((r) => {
+      {(emptyCount > 0 || showEmpty) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+          <span>{t('共 {count} 场，其中 {empty} 场没有问答记录。', { count: records.length, empty: emptyCount })}</span>
+          <button type="button" className="text-primary hover:underline" onClick={() => setShowEmpty(!showEmpty)}>
+            {showEmpty ? t('隐藏空记录') : t('显示空记录')}
+          </button>
+          {emptyCount > 0 && (
+            <button
+              type="button"
+              className="text-destructive hover:underline"
+              onClick={() => setRecords(prev => prev.filter(record => record.questions.length > 0))}
+            >
+              {t('清理 {count} 场空记录', { count: emptyCount })}
+            </button>
+          )}
+        </div>
+      )}
+      {visible.length === 0 && (
+        <Card className="p-8 text-center text-sm text-muted-foreground">{t('没有可显示的记录。')}</Card>
+      )}
+      {grouped.map((group) => (
+        <div key={group.key} className="flex flex-col gap-2">
+          <div className="mt-1 px-1 text-[11px] font-medium text-muted-foreground">{dayLabel(group.key)}</div>
+          {group.rows.map((r) => {
         const open = openId === r.id;
         return (
           <Card key={r.id} className="overflow-hidden">
@@ -302,11 +405,11 @@ function ExamRecords() {
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-sm font-medium">
-                    <span className="truncate">{r.title}</span>
+                    <span className="truncate" title={r.title}>{cleanTitle(r.title)}</span>
                     {r.status === 'ACTIVE' && <Badge variant="default">{t('进行中')}</Badge>}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {new Date(r.createdAt).toLocaleString('zh-CN')} · {t('{count} 题', { count: r.questions.length })}
+                  <div className="text-[11px] tabular-nums text-muted-foreground">
+                    {clockOf(r.createdAt)} · {t('{count} 题', { count: r.questions.length })}
                     {r.mode ? ` · ${r.mode}` : ''}
                   </div>
                 </div>
@@ -358,6 +461,8 @@ function ExamRecords() {
           </Card>
         );
       })}
+        </div>
+      ))}
       <ExamImageViewer references={images} onClose={() => setImages(null)} />
       <ConfirmDialog
         open={deleting != null}

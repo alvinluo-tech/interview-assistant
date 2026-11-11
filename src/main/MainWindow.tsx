@@ -186,8 +186,8 @@ export function MainWindow() {
           onFeedback={() => setFeedbackOpen(true)}
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className={`flex-1 ${section === 'chat' ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'}`}>
-            <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : 'max-w-3xl px-7 py-7'}`}>
+          <div className={`scroll-thin flex-1 ${section === 'chat' ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'}`}>
+            <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : 'max-w-4xl px-8 py-7'}`}>
               {showOnboarding ? (
                 <Onboarding onFinish={finishOnboarding} />
               ) : (
@@ -379,24 +379,16 @@ function Sidebar({
 
       <div className="flex-1" />
 
-      {/* GitHub 卡片：跳转到项目仓库 */}
+      {/* GitHub 入口：只占一行，说明放在 title 里，避免侧栏底部过重 */}
       <button
         type="button"
         onClick={openProjectRepo}
-        className="group mx-3 mb-2 flex items-start gap-2.5 rounded-lg border bg-card p-3 text-left transition-colors hover:border-foreground/20 hover:bg-accent/60"
+        title={t('查看源码、更新日志与问题反馈')}
+        className="group mx-3 mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <span className="mt-px text-muted-foreground transition-colors group-hover:text-foreground">
-          <GitHubMark size={16} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1 text-[13px] font-medium">
-            {t('GitHub 仓库')}
-            <ArrowUpRight size={12} className="text-muted-foreground" />
-          </span>
-          <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-            {t('查看源码、更新日志与问题反馈')}
-          </span>
-        </span>
+        <GitHubMark size={15} />
+        <span className="min-w-0 flex-1 truncate">{t('GitHub 仓库')}</span>
+        <ArrowUpRight size={12} className="shrink-0 opacity-60" />
       </button>
 
       <div className="mx-3 mb-2 flex flex-col gap-0.5">

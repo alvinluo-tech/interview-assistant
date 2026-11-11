@@ -130,6 +130,8 @@ export function Slider({
   step = 1,
   onChange,
   className = '',
+  ariaLabel,
+  disabled,
 }: {
   value: number;
   min: number;
@@ -137,7 +139,10 @@ export function Slider({
   step?: number;
   onChange: (v: number) => void;
   className?: string;
+  ariaLabel?: string;
+  disabled?: boolean;
 }) {
+  const progress = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
     <input
       type="range"
@@ -145,8 +150,13 @@ export function Slider({
       min={min}
       max={max}
       step={step}
+      aria-label={ariaLabel}
+      disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value))}
-      className={`h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-[hsl(var(--primary))] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary ${className}`}
+      style={{
+        background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%, hsl(var(--muted)) 100%)`,
+      }}
+      className={`h-1.5 w-full cursor-pointer appearance-none rounded-full disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow ${className}`}
     />
   );
 }
@@ -350,7 +360,7 @@ export function ConfirmDialog({
 }: {
   open: boolean;
   title: string;
-  body: string;
+  body?: string;
   onConfirm: () => void;
   onCancel: () => void;
   confirmText?: string;
@@ -358,7 +368,7 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onClose={onCancel} className="max-w-sm">
       <DialogTitle>{title}</DialogTitle>
-      <p className="mb-4 text-sm text-muted-foreground">{body}</p>
+      {body ? <p className="mb-4 text-sm text-muted-foreground">{body}</p> : <div className="mb-4" />}
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onCancel}>
           {t('取消')}

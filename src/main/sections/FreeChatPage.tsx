@@ -18,6 +18,7 @@ import {CHAT_ATTACH_ACCEPT, CHAT_ATTACH_MAX, IMAGE_MARKER, chatFileKind, compose
 import {useSetting} from '@/lib/store';
 import {CHAT_TEXT_PX,chatTextSize,formatClock} from '@/lib/chatText';
 import {useCopyFeedback} from '@/lib/clipboard';
+import {useConfirm} from '@/ui/confirm';
 import './voice-call.css';
 import {useModalFocus} from '@/ui/useModalFocus';
 
@@ -71,13 +72,15 @@ export function FreeChatPage() {
     if(!title||title===session.title)return;
     try{await renameFreeChat(session.id,title);}catch{showToast({type:'error',title:t('重命名失败')});}
   };
+  const [confirm,confirmDialog]=useConfirm();
   const remove=async(session:FreeChatSession)=>{
-    if(!window.confirm(t('删除「{title}」？此操作无法撤销。',{title:session.title})))return;
+    if(!await confirm({title:t('删除「{title}」？此操作无法撤销。',{title:session.title})}))return;
     try{await deleteFreeChat(session.id);if(session.id===id)openSession(crypto.randomUUID());}
     catch{showToast({type:'error',title:t('删除失败')});}
   };
   const [textSize]=useSetting<'sm'|'md'|'lg'>('chat.textSize','md');
   return <div style={{['--chat-text' as string]:`${CHAT_TEXT_PX[chatTextSize(textSize)]}px`}} className="flex h-full min-h-0 w-full bg-background">
+    {confirmDialog}
     {!collapsed&&<>
     <aside style={{width:list.width}} className="hidden shrink-0 flex-col bg-muted/20 md:flex">
       <div className="flex items-center gap-1 p-3"><button className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button><button onClick={()=>setCollapsed(true)} aria-label={t('收起侧栏')} title={t('收起侧栏')} className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftClose size={15}/></button></div>
@@ -102,7 +105,7 @@ export function FreeChatPage() {
     </>}
     {!collapsed&&<ResizeHandle label={t('调整对话列表宽度')} dragging={list.dragging} onPointerDown={list.onPointerDown}/>}
     <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} listCollapsed={collapsed} onExpandList={()=>setCollapsed(false)} permission={permission} onPermissionChange={changePermission} onCallEnd={callEnded} onDelete={async()=>{
-      if(!window.confirm(t('删除这段对话？此操作无法撤销。')))return;
+      if(!await confirm({title:t('删除这段对话？此操作无法撤销。')}))return;
       await deleteFreeChat(id);
       openSession(crypto.randomUUID());
     }}/>
@@ -300,14 +303,14 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
   return <AssistantRuntimeProvider runtime={runtime}><div className="flex min-w-0 flex-1"><ThreadPrimitive.Root ref={columnRef} inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
-    <div className={`flex items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}>{listCollapsed&&<button onClick={onExpandList} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="shrink-0 rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>}<div className={`${cramped?'hidden':''} flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary`}><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div>{!cramped&&<div className="truncate text-xs text-muted-foreground">{t('文字、语音与本地资料')}</div>}</div>
+    <div className={`flex items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}>{listCollapsed&&<button onClick={onExpandList} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="shrink-0 rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>}<div className={`${cramped?'hidden':''} flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary`}><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div><div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground"><span className="truncate">{describeRoute(aiSettings,model)}</span><span className="opacity-40">·</span><span className="shrink-0">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span></div></div>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?t('关闭语音回复'):t('开启语音回复')} title={speak?t('关闭语音回复'):t('开启语音回复')}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
       <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError(t('请先在「设置 → AI 服务」配置对话模型和语音转写模型。'));return;}inputOwner.current='call';voiceHistory.current=savedMessages(runtime.thread.getState().messages);voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
       <DeleteButton onDelete={onDelete} onError={setError}/>
       {roomy&&!resourcesOpen&&<button onClick={()=>setResourcesOpen(true)} aria-label={t('展开资源栏')} title={t('展开资源栏')} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelRightOpen size={16}/></button>}
       {speaking&&<button className="text-xs text-primary" onClick={()=>speaker.stop()}>{t('停止播放')}</button>}
     </div>
-    <div className="relative flex min-h-0 flex-1"><ThreadPrimitive.Viewport className={`chat-scroll min-h-0 flex-1 overflow-y-auto ${compact?'px-3':'px-5'} py-6`}>
+    <div className="relative flex min-h-0 flex-1"><ThreadPrimitive.Viewport className={`scroll-thin min-h-0 flex-1 overflow-y-auto ${compact?'px-3':'px-5'} py-6`}>
       <FileIndexContext.Provider value={attachmentIndex}><StampContext.Provider value={stamps}><div className={`mx-auto flex min-h-full w-full flex-col ${compact?'':'max-w-2xl'}`}><ThreadPrimitive.Empty><div className="flex flex-1 flex-col justify-center py-10">
           <p className="text-[11px] font-medium tracking-[0.18em] text-primary">{t('MIANXU · 对话')}</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight">{t('今天想聊点什么？')}</h2>
@@ -485,7 +488,7 @@ function messagePreview(message: ThreadMessage): string {
 
 /** Right-edge outline: one tick per message, hover previews it, click scrolls to it. */
 function threadScroller(node: HTMLElement | null): HTMLElement | null {
-  const viewport = node?.parentElement?.querySelector('.chat-scroll');
+  const viewport = node?.parentElement?.querySelector('.scroll-thin');
   if (viewport instanceof HTMLElement) return viewport;
   return scrollHost(node);
 }

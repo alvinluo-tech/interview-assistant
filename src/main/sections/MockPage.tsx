@@ -4,7 +4,7 @@ import { useAiReady } from '@/lib/aiSettings';
  * 会话与复盘全部落 data.json：支持「有一场还没结束」续场与历史回看。
  */
 import { useState } from 'react';
-import { Clock, FileSearch, Play, Sparkles } from 'lucide-react';
+import { Check, Clock, FileSearch, Play, Sparkles } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -79,6 +79,18 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
   });
   const reportViewing = sessions.find((s) => s.id === reportViewingId) ?? null;
 
+  const blockReason = starting
+    ? t('正在准备…')
+    : pending
+      ? t('先结束或放弃「{name}」这场', { name: mockMeta(pending)?.config.goalName ?? pending.title })
+      : !resumeId
+        ? t('先在「资料管理」上传一份简历')
+        : !goalId
+          ? t('先在「资料管理」新建一个岗位')
+          : !aiReady
+            ? t('先在「设置 → AI 服务」配置接口')
+            : '';
+
   const start = async () => {
     if (!resumeId || !goalId) {
       showToast({ type: 'error', title: t('先选好简历和岗位') });
@@ -145,9 +157,11 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
               <div>
                 <div className="text-sm font-medium">{t('有一场还没结束')}</div>
                 <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                  {t('{name} · 开始于 {time}', {
+                  {t('{name} · 已答 {answered}/{total} 题 · 上次 {time}', {
                     name: mockMeta(pending)?.config.goalName ?? pending.title,
-                    time: new Date(pending.createdAt).toLocaleString('zh-CN'),
+                    answered: pending.messages.filter((m) => m.role === 'ASSISTANT').length,
+                    total: mockMeta(pending)?.config.turnBudget ?? 12,
+                    time: new Date(pending.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
                   })}
                 </div>
               </div>
@@ -190,12 +204,13 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
           title={t('开始一场模拟面试')}
           desc={t('AI 面试官按你的简历和岗位出题，会根据你的回答追问；结束后生成复盘报告。')}
           right={
-            <Button onClick={() => void start()} disabled={starting || Boolean(pending)}>
+            <Button onClick={() => void start()} disabled={starting || Boolean(pending)} title={blockReason || undefined}>
               <Play size={14} />
               {starting ? t('准备中…') : t('开始模拟面试')}
             </Button>
           }
         />
+        {blockReason && <p className="mt-2 text-xs text-muted-foreground">{blockReason}</p>}
 
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs font-medium text-muted-foreground">
@@ -212,7 +227,12 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
           </label>
           <label className="text-xs font-medium text-muted-foreground">
             {t('岗位')}
-            <Select className="mt-1" value={goalId} onChange={(e) => setGoalId(e.target.value)}>
+            <Select
+              className="mt-1"
+              value={goalId}
+              title={goals.find((g) => g.id === goalId) ? (goals.find((g) => g.id === goalId)!.companyName ? `${goals.find((g) => g.id === goalId)!.companyName} · ${goals.find((g) => g.id === goalId)!.name}` : goals.find((g) => g.id === goalId)!.name) : undefined}
+              onChange={(e) => setGoalId(e.target.value)}
+            >
               {goals.length === 0 && <option value="">{t('先去资料管理新建')}</option>}
               {goals.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -249,17 +269,19 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div>
             <div className="mb-1 text-xs font-medium text-muted-foreground">{t('难度')}</div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-5 gap-1.5">
               {DIFFICULTY.map((d) => (
                 <button
                   key={d.key}
                   type="button"
                   onClick={() => setDifficulty(d.key)}
-                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  title={t(d.label)}
+                  className={`flex items-center justify-center gap-1 truncate rounded-full border px-2 py-1 text-center text-xs transition-colors ${
                     difficulty === d.key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
                   }`}
                 >
-                  {t(d.label)}
+                  {difficulty === d.key && <Check size={11} className="shrink-0" />}
+                  <span className="truncate">{t(d.label)}</span>
                 </button>
               ))}
             </div>

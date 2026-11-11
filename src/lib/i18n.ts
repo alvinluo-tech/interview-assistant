@@ -85,8 +85,10 @@ export function currentLocale(): Locale {
 }
 
 /** 切换语言：持久化 + 广播（主窗口收到后整窗 reload） */
-export async function switchLocale(locale: Locale) {
-  localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+export async function switchLocale(locale: Locale | null) {
+  // null 表示「跟随系统」：清掉偏好，让系统语言决定。
+  if (locale) localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  else localStorage.removeItem(LOCALE_STORAGE_KEY);
   try {
     const { emit } = await import('@tauri-apps/api/event');
     await emit(LOCALE_EVENT, { locale });

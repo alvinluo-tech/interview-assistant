@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '@/lib/i18n';
 import { Check, Eye, EyeOff, Loader2, Plus, RefreshCw, Search, Server, Trash2, Unplug } from 'lucide-react';
 import { Badge, Button, Card, ConfirmDialog, Input, SectionHeader, Select, showToast } from '@/ui/primitives';
+import { useConfirm } from '@/ui/confirm';
 import {
   AI_ROLES, PROVIDER_PRESETS, ROLE_LABELS, bailianConnection, createProvider, mergeDiscoveredModels,
   normalizeBaseUrl, removeProvider, validateModelId, isSpeechRecognitionModel, isUnsupportedBailianSpeechModel, type AiProvider, type AiRole, type AiSettings,
@@ -38,6 +39,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
   const [customName, setCustomName] = useState('');
   const [status, setStatus] = useState<Status>(null);
   const [error, setError] = useState('');
+  const [confirm, confirmDialog] = useConfirm();
   const [busy, setBusy] = useState<'discover' | 'test' | 'save' | null>(null);
   const [testingId, setTestingId] = useState('');
   const [removeId, setRemoveId] = useState<string | null>(null);
@@ -207,10 +209,11 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
           </button>;
         })}
       </div>
+      {confirmDialog}
       {loadError && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
         {t('配置读取失败，已阻止覆盖已有设置：{error}', { error: loadError })}
         <Button size="sm" variant="outline" className="ml-2" onClick={() => void reloadAiSettings().then(() => { setDraft(structuredClone(getAiSettings())); setSelectedId(getAiSettings().providers[0]?.id ?? ''); })}>{t('重新读取')}</Button>
-        <Button size="sm" variant="destructive" className="ml-2" onClick={() => { if (!window.confirm(t('将删除本机保存的 AI 连接和密钥，需要重新填写。确定继续？'))) return; void resetAiSettings().then(() => { setDraft(structuredClone(getAiSettings())); setSelectedId(''); }).catch(error => setError(String((error as Error)?.message || error))); }}>{t('清除无法读取的配置')}</Button>
+        <Button size="sm" variant="destructive" className="ml-2" onClick={() => { void (async () => { if (!(await confirm({ title: t('将删除本机保存的 AI 连接和密钥，需要重新填写。确定继续？') }))) return; await resetAiSettings().then(() => { setDraft(structuredClone(getAiSettings())); setSelectedId(''); }).catch(error => setError(String((error as Error)?.message || error))); })(); }}>{t('清除无法读取的配置')}</Button>
       </div>}
       {error && <p role="alert" className="rounded-md border border-destructive/30 p-3 text-xs text-destructive">{error}</p>}
       {externalConflict && <p role="alert" className="rounded-md border p-3 text-xs text-muted-foreground">{t('其他窗口已更新 AI 配置。请点击「撤销更改」载入最新设置后再编辑，以免覆盖新配置。')}</p>}

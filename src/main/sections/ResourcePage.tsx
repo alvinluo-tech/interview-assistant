@@ -3,7 +3,7 @@
  * 含新建岗位弹窗、资料编辑器（自由资料 + 预设问答 + AI 生成）。
  */
 import { useRef, useState } from 'react';
-import { FileText, Plus, Trash2, Upload } from 'lucide-react';
+import { Eye, FileText, Plus, Trash2, Upload } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -18,6 +18,7 @@ import {
   Textarea,
   showToast,
 } from '@/ui/primitives';
+import { useConfirm } from '@/ui/confirm';
 import {
   deleteEntry,
   deleteGoal,
@@ -94,13 +95,14 @@ export function ResourcePage() {
                     {t('上传于 {date}', { date: new Date(r.createdAt).toLocaleDateString('zh-CN') })}
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setDeleting({ kind: 'resume', id: r.id, name: r.title })}
-                >
-                  <Trash2 size={13} />
-                </Button>
+                <div className="flex shrink-0 gap-1">
+                  <Button size="sm" variant="ghost" aria-label={t('预览简历')} title={t('预览简历')} onClick={() => setPreviewResume(r)}>
+                    <Eye size={13} />
+                  </Button>
+                  <Button size="sm" variant="ghost" aria-label={t('删除简历')} title={t('删除简历')} onClick={() => setDeleting({ kind: 'resume', id: r.id, name: r.title })}>
+                    <Trash2 size={13} />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -134,14 +136,14 @@ export function ResourcePage() {
                     {t('公司：{company} · 创建于 {date}', { company: g.companyName || t('未填写'), date: new Date(g.createdAt).toLocaleDateString('zh-CN') })}
                   </div>
                   {g.description && (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{g.description}</p>
+                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground" title={g.description}>{g.description}</p>
                   )}
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button size="sm" variant="ghost" onClick={() => setGoalDialog({ open: true, goal: g })}>
                     {t('编辑')}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDeleting({ kind: 'goal', id: g.id, name: g.name })}>
+                  <Button size="sm" variant="ghost" aria-label={t('删除岗位')} title={t('删除岗位')} onClick={() => setDeleting({ kind: 'goal', id: g.id, name: g.name })}>
                     <Trash2 size={13} />
                   </Button>
                 </div>
@@ -338,14 +340,16 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
   // 「完成」= 保存并关闭：有未保存改动时先落盘，保存失败就留在编辑器里，不能静默丢弃。
   const finish = async () => { if (!dirty || await save()) onClose(); };
   // Esc 和点遮罩也走同一道门：有改动先问一句，别让输入静默消失。
-  const requestClose = () => {
-    if (dirty && !window.confirm(t('有未保存的改动，确定放弃？'))) return;
+  const [confirm, confirmDialog] = useConfirm();
+  const requestClose = async () => {
+    if (dirty && !(await confirm({ title: t('有未保存的改动，确定放弃？') }))) return;
     onClose();
   };
 
   return (
     <Dialog open onClose={requestClose} className="max-w-2xl">
       <DialogTitle>{t('编辑面试资料')}</DialogTitle>
+      {confirmDialog}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium text-muted-foreground">
           {t('资料名称')}
