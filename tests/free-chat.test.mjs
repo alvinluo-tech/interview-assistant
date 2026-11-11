@@ -16,6 +16,7 @@ function harness(responses=[], stream) {
     if(name==='./aiRequests')return {chatStream:async(options)=>{chatCalls.push(options);if(stream)return stream(options);options.onDelta?.('普通回答');return '普通回答';}};
     if(name==='./aiTaskPolicy')return {checkInputBudget:()=>{},outputLimit:()=>4096};
     if(name==='./chatHistory')return evaluateModuleFixture('src/lib/chatHistory.ts');
+    if(name==='./tokenCalibration')return {tokenScale:()=>1};
     throw Error(name);
   }});
   return {api,data,requests,chatCalls,route};

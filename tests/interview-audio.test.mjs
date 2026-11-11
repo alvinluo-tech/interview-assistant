@@ -50,6 +50,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     './examEngine': { getSolverState: () => ({ turns: [] }), prepareExamRun: () => {}, finishInterviewExam: async () => {} },
     './store': { getSetting: (key, fallback) => settings[key] ?? fallback, setSetting: async (key,value) => { settings[key] = value; } },
     './aiTaskPolicy': { estimateInputTokens: () => 1 },
+    './tokenCalibration': { tokenScale: () => 1 },
     './latencyStats': { estimateFirstToken: () => null, recordFirstToken: () => {} },
     './events': { bus: { emit() {} } },
     './i18n': evaluateModuleFixture('src/lib/i18n.ts'),

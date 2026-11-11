@@ -33,6 +33,7 @@ import { getSetting, setSetting } from './store';
 import { bus } from './events';
 import { t } from './i18n';
 import { recordFirstToken } from './latencyStats';
+import { tokenScale } from './tokenCalibration';
 import { openMicrophone, type MicrophoneCapture } from './microphone';
 import { joinTranscript } from './speechProtocol';
 import { buildKnowledgeContext,captureKnowledge,authorizedKnowledge,type KnowledgeSnapshot,type ContextSource } from './knowledgeContext';
@@ -762,8 +763,10 @@ function interviewContextBudget(){
   const output=Math.min(8192, capabilities?.maxOutputTokens || 8192);
   const reserved=Math.max(1500, Math.floor(contextWindow*0.08));
   const available=Math.max(2000, contextWindow - output - reserved);
-  // history 按 token 计（窗口本身就是 token），reference 仍按字符给知识检索做滑窗。
-  return {historyTokens:Math.max(1500,Math.floor(available*0.7)), referenceChars:Math.max(500,Math.floor(available*0.3))};
+  // 估算器对中文偏保守，按实测比例换算：history 按 token 计（窗口本身就是 token），
+  // reference 仍按字符给知识检索做滑窗。
+  const scale=tokenScale(route?.modelId);
+  return {historyTokens:Math.max(1500,Math.floor(available*0.7/scale)), referenceChars:Math.max(500,Math.floor(available*0.3))};
 }
 
 function buildSystemPromptForSession(question: string,throughMessageId:string): { prompt: string; sources: ContextSource[];referenceBlock:string } {

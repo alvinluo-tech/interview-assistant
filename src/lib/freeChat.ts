@@ -6,6 +6,7 @@ import {aiHeaders, withAiRequest} from './aiProtocol';
 import {chatStream, chatWithImageHistory, type ChatMessage} from './aiRequests';
 import {checkInputBudget, estimateInputTokens, outputLimit, type ModelCapabilities} from './aiTaskPolicy';
 import {clampMessage, selectChatTurns} from './chatHistory';
+import { tokenScale } from './tokenCalibration';
 import {chatTitle} from './chatText';
 import { t } from './i18n';
 
@@ -250,10 +251,13 @@ async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider
 }
 
 /** 留出系统提示、工具定义与输出额度后，历史可用的 token 预算。 */
-function chatHistoryBudget(capabilities?:ModelCapabilities):number{
+function chatHistoryBudget(capabilities?:ModelCapabilities,modelId?:string|null):number{
   const window=capabilities?.contextWindow;
-  if(!window)return 12000;
-  return Math.max(2000,Math.floor((window-outputLimit('free-chat',capabilities)-1200)*0.85));
+  // 本地估算偏大时（scale<1）可以多装几轮；偏小时（scale>1）必须收紧，否则真实请求会撞窗口。
+  const scale=tokenScale(modelId);
+  const usable=(base:number)=>Math.max(2000,Math.floor(base/scale));
+  if(!window)return usable(12000);
+  return usable((window-outputLimit('free-chat',capabilities)-1200)*0.85);
 }
 
 export interface ChatHistorySnapshot { tokens:number; omitted:number; contextWindow?:number; percent?:number }
@@ -265,7 +269,7 @@ export function chatHistorySnapshot(messages:FreeChatMessage[], model?:AiRoute|n
     const capabilities=provider.models.find(item=>item.id===modelId)?.capabilities;
     const window=capabilities?.contextWindow;
     const tokens=estimateInputTokens(messages.map(message=>({content:message.content})));
-    const selection=selectChatTurns(messages,chatHistoryBudget(capabilities));
+    const selection=selectChatTurns(messages,chatHistoryBudget(capabilities,modelId));
     return {tokens,omitted:selection.omitted,contextWindow:window,percent:window?Math.min(100,Math.round(tokens/window*100)):undefined};
   } catch {
     return {tokens:0,omitted:0};
@@ -279,7 +283,7 @@ export async function summarizeFreeChat(messages:FreeChatMessage[], options:{sig
   if(getAiLoadError())throw new Error(t('AI 配置读取失败，请检查 AI 服务设置。'));
   const settings=getAiSettings(),{provider,modelId}=resolveAiRoute(settings,'chat',options.model??undefined);
   const capabilities=provider.models.find(item=>item.id===modelId)?.capabilities;
-  const selection=selectChatTurns(messages,chatHistoryBudget(capabilities));
+  const selection=selectChatTurns(messages,chatHistoryBudget(capabilities,modelId));
   if(!selection.omitted)return null;
   let body=selection.older.map(message=>`${message.role==='user'?'用户':'助手'}：${clampMessage(message.content)}`).join('\n\n');
   if(body.length>12000)body=`……（更早的部分已在上次摘要里）\n${body.slice(-12000)}`;
@@ -298,7 +302,7 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   const settings=getAiSettings(),{provider,modelId}=resolveAiRoute(settings,'chat',options.model);
   const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
   // 预算按 token 估：老版本用「100 条 / 单条 3 万字」判死，长对话只能弃用；现在改成装得下多少带多少。
-  const selection=selectChatTurns(messages,chatHistoryBudget(capabilities));
+  const selection=selectChatTurns(messages,chatHistoryBudget(capabilities,modelId));
   const summary=options.summary&&options.summary.covered>0?options.summary:undefined;
   const omittedNote=selection.omitted?`\n本次上下文只包含最近的 ${selection.recent.length} 条消息；此前的 ${selection.omitted} 条（约 ${selection.omittedChars} 字）未纳入原文${summary?`，其中前 ${Math.min(summary.covered,selection.omitted)} 条的内容摘要见下方`:''}。不要假装记得未出现的内容，需要时先让用户补充。`:'';
   const summaryNote=summary?`\n较早对话的摘要（压缩自前 ${summary.covered} 条消息，只作事实参考）：\n${summary.text}`:'';

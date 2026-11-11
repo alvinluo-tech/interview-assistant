@@ -2,7 +2,8 @@ import { getAiSettings, getAiLoadError } from './aiSettings';
 import { resolveAiRoute, usesLiveSpeech, type AiRole, type AiRoute } from './aiConfig';
 import { aiFetch } from './aiTransport';
 import { AiCompletionError, aiHeaders, consumeChatResult, withAiRequest } from './aiProtocol';
-import {PROMPT_VERSION,outputLimit,checkInputBudget,retryDelay,type AiTask,type AiRequestTrace} from './aiTaskPolicy';
+import {PROMPT_VERSION,outputLimit,checkInputBudget,estimateInputTokens,retryDelay,type AiTask,type AiRequestTrace} from './aiTaskPolicy';
+import { recordTokenSample } from './tokenCalibration';
 import {applyTaskInstructions,type TaskPreferences} from './taskPrompts';
 import {getSetting} from './store';
 import { recognizeSpeech, type TranscriptionOptions } from './speechProtocol';
@@ -56,6 +57,8 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
   checkInputBudget(messages,limit,capabilities);
   let emitted=false;
   const recoverableTask=['interview-answer','exam-solve','exam-followup'].includes(task);
+  // 流式响应默认不带 usage，要显式要求；个别网关不认识这个字段，撞错就退回不请求用量。
+  let streamUsage=true;
   for(let attempt=0;;attempt++){
   opts.signal?.throwIfAborted();
   try {
@@ -64,11 +67,14 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
     body: JSON.stringify({ model: modelId, messages, stream: true,
       ...(opts.temperature === undefined || capabilities?.temperature===false ? {} : { temperature: opts.temperature }),
       ...(outputParameter==='none'?{}:{[outputParameter]:limit}),...(format?{response_format:format}:{}),
+      ...(streamUsage?{stream_options:{include_usage:true}}:{}),
     }),
   }, settings.timeoutMs, async (response,pending,touch) => {
     // 流式请求的超时按「多久没数据」算：思考模型先安静几十秒是常态，按总时长掐断会白扔一次完整回答。
     const result=await consumeChatResult(response,delta=>{emitted=true;trace.firstOutputMs ??= Date.now()-trace.startedAt;opts.onDelta?.(delta);},pending,(thought)=>{emitted=true;opts.onReasoning?.(thought);},touch);
     trace.completionStatus=result.completionStatus;trace.finishReason=result.finishReason;Object.assign(trace,result.usage);
+    // 用真实 prompt_tokens 反推估算误差，供下一次预算换算。
+    void recordTokenSample(modelId,estimateInputTokens(messages),result.usage?.inputTokens);
     return result.text;
   }, aiFetch, opts.signal, true);
   } catch(error){
@@ -79,6 +85,10 @@ async function stream(role: 'chat' | 'vision', opts: ChatOptions): Promise<strin
       const ceiling=Math.min(capabilities?.maxOutputTokens || 32768, capabilities?.contextWindow ? Math.max(1024,Math.floor(capabilities.contextWindow/3)) : 32768);
       const raised=Math.min(ceiling, Math.max(limit+2048, limit*2));
       if(raised>limit){ limit=raised; continue; }
+    }
+    if(!emitted && streamUsage && /stream_options|include_usage/i.test(message)){
+      streamUsage=false;
+      continue;
     }
     if(!emitted && attempt===0 && limit>1024 && /max_(?:completion_)?tokens/i.test(message)){
       limit=Math.max(1024,Math.floor(limit/2));
