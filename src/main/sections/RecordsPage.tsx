@@ -576,12 +576,122 @@ function ExamRecords() {
 
 void SectionHeader;
 
+const MAX_ZOOM = 6;
+
+/** 图片缩放：滚轮以光标为锚点缩放，按住拖动平移，双击在适应与 2.5 倍之间切换。 */
+function ZoomableImage({src, alt}: {src: string; alt: string}) {
+  const frame = useRef<HTMLDivElement | null>(null);
+  const [natural, setNatural] = useState({w: 0, h: 0}), [box, setBox] = useState({w: 0, h: 0});
+  const [zoom, setZoom] = useState(1), [pan, setPan] = useState({x: 0, y: 0}), [dragging, setDragging] = useState(false);
+  const state = useRef({zoom: 1, pan: {x: 0, y: 0}, box: {w: 0, h: 0}});
+  state.current = {zoom, pan, box};
+  const drag = useRef<{x: number; y: number; panX: number; panY: number} | null>(null);
+
+  useEffect(() => {
+    if (!natural.w) return;
+    const fit = () => {
+      const maxW = Math.max(240, window.innerWidth * 0.92 - 40), maxH = Math.max(200, window.innerHeight * 0.74);
+      const scale = Math.min(1, maxW / natural.w, maxH / natural.h);
+      setBox({w: Math.round(natural.w * scale), h: Math.round(natural.h * scale)});
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [natural]);
+
+  const clamp = (next: {x: number; y: number}, value: number) => {
+    const maxX = Math.max(0, (box.w * value - box.w) / 2), maxY = Math.max(0, (box.h * value - box.h) / 2);
+    return {x: Math.max(-maxX, Math.min(maxX, next.x)), y: Math.max(-maxY, Math.min(maxY, next.y))};
+  };
+  /** 以容器内某点为锚点缩放，锚点下的像素保持不动。 */
+  const zoomAt = (factor: number, anchor?: {x: number; y: number}) => {
+    const {zoom: current, pan: offset} = state.current;
+    const value = Math.min(MAX_ZOOM, Math.max(1, current * factor));
+    if (value === current) return;
+    const point = anchor ?? {x: 0, y: 0};
+    const ratio = value / current;
+    const next = {x: point.x - (point.x - offset.x) * ratio, y: point.y - (point.y - offset.y) * ratio};
+    setZoom(value);
+    setPan(value === 1 ? {x: 0, y: 0} : clamp(next, value));
+  };
+  const reset = () => {setZoom(1); setPan({x: 0, y: 0});};
+  const actualSize = () => {
+    if (!natural.w || !box.w) return;
+    const value = Math.min(MAX_ZOOM, Math.max(1, natural.w / box.w));
+    setZoom(value);
+    // 100% 时从左上角开始看，而不是停在图片正中间。
+    setPan({x: (box.w * value - box.w) / 2, y: (box.h * value - box.h) / 2});
+  };
+
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) < 1) return;
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
+      zoomAt(event.deltaY < 0 ? 1.18 : 1 / 1.18, {x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2});
+    };
+    element.addEventListener('wheel', onWheel, {passive: false});
+    return () => element.removeEventListener('wheel', onWheel);
+  });
+
+  const percent = natural.w && box.w ? Math.round((zoom * box.w) / natural.w * 100) : 100;
+  return <div className="flex flex-col items-center gap-2">
+    <div className="flex items-center gap-2 text-[11px] text-white/70">
+      <button type="button" onClick={() => zoomAt(1 / 1.25)} disabled={zoom <= 1} className="rounded-md border border-white/15 px-2 py-1 disabled:opacity-40 hover:bg-white/10" aria-label={t('缩小')} title={t('缩小')}>−</button>
+      <span className="w-12 text-center tabular-nums">{percent}%</span>
+      <button type="button" onClick={() => zoomAt(1.25)} disabled={zoom >= MAX_ZOOM} className="rounded-md border border-white/15 px-2 py-1 disabled:opacity-40 hover:bg-white/10" aria-label={t('放大')} title={t('放大')}>+</button>
+      <button type="button" onClick={reset} className="rounded-md border border-white/15 px-2 py-1 hover:bg-white/10">{t('适应窗口')}</button>
+      <button type="button" onClick={actualSize} className="rounded-md border border-white/15 px-2 py-1 hover:bg-white/10">{t('实际大小')}</button>
+    </div>
+    <div
+      ref={frame}
+      style={{width: box.w || undefined, height: box.h || undefined}}
+      className={`relative overflow-hidden rounded-md bg-black/40 ${dragging ? 'cursor-grabbing' : zoom > 1 ? 'cursor-grab' : 'cursor-zoom-in'}`}
+      onDoubleClick={event => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (zoom > 1) return reset();
+        const anchor = {x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2};
+        const value = 2.5;
+        const next = {x: anchor.x - anchor.x * value, y: anchor.y - anchor.y * value};
+        setZoom(value); setPan(clamp(next, value));
+      }}
+      onPointerDown={event => {
+        if (zoom <= 1) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        drag.current = {x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y};
+        setDragging(true);
+      }}
+      onPointerMove={event => {
+        const start = drag.current;
+        if (!start) return;
+        setPan(clamp({x: start.panX + event.clientX - start.x, y: start.panY + event.clientY - start.y}, zoom));
+      }}
+      onPointerUp={event => {
+        if (!drag.current) return;
+        drag.current = null; setDragging(false);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={() => {drag.current = null; setDragging(false);}}
+    >
+      <img
+        alt={alt}
+        src={src}
+        draggable={false}
+        onLoad={event => setNatural({w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight})}
+        style={{transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center', width: box.w || '100%', height: box.h || 'auto'}}
+        className="max-w-none select-none"
+      />
+    </div>
+  </div>;
+}
+
 function ExamImageViewer({references, onClose}: {references: string[] | null; onClose: () => void}) {
   const [index, setIndex] = useState(0), [url, setUrl] = useState(''), [error, setError] = useState('');
-  const [full, setFull] = useState(false), [actual, setActual] = useState(false);
-  const [natural, setNatural] = useState({w: 0, h: 0});
+  const [full, setFull] = useState(false);
   const fullRoot = useRef<HTMLDivElement | null>(null), fullClose = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {setIndex(0); setFull(false); setActual(false);}, [references]);
+  useEffect(() => {setIndex(0); setFull(false);}, [references]);
   // 走同一个模态栈：Escape 只关最上面这层，详情对话框留在后面。
   useModalFocus(fullRoot, full, () => setFull(false), fullClose);
   useEffect(() => {
@@ -607,18 +717,11 @@ function ExamImageViewer({references, onClose}: {references: string[] | null; on
           <span>{t('第 {index} / {total} 张 · 已压缩保存', { index: index + 1, total: references?.length || 0 })}</span>
           <Button size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)}>{t('上一张')}</Button>
           <Button size="sm" variant="outline" disabled={index >= (references?.length || 0) - 1} onClick={() => setIndex(index + 1)}>{t('下一张')}</Button>
-          <Button size="sm" variant="ghost" onClick={() => setActual(value => !value)}>{actual ? t('适应窗口') : t('实际大小')}</Button>
-          <span className="ml-auto text-[11px] text-white/55">{t('按原始比例显示，可滚动查看')}</span>
+          <span className="ml-auto text-[11px] text-white/55">{t('滚轮缩放 · 拖动平移 · 双击切换')}</span>
           <button ref={fullClose} type="button" aria-label={t('关闭预览')} title={t('关闭预览')} onClick={() => setFull(false)} className="ml-1 rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"><X size={16} /></button>
         </div>
-        <div className={`min-h-0 flex-1 ${actual ? 'overflow-auto' : 'overflow-hidden'} p-3`}>
-          <img
-            alt={t('原题截图 {index}', { index: index + 1 })}
-            src={url}
-            onLoad={event => setNatural({w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight})}
-            style={actual && natural.w ? {width: natural.w, height: natural.h} : undefined}
-            className={actual ? 'mx-auto block max-w-none' : 'mx-auto block max-h-[78vh] max-w-[calc(92vw-24px)] object-contain'}
-          />
+        <div className="min-h-0 flex-1 p-3">
+          <ZoomableImage key={url} src={url} alt={t('原题截图 {index}', { index: index + 1 })} />
         </div>
         </div>
       </div>,
