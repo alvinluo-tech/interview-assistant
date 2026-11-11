@@ -115,6 +115,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
   const [columnRef,columnWidth]=useElementWidth<HTMLDivElement>();
   const compact=columnWidth>0&&columnWidth<620;
   const cramped=columnWidth>0&&columnWidth<500;
+  const [preview,setPreview]=useState<string|null>(null);
   const [approval,setApproval]=useState<FreeChatApprovalRequest|null>(null);
   const [receipt,setReceipt]=useState('');
   const approvalRef=useRef<FreeChatApprovalRequest|null>(null);approvalRef.current=approval;
@@ -301,7 +302,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
       <DeleteButton onDelete={onDelete} onError={setError}/>
       {speaking&&<button className="text-xs text-primary" onClick={()=>speaker.stop()}>{t('停止播放')}</button>}
     </div>
-    <ThreadPrimitive.Viewport className={`min-h-0 flex-1 overflow-y-auto ${compact?'px-3':'px-5'} py-6`}>
+    <div className="relative flex min-h-0 flex-1"><ThreadPrimitive.Viewport className={`min-h-0 flex-1 overflow-y-auto ${compact?'px-3':'px-5'} py-6`}>
       <FileIndexContext.Provider value={attachmentIndex}><StampContext.Provider value={stamps}><div className={`mx-auto flex min-h-full w-full flex-col ${compact?'':'max-w-2xl'}`}><ThreadPrimitive.Empty><div className="flex flex-1 flex-col justify-center py-10">
           <p className="text-[11px] font-medium tracking-[0.18em] text-primary">{t('MIANXU · 对话')}</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight">{t('今天想聊点什么？')}</h2>
@@ -312,11 +313,12 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
         <ScrollToBottomButton/>
         {error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
       </div></StampContext.Provider></FileIndexContext.Provider>
-    </ThreadPrimitive.Viewport>
-    <div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
+    </ThreadPrimitive.Viewport><ConversationRail/></div>
+    <div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} onPreview={setPreview} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
+    {preview&&<ImageLightbox src={preview} onClose={()=>setPreview(null)}/>}
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
   </ThreadPrimitive.Root>
-    {roomy&&(resourcesOpen?<><ResizeHandle label={t('调整资源栏宽度')} dragging={resources.dragging} onPointerDown={resources.onPointerDown}/><ResourcePanel width={resources.width} files={files} pending={attachments} onClose={()=>setResourcesOpen(false)} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/></>:<button type="button" onClick={()=>setResourcesOpen(true)} title={t('展开资源栏')} aria-label={t('展开资源栏')} className="flex w-8 shrink-0 items-center justify-center border-l bg-muted/20 text-muted-foreground transition hover:bg-muted hover:text-foreground"><PanelRightOpen size={15}/></button>)}
+    {roomy&&(resourcesOpen?<><ResizeHandle label={t('调整资源栏宽度')} dragging={resources.dragging} onPointerDown={resources.onPointerDown}/><ResourcePanel width={resources.width} onPreview={setPreview} files={files} pending={attachments} onClose={()=>setResourcesOpen(false)} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/></>:<button type="button" onClick={()=>setResourcesOpen(true)} title={t('展开资源栏')} aria-label={t('展开资源栏')} className="flex w-8 shrink-0 items-center justify-center border-l bg-muted/20 text-muted-foreground transition hover:bg-muted hover:text-foreground"><PanelRightOpen size={15}/></button>)}
   </div></AssistantRuntimeProvider>;
 }
 
@@ -470,6 +472,78 @@ function ScrollToBottomButton() {
   return <div ref={holder} className="sticky bottom-2 flex justify-center">{away&&<button type="button" onClick={jump} aria-label={t('滚动到底部')} title={t('滚动到底部')} className="flex size-9 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-md transition hover:text-foreground"><ArrowDown size={16}/></button>}</div>;
 }
 
+function messagePreview(message: ThreadMessage): string {
+  return message.content.filter(part => part.type === 'text').map(part => part.text).join('').replace(/\s+/g, ' ').trim();
+}
+
+/** Right-edge outline: one tick per message, hover previews it, click scrolls to it. */
+function ConversationRail() {
+  const messages = useAuiState(state => state.thread.messages);
+  const track = useRef<HTMLDivElement | null>(null);
+  const [active, setActive] = useState('');
+  const [hover, setHover] = useState<{ id: string; top: number } | null>(null);
+  const visible = useMemo(() => messages.filter(message => (message.role === 'user' || message.role === 'assistant') && messagePreview(message)), [messages]);
+  useEffect(() => {
+    const node = track.current;
+    if (!node) return;
+    const scroller = scrollHost(node);
+    if (!scroller) return;
+    const update = () => {
+      const frame = scroller.getBoundingClientRect();
+      const middle = frame.top + frame.height / 2;
+      let best = '', distance = Infinity;
+      for (const item of scroller.querySelectorAll('[data-message-id]')) {
+        const box = item.getBoundingClientRect();
+        const gap = Math.abs(box.top + box.height / 2 - middle);
+        if (gap < distance) { distance = gap; best = (item as HTMLElement).dataset.messageId || ''; }
+      }
+      setActive(best);
+    };
+    update();
+    scroller.addEventListener('scroll', update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    const content = scroller.firstElementChild;
+    if (content) observer.observe(content);
+    return () => { scroller.removeEventListener('scroll', update); observer.disconnect(); };
+  }, [visible.length]);
+  if (visible.length < 3) return null;
+  const hovered = hover ? visible.find(message => message.id === hover.id) : null;
+  const jump = (messageId: string) => {
+    const scroller = scrollHost(track.current);
+    const target = scroller?.querySelector(`[data-message-id="${messageId}"]`) as HTMLElement | null;
+    if (!scroller || !target) return;
+    const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
+    scroller.scrollTo({ top, behavior: 'smooth' });
+  };
+  return <div ref={track} style={{gap:visible.length>18?3:6}} className="group/rail absolute right-1 top-1/2 z-10 hidden max-h-[70vh] -translate-y-1/2 flex-col items-end overflow-hidden py-2 pr-0.5 md:flex">
+    {visible.map(message => <button
+      key={message.id}
+      type="button"
+      aria-label={t('跳转到这条消息')}
+      onClick={() => jump(message.id)}
+      onMouseEnter={event => setHover({ id: message.id, top: event.currentTarget.offsetTop })}
+      onFocus={event => setHover({ id: message.id, top: event.currentTarget.offsetTop })}
+      onMouseLeave={() => setHover(current => current?.id === message.id ? null : current)}
+      onBlur={() => setHover(current => current?.id === message.id ? null : current)}
+      className={`h-[2px] shrink-0 rounded-full transition-all ${message.id === active ? 'w-4 bg-foreground/80' : message.role === 'user' ? 'w-2.5 bg-primary/45 hover:w-4' : 'w-2.5 bg-muted-foreground/35 hover:w-4 hover:bg-foreground/60'}`}
+    />)}
+    {hovered && hover && <div role="tooltip" style={{ top: hover.top }} className="pointer-events-none absolute right-5 -translate-y-1/2 w-72 rounded-xl border bg-[hsl(var(--popover))] p-3 text-xs leading-5 shadow-xl">
+      <p className="mb-1 text-[11px] font-medium text-muted-foreground">{hovered.role === 'user' ? t('你') : t('助手')}</p>
+      <p className="line-clamp-4 text-foreground">{messagePreview(hovered)}</p>
+    </div>}
+  </div>;
+}
+
+function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  const root = useRef<HTMLDivElement | null>(null);
+  useModalFocus(root, true, onClose);
+  return createPortal(<div ref={root} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('图片预览')} onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-8 backdrop-blur-sm">
+    <img src={src} alt={t('图片预览')} onClick={event => event.stopPropagation()} className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"/>
+    <button type="button" onClick={onClose} aria-label={t('关闭预览')} title={t('关闭预览')} className="absolute right-4 top-4 grid size-9 place-items-center rounded-full bg-white/15 text-white transition hover:bg-white/25"><X size={18}/></button>
+  </div>, document.body);
+}
+
 function StepRow({step}:{step:FreeChatStep}) {
   const running=step.status==='running';
   return <details className="group">
@@ -551,7 +625,7 @@ function ApprovalCard({request,onDecide}:{request:FreeChatApprovalRequest;onDeci
   </div>;
 }
 
-function Composer({compact,settings,model,onModelChange,permission,onPermissionChange,askBeforeRead,onAskBeforeReadChange,attachments,onAttach,onDetach,destination,setError,speakerStop,inputOwner,blocked,onInputBusy}:{compact:boolean;settings:AiSettings;model:AiRoute|null;onModelChange:(next:AiRoute|null)=>void;permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;askBeforeRead:boolean;onAskBeforeReadChange:(value:boolean)=>void;attachments:ChatAttachment[];onAttach:(files:ChatAttachment[])=>void;onDetach:(id:string)=>void;destination:string;setError:(v:string)=>void;speakerStop:()=>void;inputOwner:RefObject<'call'|'manual'|null>;blocked:boolean;onInputBusy:(busy:boolean)=>void}) {
+function Composer({compact,onPreview,settings,model,onModelChange,permission,onPermissionChange,askBeforeRead,onAskBeforeReadChange,attachments,onAttach,onDetach,destination,setError,speakerStop,inputOwner,blocked,onInputBusy}:{compact:boolean;onPreview:(src:string)=>void;settings:AiSettings;model:AiRoute|null;onModelChange:(next:AiRoute|null)=>void;permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;askBeforeRead:boolean;onAskBeforeReadChange:(value:boolean)=>void;attachments:ChatAttachment[];onAttach:(files:ChatAttachment[])=>void;onDetach:(id:string)=>void;destination:string;setError:(v:string)=>void;speakerStop:()=>void;inputOwner:RefObject<'call'|'manual'|null>;blocked:boolean;onInputBusy:(busy:boolean)=>void}) {
   const {allowLocal,categories}=permission;
   const composer=unstable_useComposerInput();
   const currentComposer=useRef(composer);currentComposer.current=composer;
@@ -606,7 +680,7 @@ function Composer({compact,settings,model,onModelChange,permission,onPermissionC
     className={`rounded-2xl border bg-card shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-ring/20 ${dragging?'border-primary ring-2 ring-primary/20':''}`}>
     {(attachments.length>0||parsing>0)&&<div className="flex flex-wrap items-center gap-1.5 px-3 pt-2">
       {attachments.map(item=>item.dataUrl
-        ?<div key={item.id} className="relative size-16 shrink-0 overflow-hidden rounded-xl border bg-muted"><img src={item.dataUrl} alt={item.name} title={`${item.name} · ${formatFileSize(item.size)}`} className="size-full object-cover"/><button type="button" onClick={()=>onDetach(item.id)} aria-label={t('移除附件')} title={t('移除附件')} className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-foreground/70 text-background shadow-sm transition hover:bg-destructive"><X size={11}/></button></div>
+        ?<div key={item.id} className="relative size-16 shrink-0 overflow-hidden rounded-xl border bg-muted"><button type="button" onClick={()=>onPreview(item.dataUrl!)} aria-label={t('图片预览')} title={`${item.name} · ${formatFileSize(item.size)}`} className="size-full cursor-zoom-in"><img src={item.dataUrl} alt={item.name} className="size-full object-cover"/></button><button type="button" onClick={()=>onDetach(item.id)} aria-label={t('移除附件')} title={t('移除附件')} className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-foreground/70 text-background shadow-sm transition hover:bg-destructive"><X size={11}/></button></div>
         :<span key={item.id} className="flex max-w-[15rem] items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate" title={`${item.name} · ${formatFileSize(item.size)}`}>{item.name}</span><button type="button" onClick={()=>onDetach(item.id)} aria-label={t('移除附件')} title={t('移除附件')} className="rounded p-0.5 text-muted-foreground hover:text-destructive"><X size={11}/></button></span>)}
       {parsing>0&&<span className="flex items-center gap-1.5 rounded-lg border border-dashed px-2 py-1 text-[11px] text-muted-foreground"><LoaderCircle size={12} className="animate-spin"/>{t('正在解析…')}</span>}
     </div>}
@@ -637,11 +711,11 @@ function Composer({compact,settings,model,onModelChange,permission,onPermissionC
   </ComposerPrimitive.Root>;
 }
 
-function ResourcePanel({width,files,pending,onQuote,onRemove,onClose}:{width:number;files:ParsedFile[];pending:ChatAttachment[];onQuote:(file:ParsedFile)=>void;onRemove:(id:string)=>void;onClose:()=>void}) {
+function ResourcePanel({width,onPreview,files,pending,onQuote,onRemove,onClose}:{width:number;onPreview:(src:string)=>void;files:ParsedFile[];pending:ChatAttachment[];onQuote:(file:ParsedFile)=>void;onRemove:(id:string)=>void;onClose:()=>void}) {
   return <aside style={{width}} className="flex shrink-0 flex-col bg-muted/10">
     <div className="flex items-start gap-2 border-b px-3 py-3"><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{t('对话资源')}</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('文件会解析成文字随消息发送，原文件不上传，也不写入磁盘。')}</p></div><button type="button" onClick={onClose} title={t('收起资源栏')} aria-label={t('收起资源栏')} className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-muted"><PanelRightClose size={14}/></button></div>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-      {pending.length>0&&<div className="space-y-1.5"><p className="text-[11px] font-medium text-muted-foreground">{t('待发送（{count}）',{count:pending.length})}</p>{pending.map(item=><div key={item.id} className="flex items-center gap-1.5 rounded-lg border bg-background px-2 py-1.5 text-[11px]">{item.dataUrl?<img src={item.dataUrl} alt={item.name} className="size-7 shrink-0 rounded object-cover"/>:item.kind==='image'?<ImageIcon size={12}/>:<FileText size={12}/>}<span className="min-w-0 flex-1 truncate" title={`${item.name} · ${formatFileSize(item.size)}`}>{item.name}</span><button type="button" onClick={()=>onRemove(item.id)} aria-label={t('移除附件')} className="rounded p-0.5 text-muted-foreground hover:text-destructive"><X size={11}/></button></div>)}</div>}
+      {pending.length>0&&<div className="space-y-1.5"><p className="text-[11px] font-medium text-muted-foreground">{t('待发送（{count}）',{count:pending.length})}</p>{pending.map(item=><div key={item.id} className="flex items-center gap-1.5 rounded-lg border bg-background px-2 py-1.5 text-[11px]">{item.dataUrl?<button type="button" onClick={()=>onPreview(item.dataUrl!)} aria-label={t('图片预览')} className="shrink-0 cursor-zoom-in"><img src={item.dataUrl} alt={item.name} className="size-7 rounded object-cover"/></button>:item.kind==='image'?<ImageIcon size={12}/>:<FileText size={12}/>}<span className="min-w-0 flex-1 truncate" title={`${item.name} · ${formatFileSize(item.size)}`}>{item.name}</span><button type="button" onClick={()=>onRemove(item.id)} aria-label={t('移除附件')} className="rounded p-0.5 text-muted-foreground hover:text-destructive"><X size={11}/></button></div>)}</div>}
       <div className="space-y-1.5"><p className="text-[11px] font-medium text-muted-foreground">{t('已引用（{count}）',{count:files.length})}</p>{files.map(file=><div key={file.name} className="rounded-lg border bg-background px-2 py-1.5 text-[11px]"><div className="flex items-center gap-1.5"><FileText size={12}/><span className="min-w-0 flex-1 truncate" title={file.name}>{file.name}</span></div><div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground"><span>{file.image ? t('图片') : t('{count} 字',{count:file.chars})}</span><button type="button" onClick={()=>onQuote(file)} className="rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground">{t('再次引用')}</button></div></div>)}{files.length===0&&<p className="py-6 text-center text-[11px] leading-5 text-muted-foreground">{t('还没有资源。点输入框左边的回形针上传 PDF、图片或文本。')}</p>}</div>
     </div>
   </aside>;
