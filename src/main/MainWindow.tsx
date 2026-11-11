@@ -186,8 +186,8 @@ export function MainWindow() {
           onFeedback={() => setFeedbackOpen(true)}
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-            <div className={`mx-auto w-full ${section==='chat'?'max-w-none':'max-w-3xl'} px-7 py-7`}>
+          <div className={`flex-1 ${section === 'chat' ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'}`}>
+            <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : 'max-w-3xl px-7 py-7'}`}>
               {showOnboarding ? (
                 <Onboarding onFinish={finishOnboarding} />
               ) : (

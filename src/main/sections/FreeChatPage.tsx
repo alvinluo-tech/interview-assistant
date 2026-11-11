@@ -58,6 +58,7 @@ export function FreeChatPage() {
     const needle=query.trim().toLowerCase();
     return needle?sessions.filter(session=>session.title.toLowerCase().includes(needle)):sessions;
   },[sessions,query]);
+  const roomy=useAtLeast(1180);
   const commitRename=async(session:FreeChatSession)=>{
     const title=draft.trim();
     setRenaming(null);
@@ -69,8 +70,8 @@ export function FreeChatPage() {
     try{await deleteFreeChat(session.id);if(session.id===id)openSession(crypto.randomUUID());}
     catch{showToast({type:'error',title:t('删除失败')});}
   };
-  return <div className="-mx-7 -my-7 flex h-[calc(100vh-6rem)] min-h-[520px] bg-background">
-    <aside className={`hidden shrink-0 flex-col border-r bg-muted/20 md:flex ${collapsed?'w-14':'w-60'}`}>
+  return <div className="flex h-full min-h-0 w-full bg-background">
+    <aside className={`hidden shrink-0 flex-col border-r bg-muted/20 md:flex ${collapsed?'w-14':roomy?'w-60':'w-52'}`}>
       {collapsed?<div className="flex flex-col items-center gap-1 p-2">
         <button onClick={()=>setCollapsed(false)} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>
         <button onClick={()=>openSession(crypto.randomUUID())} aria-label={t('新对话')} title={t('新对话')} className="rounded-lg border bg-background p-2 shadow-xs hover:bg-muted"><Plus size={16}/></button>
@@ -108,6 +109,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
   const [speak,setSpeak]=useState(false),[speaking,setSpeaking]=useState(false),[tool,setTool]=useState(''),[error,setError]=useState('');
   const [model,setModel]=useState<AiRoute|null>(initialModel);
   const modelRef=useRef<AiRoute|null>(initialModel);modelRef.current=model;
+  const roomy=useAtLeast(1180);
   const [approval,setApproval]=useState<FreeChatApprovalRequest|null>(null);
   const [receipt,setReceipt]=useState('');
   const approvalRef=useRef<FreeChatApprovalRequest|null>(null);approvalRef.current=approval;
@@ -288,14 +290,14 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
   return <AssistantRuntimeProvider runtime={runtime}><div className="flex min-w-0 flex-1"><ThreadPrimitive.Root inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
-    <div className="flex items-center gap-3 border-b px-6 py-4"><div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{t('自由对话')}</div><div className="text-xs text-muted-foreground">{t('文字、语音与本地资料')}</div></div>
+    <div className="flex items-center gap-3 border-b px-6 py-4"><div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div><div className="truncate text-xs text-muted-foreground">{t('文字、语音与本地资料')}</div></div>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?t('关闭语音回复'):t('开启语音回复')} title={speak?t('关闭语音回复'):t('开启语音回复')}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
       <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError(t('请先在「设置 → AI 服务」配置对话模型和语音转写模型。'));return;}inputOwner.current='call';voiceHistory.current=savedMessages(runtime.thread.getState().messages);voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
       <DeleteButton onDelete={onDelete} onError={setError}/>
       {speaking&&<button className="text-xs text-primary" onClick={()=>speaker.stop()}>{t('停止播放')}</button>}
     </div>
     <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-      <FileIndexContext.Provider value={attachmentIndex}><StampContext.Provider value={stamps}><div className="mx-auto max-w-2xl"><ThreadPrimitive.Empty><div className="flex min-h-[18rem] flex-col justify-center">
+      <FileIndexContext.Provider value={attachmentIndex}><StampContext.Provider value={stamps}><div className="mx-auto flex min-h-full w-full max-w-2xl flex-col"><ThreadPrimitive.Empty><div className="flex flex-1 flex-col justify-center py-10">
           <p className="text-[11px] font-medium tracking-[0.18em] text-primary">{t('MIANXU · 对话')}</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight">{t('今天想聊点什么？')}</h2>
           <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{t('可以问我知识、梳理思路，也可以开启本地资料查询，了解自己的岗位和面试记录。')}</p>
@@ -309,7 +311,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
     <div className="mx-auto w-full max-w-2xl px-5 pb-4">{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
   </ThreadPrimitive.Root>
-    {resourcesOpen?<ResourcePanel files={files} pending={attachments} onClose={()=>setResourcesOpen(false)} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/>:<button type="button" onClick={()=>setResourcesOpen(true)} title={t('展开资源栏')} aria-label={t('展开资源栏')} className="flex w-8 shrink-0 items-center justify-center border-l bg-muted/20 text-muted-foreground transition hover:bg-muted hover:text-foreground"><PanelRightOpen size={15}/></button>}
+    {roomy&&(resourcesOpen?<ResourcePanel files={files} pending={attachments} onClose={()=>setResourcesOpen(false)} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/>:<button type="button" onClick={()=>setResourcesOpen(true)} title={t('展开资源栏')} aria-label={t('展开资源栏')} className="flex w-8 shrink-0 items-center justify-center border-l bg-muted/20 text-muted-foreground transition hover:bg-muted hover:text-foreground"><PanelRightOpen size={15}/></button>)}
   </div></AssistantRuntimeProvider>;
 }
 
@@ -345,6 +347,19 @@ export function VoiceCallDialog({phase,messages,level,tool,onStop,onInterrupt,lo
 function DeleteButton({onDelete,onError}:{onDelete:()=>Promise<void>;onError:(message:string)=>void}) {
   const running=useAuiState(state=>state.thread.isRunning);
   return <button disabled={running} onClick={()=>void onDelete().catch(e=>onError(t('删除失败：{message}',{message:String((e as Error).message || e)})))} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted disabled:opacity-40" aria-label={t('删除当前对话')} title={t('删除当前对话')}><Trash2 size={16}/></button>;
+}
+
+/** Rooms with three fixed columns leave the thread too narrow below this width. */
+function useAtLeast(width:number) {
+  const [enough,setEnough]=useState(()=>window.innerWidth>=width);
+  useEffect(()=>{
+    const query=window.matchMedia(`(min-width:${width}px)`);
+    const update=()=>setEnough(query.matches);
+    update();
+    query.addEventListener('change',update);
+    return ()=>query.removeEventListener('change',update);
+  },[width]);
+  return enough;
 }
 
 const FileIndexContext=createContext<Record<string,ParsedFile[]>>({});
@@ -534,8 +549,9 @@ function Composer({settings,model,onModelChange,permission,onPermissionChange,as
     </div>}
     <ComposerPrimitive.Input rows={2} onPaste={event=>{const files=event.clipboardData?.files;if(files&&files.length){event.preventDefault();void attach(files);}}} placeholder={t('输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片')} className="max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-6 outline-none placeholder:text-muted-foreground"/>
     <div className="flex items-center gap-1.5 px-2 pb-2">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
       <div className="relative" ref={permRef}>
-        <button type="button" onClick={()=>setPermOpen(value=>!value)} aria-expanded={permOpen} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition ${allowLocal?'border-primary/40 bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted'}`}><ShieldQuestion size={13}/>{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}<ChevronDown size={12}/></button>
+        <button type="button" onClick={()=>setPermOpen(value=>!value)} aria-expanded={permOpen} aria-label={allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')} title={allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition ${allowLocal?'border-primary/40 bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted'}`}><ShieldQuestion size={13}/><span className="hidden lg:inline">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span><ChevronDown size={12}/></button>
         {permOpen&&<div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border bg-[hsl(var(--popover))] p-3 shadow-xl">
           <label className="flex items-center justify-between gap-3 text-xs font-medium"><span>{t('允许查询本地资料')}</span><input type="checkbox" checked={allowLocal} disabled={blocked||categories.length===0} onChange={event=>onPermissionChange({...permission,allowLocal:event.target.checked})}/></label>
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">{LOCAL_DATA_CATEGORIES.map(category=><label key={category} className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><input type="checkbox" checked={categories.includes(category)} disabled={blocked} onChange={event=>{const selected=event.target.checked?[...categories,category]:categories.filter(item=>item!==category);onPermissionChange({allowLocal:allowLocal&&selected.length>0,categories:selected});}}/>{t(LOCAL_DATA_LABELS[category])}</label>)}</div>
@@ -547,16 +563,19 @@ function Composer({settings,model,onModelChange,permission,onPermissionChange,as
       <input ref={fileInput} type="file" multiple accept={CHAT_ATTACH_ACCEPT} className="hidden" onChange={event=>void attach(event.target.files)}/>
       <button type="button" onClick={()=>fileInput.current?.click()} disabled={blocked||parsing>0} className="shrink-0 rounded-lg p-2 text-muted-foreground transition hover:bg-muted disabled:opacity-40" aria-label={t('添加附件')} title={t('添加附件：PDF、图片、文本')}><Paperclip size={17}/></button>
       <span className="min-w-0 flex-1 truncate px-1 text-[11px] text-muted-foreground">{recording?t('正在录音，再点一次结束'):busy?t('正在识别…'):''}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
       <ModelPicker settings={settings} value={model} onChange={onModelChange} placement="up"/>
       <button type="button" onClick={()=>void record()} disabled={busy||blocked||running} className={`shrink-0 rounded-lg p-2 transition ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?t('结束录音'):t('语音输入')} title={recording?t('结束录音'):t('语音输入')}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
       <ComposerPrimitive.Cancel className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={t('停止生成')}><Square size={16}/></ComposerPrimitive.Cancel>
       <ComposerPrimitive.Send disabled={busy||recording||blocked} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition disabled:opacity-40" aria-label={t('发送')}><ArrowUp size={16}/></ComposerPrimitive.Send>
+      </div>
     </div>
   </ComposerPrimitive.Root>;
 }
 
 function ResourcePanel({files,pending,onQuote,onRemove,onClose}:{files:ParsedFile[];pending:ChatAttachment[];onQuote:(file:ParsedFile)=>void;onRemove:(id:string)=>void;onClose:()=>void}) {
-  return <aside className="hidden w-72 shrink-0 flex-col border-l bg-muted/10 lg:flex">
+  return <aside className="flex w-72 shrink-0 flex-col border-l bg-muted/10">
     <div className="flex items-start gap-2 border-b px-3 py-3"><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{t('对话资源')}</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('文件会解析成文字随消息发送，原文件不上传，也不写入磁盘。')}</p></div><button type="button" onClick={onClose} title={t('收起资源栏')} aria-label={t('收起资源栏')} className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-muted"><PanelRightClose size={14}/></button></div>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
       {pending.length>0&&<div className="space-y-1.5"><p className="text-[11px] font-medium text-muted-foreground">{t('待发送（{count}）',{count:pending.length})}</p>{pending.map(item=><div key={item.id} className="flex items-center gap-1.5 rounded-lg border bg-background px-2 py-1.5 text-[11px]">{item.kind==='image'?<ImageIcon size={12}/>:<FileText size={12}/>}<span className="min-w-0 flex-1 truncate" title={`${item.name} · ${formatFileSize(item.size)}`}>{item.name}</span><button type="button" onClick={()=>onRemove(item.id)} aria-label={t('移除附件')} className="rounded p-0.5 text-muted-foreground hover:text-destructive"><X size={11}/></button></div>)}</div>}
