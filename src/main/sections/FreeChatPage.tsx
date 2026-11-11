@@ -302,7 +302,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
       <DeleteButton onDelete={onDelete} onError={setError}/>
       {speaking&&<button className="text-xs text-primary" onClick={()=>speaker.stop()}>{t('停止播放')}</button>}
     </div>
-    <div className="relative flex min-h-0 flex-1"><ThreadPrimitive.Viewport className={`min-h-0 flex-1 overflow-y-auto ${compact?'px-3':'px-5'} py-6`}>
+    <div className="relative flex min-h-0 flex-1"><ThreadPrimitive.Viewport className={`chat-scroll min-h-0 flex-1 overflow-y-auto ${compact?'px-3':'px-5'} py-6`}>
       <FileIndexContext.Provider value={attachmentIndex}><StampContext.Provider value={stamps}><div className={`mx-auto flex min-h-full w-full flex-col ${compact?'':'max-w-2xl'}`}><ThreadPrimitive.Empty><div className="flex flex-1 flex-col justify-center py-10">
           <p className="text-[11px] font-medium tracking-[0.18em] text-primary">{t('MIANXU · 对话')}</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight">{t('今天想聊点什么？')}</h2>
@@ -313,12 +313,12 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
         <ScrollToBottomButton/>
         {error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
       </div></StampContext.Provider></FileIndexContext.Provider>
-    </ThreadPrimitive.Viewport><ConversationRail/></div>
+    </ThreadPrimitive.Viewport><ConversationRail visible={!roomy || !resourcesOpen}/></div>
     <div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} onPreview={setPreview} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {preview&&<ImageLightbox src={preview} onClose={()=>setPreview(null)}/>}
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
   </ThreadPrimitive.Root>
-    {roomy&&(resourcesOpen?<><ResizeHandle label={t('调整资源栏宽度')} dragging={resources.dragging} onPointerDown={resources.onPointerDown}/><ResourcePanel width={resources.width} onPreview={setPreview} files={files} pending={attachments} onClose={()=>setResourcesOpen(false)} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/></>:<button type="button" onClick={()=>setResourcesOpen(true)} title={t('展开资源栏')} aria-label={t('展开资源栏')} className="flex w-8 shrink-0 items-center justify-center border-l bg-muted/20 text-muted-foreground transition hover:bg-muted hover:text-foreground"><PanelRightOpen size={15}/></button>)}
+    {roomy&&(resourcesOpen?<><ResizeHandle border label={t('调整资源栏宽度')} dragging={resources.dragging} onPointerDown={resources.onPointerDown}/><ResourcePanel width={resources.width} onPreview={setPreview} files={files} pending={attachments} onClose={()=>setResourcesOpen(false)} onQuote={file=>setAttachments(list=>list.some(item=>item.name===file.name)?list:[...list,{id:`att-${Date.now().toString(36)}`,name:file.name,size:0,kind:chatFileKind(file.name) || 'text',text:file.body}])} onRemove={target=>setAttachments(list=>list.filter(item=>item.id!==target))}/></>:<button type="button" onClick={()=>setResourcesOpen(true)} title={t('展开资源栏')} aria-label={t('展开资源栏')} className="flex w-8 shrink-0 items-center justify-center border-l bg-muted/20 text-muted-foreground transition hover:bg-muted hover:text-foreground"><PanelRightOpen size={15}/></button>)}
   </div></AssistantRuntimeProvider>;
 }
 
@@ -402,15 +402,17 @@ function usePanelWidth(key: string, fallback: number, min: number, max: number, 
   return { width, dragging, onPointerDown };
 }
 
-function ResizeHandle({ label, dragging, onPointerDown }: { label: string; dragging: boolean; onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void }) {
+function ResizeHandle({ label, dragging, onPointerDown, border = false }: { label: string; dragging: boolean; onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void; border?: boolean }) {
   return <div
     role="separator"
     aria-orientation="vertical"
     aria-label={label}
     title={label}
     onPointerDown={onPointerDown}
-    className={`relative w-1.5 shrink-0 cursor-col-resize bg-border/70 transition-colors hover:bg-primary/50 ${dragging ? 'bg-primary/60' : ''}`}
-  />;
+    className="group/handle relative flex w-2 shrink-0 cursor-col-resize items-stretch justify-center"
+  >
+    <span className={`my-0 w-px transition-colors ${dragging ? 'bg-primary/70' : border ? 'bg-border' : 'bg-transparent'} ${dragging ? '' : 'group-hover/handle:bg-primary/50'}`}/>
+  </div>;
 }
 
 function useAtLeast(width:number) {
@@ -477,12 +479,35 @@ function messagePreview(message: ThreadMessage): string {
 }
 
 /** Right-edge outline: one tick per message, hover previews it, click scrolls to it. */
-function ConversationRail() {
+function clipPlain(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`>#]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function ConversationRail({ visible }: { visible: boolean }) {
   const messages = useAuiState(state => state.thread.messages);
   const track = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState('');
-  const [hover, setHover] = useState<{ id: string; top: number } | null>(null);
-  const visible = useMemo(() => messages.filter(message => (message.role === 'user' || message.role === 'assistant') && messagePreview(message)), [messages]);
+  const [hover, setHover] = useState<{ index: number; top: number } | null>(null);
+  const pairs = useMemo(() => {
+    const list: { id: string; question: string; answer: string; messages: Set<string> }[] = [];
+    for (const message of messages) {
+      if (message.role !== 'user' && message.role !== 'assistant') continue;
+      const text = messagePreview(message);
+      if (!text) continue;
+      if (message.role === 'user') { list.push({ id: message.id, question: text, answer: '', messages: new Set([message.id]) }); continue; }
+      const last = list[list.length - 1];
+      if (!last) { list.push({ id: message.id, question: '', answer: text, messages: new Set([message.id]) }); continue; }
+      last.answer = last.answer ? `${last.answer} ${text}` : text;
+      last.messages.add(message.id);
+    }
+    return list;
+  }, [messages]);
   useEffect(() => {
     const node = track.current;
     if (!node) return;
@@ -506,9 +531,10 @@ function ConversationRail() {
     const content = scroller.firstElementChild;
     if (content) observer.observe(content);
     return () => { scroller.removeEventListener('scroll', update); observer.disconnect(); };
-  }, [visible.length]);
-  if (visible.length < 3) return null;
-  const hovered = hover ? visible.find(message => message.id === hover.id) : null;
+  }, [pairs.length]);
+  if (!visible || pairs.length < 2) return null;
+  const activeIndex = pairs.findIndex(pair => pair.messages.has(active));
+  const hovered = hover ? pairs[hover.index] : null;
   const jump = (messageId: string) => {
     const scroller = scrollHost(track.current);
     const target = scroller?.querySelector(`[data-message-id="${messageId}"]`) as HTMLElement | null;
@@ -516,21 +542,24 @@ function ConversationRail() {
     const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
     scroller.scrollTo({ top, behavior: 'smooth' });
   };
-  return <div ref={track} style={{gap:visible.length>18?3:6}} className="group/rail absolute right-1 top-1/2 z-10 hidden max-h-[70vh] -translate-y-1/2 flex-col items-end overflow-hidden py-2 pr-0.5 md:flex">
-    {visible.map(message => <button
-      key={message.id}
+  const gap = Math.max(2, Math.min(6, Math.floor((400 - pairs.length * 16) / Math.max(1, pairs.length - 1))));
+  return <div ref={track} style={{ gap }} className="group/rail absolute right-2.5 top-1/2 z-10 hidden h-[400px] max-h-[60vh] -translate-y-1/2 flex-col items-center justify-center md:flex">
+    {pairs.map((pair, index) => <button
+      key={pair.id}
       type="button"
       aria-label={t('跳转到这条消息')}
-      onClick={() => jump(message.id)}
-      onMouseEnter={event => setHover({ id: message.id, top: event.currentTarget.offsetTop })}
-      onFocus={event => setHover({ id: message.id, top: event.currentTarget.offsetTop })}
-      onMouseLeave={() => setHover(current => current?.id === message.id ? null : current)}
-      onBlur={() => setHover(current => current?.id === message.id ? null : current)}
-      className={`h-[2px] shrink-0 rounded-full transition-all ${message.id === active ? 'w-4 bg-foreground/80' : message.role === 'user' ? 'w-2.5 bg-primary/45 hover:w-4' : 'w-2.5 bg-muted-foreground/35 hover:w-4 hover:bg-foreground/60'}`}
-    />)}
-    {hovered && hover && <div role="tooltip" style={{ top: hover.top }} className="pointer-events-none absolute right-5 -translate-y-1/2 w-72 rounded-xl border bg-[hsl(var(--popover))] p-3 text-xs leading-5 shadow-xl">
-      <p className="mb-1 text-[11px] font-medium text-muted-foreground">{hovered.role === 'user' ? t('你') : t('助手')}</p>
-      <p className="line-clamp-4 text-foreground">{messagePreview(hovered)}</p>
+      onClick={() => jump(pair.id)}
+      onMouseEnter={event => setHover({ index, top: event.currentTarget.offsetTop })}
+      onFocus={event => setHover({ index, top: event.currentTarget.offsetTop })}
+      onMouseLeave={() => setHover(current => current?.index === index ? null : current)}
+      onBlur={() => setHover(current => current?.index === index ? null : current)}
+      className="group/tick flex h-4 w-6 shrink-0 cursor-pointer items-center justify-end"
+    >
+      <span className={`block h-[2px] rounded-full transition-all ${index === activeIndex ? 'w-5 bg-foreground/75' : 'w-2.5 bg-muted-foreground/40 group-hover/tick:w-5 group-hover/tick:bg-foreground/60'}`}/>
+    </button>)}
+    {hovered && hover && <div role="tooltip" style={{ top: hover.top }} className="pointer-events-none absolute right-5 w-72 -translate-y-1/2 rounded-xl border bg-[hsl(var(--popover))] p-3 shadow-xl">
+      <p className="truncate text-[12px] font-medium text-foreground">{clipPlain(hovered.question) || t('助手')}</p>
+      {hovered.answer && <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-muted-foreground">{clipPlain(hovered.answer)}</p>}
     </div>}
   </div>;
 }
