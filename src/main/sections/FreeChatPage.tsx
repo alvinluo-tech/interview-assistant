@@ -356,10 +356,42 @@ function MessageCopyButton({text}:{text:string}) {
   return <button type="button" onClick={copy} aria-label={copied?t('已复制'):t('复制')} title={copied?t('已复制'):t('复制')} className="transition hover:text-foreground">{copied?<Check size={13} className="text-primary"/>:<CopyIcon size={13}/>}</button>;
 }
 
+function scrollHost(node:HTMLElement|null):HTMLElement|null {
+  let element=node?.parentElement ?? null;
+  while(element){
+    if(/(auto|scroll)/.test(getComputedStyle(element).overflowY))return element;
+    element=element.parentElement;
+  }
+  return null;
+}
+
 function ScrollToBottomButton() {
   const empty=useAuiState(state=>state.thread.isEmpty);
-  if(empty)return null;
-  return <div className="sticky bottom-2 flex justify-center pb-1"><ThreadPrimitive.ScrollToBottom className="flex size-9 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-md hover:text-foreground" aria-label={t('滚动到底部')}><ArrowDown size={16}/></ThreadPrimitive.ScrollToBottom></div>;
+  const holder=useRef<HTMLDivElement|null>(null);
+  const [away,setAway]=useState(false);
+  useEffect(()=>{
+    if(empty)return;
+    const scroller=scrollHost(holder.current);
+    if(!scroller)return;
+    let frame=0;
+    const measure=()=>{
+      if(frame)return;
+      frame=window.requestAnimationFrame(()=>{
+        frame=0;
+        const gap=scroller.scrollHeight-scroller.clientHeight-scroller.scrollTop;
+        setAway(gap>24);
+      });
+    };
+    measure();
+    scroller.addEventListener('scroll',measure,{passive:true});
+    const observer=new ResizeObserver(measure);
+    observer.observe(scroller);
+    const content=scroller.firstElementChild;
+    if(content)observer.observe(content);
+    return ()=>{scroller.removeEventListener('scroll',measure);observer.disconnect();if(frame)window.cancelAnimationFrame(frame);};
+  },[empty]);
+  const jump=()=>{const scroller=scrollHost(holder.current);scroller?.scrollTo({top:scroller.scrollHeight,behavior:'smooth'});};
+  return <div ref={holder} className="sticky bottom-2 flex justify-center">{away&&<button type="button" onClick={jump} aria-label={t('滚动到底部')} title={t('滚动到底部')} className="flex size-9 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-md transition hover:text-foreground"><ArrowDown size={16}/></button>}</div>;
 }
 
 function StepRow({step}:{step:FreeChatStep}) {
@@ -419,9 +451,11 @@ function ChatMessage({role}:{role:string}) {
   const queries=readFreeChatQueries(rawQueries);
   const failed=role==='assistant'&&status?.type==='incomplete'&&status.reason==='error';
   const waiting=role==='assistant'&&status?.type==='running'&&!text;
-  return <MessagePrimitive.Root className={`group mb-5 flex ${role==='user'?'justify-end':'justify-start'}`}><div className={role==='user'?'max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-sm leading-6 text-primary-foreground':'w-full text-sm leading-6 text-foreground'}>
-    {role==='assistant'?<>{steps.length>0&&<StepsView steps={steps} elapsedMs={elapsedMs}/>}{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><MessageCopyButton text={displayFreeChatText(text)}/><ActionBarPrimitive.Reload title={t('重新生成')} aria-label={t('重新生成')} disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40"><RotateCcw size={13}/></ActionBarPrimitive.Reload>{clock&&<time className="tabular-nums">{clock}</time>}</div>}</>:<>{parsed.text&&<div className="whitespace-pre-wrap break-words">{parsed.text}</div>}{files.length>0&&<ul className="mt-2 space-y-1">{files.map(file=><li key={file.name} className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 opacity-70">{file.image ? t('图片') : t('{count} 字',{count:file.chars})}</span></li>)}</ul>}<div className="mt-1 flex items-center justify-end gap-2 text-[11px] text-primary-foreground/70 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">{clock&&<time className="tabular-nums">{clock}</time>}<MessageCopyButton text={parsed.text}/></div></>}
-  </div></MessagePrimitive.Root>;
+  return <MessagePrimitive.Root className={`group mb-5 flex flex-col ${role==='user'?'items-end':'items-start'}`}><div className={role==='user'?'max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-sm leading-6 text-primary-foreground':'w-full text-sm leading-6 text-foreground'}>
+    {role==='assistant'?<>{steps.length>0&&<StepsView steps={steps} elapsedMs={elapsedMs}/>}{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><MessageCopyButton text={displayFreeChatText(text)}/><ActionBarPrimitive.Reload title={t('重新生成')} aria-label={t('重新生成')} disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40"><RotateCcw size={13}/></ActionBarPrimitive.Reload>{clock&&<time className="tabular-nums">{clock}</time>}</div>}</>:<>{parsed.text&&<div className="whitespace-pre-wrap break-words">{parsed.text}</div>}{files.length>0&&<ul className="mt-2 space-y-1">{files.map(file=><li key={file.name} className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 opacity-70">{file.image ? t('图片') : t('{count} 字',{count:file.chars})}</span></li>)}</ul>}</>}
+  </div>
+  {role==='user'&&<div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">{clock&&<time className="tabular-nums">{clock}</time>}<MessageCopyButton text={parsed.text}/></div>}
+  </MessagePrimitive.Root>;
 }
 
 function ApprovalCard({request,onDecide}:{request:FreeChatApprovalRequest;onDecide:(decision:FreeChatApproval)=>void}) {
