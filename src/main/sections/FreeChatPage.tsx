@@ -37,7 +37,7 @@ function savedMessages(messages:readonly ThreadMessage[]):FreeChatMessage[] {
     const content=message.content.filter(part=>part.type==='text').map(part=>part.text).join('');
     const incomplete=message.role==='assistant'&&message.status.type==='incomplete';
     if(!content.trim()&&!(incomplete&&message.status.reason==='error'))return [];
-    return [{role:message.role,content,...(message.role==='assistant'?{queries:readFreeChatQueries(message.metadata.custom.localQueries),...(()=>{const steps=readFreeChatSteps(message.metadata.custom.localSteps);return steps.length?{steps}:{};})()}:{}),...(incomplete?{status:content?'partial' as const:'failed' as const,error:message.status.reason==='error'?String(message.status.error || t('回答失败')):undefined}:{})}];
+    return [{role:message.role,content,...(message.role==='assistant'?{queries:readFreeChatQueries(message.metadata.custom.localQueries),...(()=>{const steps=readFreeChatSteps(message.metadata.custom.localSteps);return steps.length?{steps}:{};})(),...(()=>{const elapsed=Number(message.metadata.custom.localElapsedMs);return Number.isFinite(elapsed)&&elapsed>0?{elapsedMs:Math.round(elapsed)}:{};})()}:{}),...(incomplete?{status:content?'partial' as const:'failed' as const,error:message.status.reason==='error'?String(message.status.error || t('回答失败')):undefined}:{})}];
   });
 }
 export function FreeChatPage() {
@@ -188,6 +188,8 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
       }
       if(controller.signal.aborted)return;
       let full='', complete=false, wake:(()=>void)|undefined, version=0;
+      const startedAt=Date.now();
+      let elapsedMs=0;
       const queries:FreeChatQuery[]=[],steps:FreeChatStep[]=[];reasoningRef.current='';
       const stepChanged=()=>{version+=1;wake?.();};
       const upsertStep=(step:FreeChatStep)=>{const index=steps.findIndex(item=>item.id===step.id);if(index>=0)steps[index]=step;else steps.push(step);stepChanged();};
@@ -196,7 +198,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
         signal:controller.signal,allowLocal:grant.allowLocal,categories:grant.categories,...(modelRef.current?{model:modelRef.current}:{}),...(shots.length?{images:shots}:{}),
         canQueryLocal:()=>permissionEpoch.current===epoch&&config.current.allowLocal,
         onDelta:delta=>{if(!controller.signal.aborted){full+=delta;stepChanged();}},
-        onReasoning:text=>{reasoningRef.current+=text;if(reasoningRef.current.trim())upsertStep({id:'reasoning',kind:'reasoning',label:t('思考'),text:reasoningRef.current.slice(-1200),status:'running'});},
+        onReasoning:text=>{reasoningRef.current+=text;},
         onStep:upsertStep,
         onTool:recordTool,onToolResult:query=>{queries.push(query);stepChanged();},requestApproval:askApproval,
       });
@@ -204,21 +206,22 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
       void work.then(()=>{complete=true;wake?.();},e=>{failure=e;complete=true;wake?.();});
       let sent=0;
       while(!complete || sent!==version){
-        if(sent!==version){sent=version;yield {content:[{type:'text' as const,text:full}],metadata:{custom:{localQueries:queries,localSteps:[...steps]}}};continue;}
+        if(sent!==version){sent=version;yield {content:[{type:'text' as const,text:full}],metadata:{custom:{localQueries:queries,localSteps:[...steps],localElapsedMs:elapsedMs||Date.now()-startedAt}}};continue;}
         await new Promise<void>(resolve=>{wake=resolve;});wake=undefined;
       }
+      elapsedMs=Date.now()-startedAt;
       const pendingStep=steps.find(step=>step.status==='running');
       if(pendingStep)upsertStep({...pendingStep,status:failure?'error':'done'});
       setTool('');
       const message=failure?t('对话失败：{message}',{message:String((failure as Error).message || failure)}):undefined;
       if(full || (failure&&!controller.signal.aborted)){
         try {
-          await saveFreeChat(id,[...history,{role:'assistant',content:full,queries,...(steps.length?{steps}:{}),...(message?{status:full?'partial' as const:'failed' as const,error:message}:{})}]);
+          await saveFreeChat(id,[...history,{role:'assistant',content:full,queries,elapsedMs,...(steps.length?{steps}:{}),...(message?{status:full?'partial' as const:'failed' as const,error:message}:{})}]);
         } catch(e) {setError(t('回答保存失败：{message}',{message:String((e as Error).message || e)}));}
       }
-      if(controller.signal.aborted){yield {metadata:{custom:{localQueries:queries,localSteps:[...steps]}},status:{type:'incomplete',reason:'cancelled'}};return;}
-      if(failure){yield {metadata:{custom:{localQueries:queries,localSteps:[...steps]}},status:{type:'incomplete',reason:'error',error:message}};return;}
-      yield {metadata:{custom:{localQueries:queries,localSteps:[...steps]}}};
+      if(controller.signal.aborted){yield {metadata:{custom:{localQueries:queries,localSteps:[...steps],localElapsedMs:elapsedMs||Date.now()-startedAt}},status:{type:'incomplete',reason:'cancelled'}};return;}
+      if(failure){yield {metadata:{custom:{localQueries:queries,localSteps:[...steps],localElapsedMs:elapsedMs||Date.now()-startedAt}},status:{type:'incomplete',reason:'error',error:message}};return;}
+      yield {metadata:{custom:{localQueries:queries,localSteps:[...steps],localElapsedMs:elapsedMs||Date.now()-startedAt}}};
       if(config.current.speak&&full&&!inputOwner.current)void speaker.speak(full);
     } finally {
       abortSignal.removeEventListener('abort',cancel);
@@ -227,7 +230,7 @@ function ChatThread({id,initial,initialModel,permission,onPermissionChange,onDel
       controller.abort();
     }
   }}),[id,speaker,recordTool,askApproval]);
-  const runtime=useLocalRuntime(adapter,{initialMessages:initial.map(message=>({role:message.role,content:[{type:'text' as const,text:message.content}],metadata:{custom:{localQueries:readFreeChatQueries(message.queries),localSteps:readFreeChatSteps(message.steps)}},...(message.role==='assistant'&&message.status?{status:{type:'incomplete' as const,reason:'error' as const,error:message.error || t('上次回答未完成，请重试。')}}:{})}))});
+  const runtime=useLocalRuntime(adapter,{initialMessages:initial.map(message=>({role:message.role,content:[{type:'text' as const,text:message.content}],metadata:{custom:{localQueries:readFreeChatQueries(message.queries),localSteps:readFreeChatSteps(message.steps),localElapsedMs:message.elapsedMs ?? 0}},...(message.role==='assistant'&&message.status?{status:{type:'incomplete' as const,reason:'error' as const,error:message.error || t('上次回答未完成，请重试。')}}:{})}))});
   const changePermission=(next:LocalPermission)=>{permissionEpoch.current++;config.current={...config.current,...next};textRequest.current?.abort();runtime.thread.cancelRun();voiceRequest.current?.abort();speaker.stop();setTool('');onPermissionChange(next);};
   const voiceCall=useMemo(()=>createVoiceCall({
     ...(speechInputMode==='realtime'?{openRealtime:async (onPreview:(text:string)=>void,onError:(message:string)=>void,signal:AbortSignal)=>{
@@ -342,35 +345,41 @@ function ScrollToBottomButton() {
 
 function StepRow({step}:{step:FreeChatStep}) {
   const running=step.status==='running';
-  return <details className="group rounded-lg border bg-background/60 px-2 py-1.5">
-    <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] text-muted-foreground">
+  return <details className="group">
+    <summary className="flex cursor-pointer list-none items-center gap-2 py-0.5 text-[11px] leading-5 text-muted-foreground transition hover:text-foreground">
       <span className="shrink-0 text-foreground/70">{step.kind==='tool'?<Wrench size={12}/>:<Brain size={12}/>}</span>
       <span className="shrink-0 font-medium text-foreground/80">{step.kind==='tool'?t('工具调用'):t('思考')}</span>
       <span className="min-w-0 flex-1 truncate">{step.label&&step.kind==='tool'?`${step.label} · `:''}{step.text}</span>
       {running?<LoaderCircle size={12} className="shrink-0 animate-spin"/>:step.status==='error'?<X size={12} className="shrink-0 text-destructive"/>:null}
       <ChevronDown size={12} className="shrink-0 transition group-open:rotate-180"/>
     </summary>
-    <div className="mt-1.5 space-y-1.5 border-t pt-1.5">
-      {step.input&&<div><p className="text-[10px] font-medium text-muted-foreground">{t('输入')}</p><pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/60 p-1.5 text-[10px] leading-4">{step.input}</pre></div>}
-      {step.output&&<div><p className="text-[10px] font-medium text-muted-foreground">{t('输出')}</p><pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/60 p-1.5 text-[10px] leading-4">{step.output}</pre></div>}
+    <div className="mt-1 space-y-1.5 pb-1 pl-5">
+      {step.input&&<div><p className="text-[10px] font-medium text-muted-foreground">{t('输入')}</p><pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/50 p-1.5 text-[10px] leading-4">{step.input}</pre></div>}
+      {step.output&&<div><p className="text-[10px] font-medium text-muted-foreground">{t('输出')}</p><pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/50 p-1.5 text-[10px] leading-4">{step.output}</pre></div>}
       {!step.output&&step.kind==='reasoning'&&<p className="whitespace-pre-wrap break-words text-[11px] leading-5 text-muted-foreground">{step.text}</p>}
     </div>
   </details>;
 }
 
-function StepsView({steps}:{steps:FreeChatStep[]}) {
+function formatElapsed(ms:number) {
+  const total=Math.max(1,Math.round(ms/1000));
+  if(total<60)return t('{seconds} 秒',{seconds:total});
+  return t('{minutes} 分 {seconds} 秒',{minutes:Math.floor(total/60),seconds:total%60});
+}
+
+function StepsView({steps,elapsedMs}:{steps:FreeChatStep[];elapsedMs:number}) {
   const [open,setOpen]=useState(true);
   const known=steps.filter(step=>step.kind==='tool'||step.text.trim());
   if(!known.length)return null;
   const busy=known.some(step=>step.status==='running');
-  const tools=known.filter(step=>step.kind==='tool').length;
-  return <div className="mb-3 rounded-xl border border-dashed bg-muted/20">
-    <button type="button" onClick={()=>setOpen(value=>!value)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-muted-foreground">
-      {busy?<LoaderCircle size={12} className="shrink-0 animate-spin"/>:<Check size={12} className="shrink-0"/>}
-      <span className="min-w-0 flex-1 truncate">{busy?t('正在处理…'):tools?t('已调用 {count} 个工具',{count:tools}):t('思考过程')}</span>
+  const failed=known.some(step=>step.status==='error');
+  return <div className="mb-1">
+    <button type="button" onClick={()=>setOpen(value=>!value)} className="flex w-full items-center gap-2 py-1 text-left text-[11px] leading-5 text-muted-foreground transition hover:text-foreground">
+      {busy?<LoaderCircle size={12} className="shrink-0 animate-spin"/>:failed?<X size={12} className="shrink-0 text-destructive"/>:<Check size={12} className="shrink-0"/>}
+      <span className="min-w-0 flex-1 truncate">{busy?t('正在处理…'):elapsedMs>0?t('已完成，用时 {duration}',{duration:formatElapsed(elapsedMs)}):t('已完成')}</span>
       <ChevronDown size={12} className={`shrink-0 transition ${open?'rotate-180':''}`}/>
     </button>
-    {open&&<div className="space-y-1 px-2 pb-2">{known.map(step=><StepRow key={step.id} step={step}/>)}</div>}
+    {open&&<div className="pl-1">{known.map(step=><StepRow key={step.id} step={step}/>)}</div>}
   </div>;
 }
 
@@ -382,11 +391,13 @@ function ChatMessage({role}:{role:string}) {
   const files=parsed.files.length?parsed.files:fileIndex[messageId]??[];
   const status=useAuiState(s=>s.message.status),rawQueries=useAuiState(s=>s.message.metadata.custom.localQueries),rawSteps=useAuiState(s=>s.message.metadata.custom.localSteps);
   const steps=readFreeChatSteps(rawSteps);
+  const rawElapsed=useAuiState(s=>s.message.metadata.custom.localElapsedMs);
+  const elapsedMs=Number(rawElapsed);
   const queries=readFreeChatQueries(rawQueries);
   const failed=role==='assistant'&&status?.type==='incomplete'&&status.reason==='error';
   const waiting=role==='assistant'&&status?.type==='running'&&!text;
-  return <MessagePrimitive.Root className={`mb-5 flex ${role==='user'?'justify-end':'justify-start'}`}><div className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 ${role==='user'?'bg-primary text-primary-foreground':'border bg-card text-foreground'}`}>
-    {role==='assistant'?<>{steps.length>0&&<StepsView steps={steps}/>}{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><ActionBarPrimitive.Copy className="transition hover:text-foreground data-[copied=true]:text-primary">{t('复制')}</ActionBarPrimitive.Copy><ActionBarPrimitive.Reload disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40">{t('重新生成')}</ActionBarPrimitive.Reload></ActionBarPrimitive.Root>}</>:<>{parsed.text&&<div className="whitespace-pre-wrap break-words">{parsed.text}</div>}{files.length>0&&<ul className="mt-2 space-y-1">{files.map(file=><li key={file.name} className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 opacity-70">{file.image ? t('图片') : t('{count} 字',{count:file.chars})}</span></li>)}</ul>}</>}
+  return <MessagePrimitive.Root className={`mb-5 flex ${role==='user'?'justify-end':'justify-start'}`}><div className={role==='user'?'max-w-[85%] rounded-2xl bg-primary px-4 py-2.5 text-sm leading-6 text-primary-foreground':'w-full text-sm leading-6 text-foreground'}>
+    {role==='assistant'?<>{steps.length>0&&<StepsView steps={steps} elapsedMs={elapsedMs}/>}{text&&<Md text={displayFreeChatText(text)}/>}{waiting&&<span role="status" className="text-muted-foreground">{t('正在思考或查询资料…')}</span>}{failed&&<div role="alert" className="text-destructive">{String(status.error || t('回答失败，请重试。'))}</div>}{status?.type==='incomplete'&&status.reason==='cancelled'&&<p className="text-xs text-muted-foreground">{t('已停止回答')}</p>}{queries&&queries.length>0&&<details className="mt-3 border-t pt-2 text-xs text-muted-foreground"><summary className="cursor-pointer select-none">{t('查询记录（{count}）',{count:queries.length})}</summary><ul className="mt-2 space-y-1">{queries.map((query,index)=><li key={index}>{query.category&&t(LOCAL_DATA_LABELS[query.category as LocalDataCategory]) || (query.name==='app_guide'?t('应用功能'):t('资料搜索'))}{query.title?` · ${query.title}`:''}{query.count!==undefined?t(' · {count} 条',{count:query.count}):''} · {query.status==='error'?t('查询失败'):query.status==='cached'?t('复用本轮结果'):t('已查询')}{query.recordId&&<span className="block break-all opacity-70">{t('记录编号：{id}',{id:query.recordId})}</span>}</li>)}</ul></details>}{text&&<ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><ActionBarPrimitive.Copy className="transition hover:text-foreground data-[copied=true]:text-primary">{t('复制')}</ActionBarPrimitive.Copy><ActionBarPrimitive.Reload disabled={status?.type==='running'} className="transition hover:text-foreground disabled:opacity-40">{t('重新生成')}</ActionBarPrimitive.Reload></ActionBarPrimitive.Root>}</>:<>{parsed.text&&<div className="whitespace-pre-wrap break-words">{parsed.text}</div>}{files.length>0&&<ul className="mt-2 space-y-1">{files.map(file=><li key={file.name} className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="shrink-0 opacity-70">{file.image ? t('图片') : t('{count} 字',{count:file.chars})}</span></li>)}</ul>}</>}
   </div></MessagePrimitive.Root>;
 }
 

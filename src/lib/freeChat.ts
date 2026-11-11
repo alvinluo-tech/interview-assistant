@@ -14,7 +14,7 @@ export const LOCAL_DATA_LABELS:Record<LocalDataCategory,string> = {resumes:'简�
 export interface FreeChatQuery {name:string;status:'success'|'error'|'cached';category?:string;title?:string;recordId?:string;count?:number}
 /** One entry of the visible work log: thinking, a tool call, or its result. */
 export interface FreeChatStep { id:string; kind:'reasoning'|'tool'; label:string; text:string; status?:'running'|'done'|'error'; input?:string; output?:string }
-export interface FreeChatMessage { role:'user'|'assistant'; content:string; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[]; steps?:FreeChatStep[] }
+export interface FreeChatMessage { role:'user'|'assistant'; content:string; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[]; steps?:FreeChatStep[]; elapsedMs?:number }
 export interface FreeChatSession { id:string; title:string; updatedAt:number; messages:FreeChatMessage[]; /** Per-conversation model; absent means the global chat route. */ model?:AiRoute }
 /** 语音对话仍要短答，但上限必须给思考模型留出思维链预算，否则会在正文前被截断。 */
 const VOICE_OUTPUT_LIMIT = 2048;
@@ -236,6 +236,14 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   const categories=options.categories || LOCAL_DATA_CATEGORIES;
   const history:ChatMessage[]=[{role:'system',content:`${SYSTEM}\n${instruction}\n${options.allowLocal?`用户仅授权本轮按需查询以下本地资料：${categories.map(category=>LOCAL_DATA_LABELS[category]).join('、')}。先列清单再读取必要详情；不要反复读取相同页；最近几场默认最多三场，明确说明覆盖范围和来源。`:'本轮未授权查询本地资料。可以使用用户消息与已有对话；不要声称执行了新的本地查询。'}`},...messages.filter(message=>message.role!=='assistant'||(!message.status&&!hasInternalToolMarkup(message.content)))];
   const assertActive=()=>{options.signal.throwIfAborted();if(options.allowLocal&&options.canQueryLocal&&!options.canQueryLocal())throw new Error(t('本地资料查询授权已撤销，请重新发送消息。'));};
+  // Plain answers have no tool loop, but the thought stream should still be visible.
+  const tapThinking=()=>{
+    let reasoning='';
+    return {
+      onReasoning:(text:string)=>{reasoning+=text;options.onStep?.({id:'reasoning-0',kind:'reasoning',label:t('思考'),text:reasoning.slice(-4000),status:'running'});options.onReasoning?.(text);},
+      close:()=>{if(reasoning.trim())options.onStep?.({id:'reasoning-0',kind:'reasoning',label:t('思考'),text:reasoning.slice(-4000),status:'done'});},
+    };
+  };
   // Keep a possible incomplete control token private, including across streamed chunks.
   const plainAnswer=async(prompt:ChatMessage[],prefix='')=>{
     let pending='',emitted='';
@@ -250,7 +258,9 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
       const delta=pending.slice(0,end);pending=pending.slice(end);
       if(delta){const part=(emitted?'':prefix)+delta;emitted+=part;options.onDelta(part);}
     };
-    const answer=await chatStream({messages:prompt,task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);},...(options.onReasoning?{onReasoning:options.onReasoning}:{})});
+    const thoughts=tapThinking();
+    const answer=await chatStream({messages:prompt,task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);},onReasoning:thoughts.onReasoning});
+    thoughts.close();
     // Transports normally emit all text through onDelta. Also accept a buffered adapter.
     if(!pending&&!emitted)pending=answer;
     assertActive();if(hasInternalToolMarkup(answer))throw new Error(t('模型返回了无效的内部工具标记，请更换模型后重试。'));
@@ -259,7 +269,9 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   const plainAnswerImages=async(prompt:ChatMessage[],images:string[])=>{
     let pending='',emitted='';
     const flush=(final:boolean)=>{if(!pending)return;const delta=pending;pending='';emitted+=delta;options.onDelta(delta);void final;};
-    const answer=await chatWithImageHistory(prompt,images,{task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);},...(options.onReasoning?{onReasoning:options.onReasoning}:{})});
+    const thoughts=tapThinking();
+    const answer=await chatWithImageHistory(prompt,images,{task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);},onReasoning:thoughts.onReasoning});
+    thoughts.close();
     if(!pending&&!emitted)pending=answer;
     assertActive();flush(true);return emitted;
   };
@@ -270,11 +282,12 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   const settings=getAiSettings(),{provider,modelId}=resolveAiRoute(settings,'chat',options.model);
   const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
   const wire:WireMessage[]=history.map(({role,content})=>({role,content:typeof content==='string'?content:''}));
-  let reasoningText='';
+  // Each model round gets its own thought step so the log reads思考→工具→思考→…
+  let reasoningText='', reasoningRound=0;
   const emitStep=(step:FreeChatStep)=>options.onStep?.(step);
-  const thoughtStep=(status:'running'|'done'):FreeChatStep=>({id:'reasoning',kind:'reasoning',label:t('思考'),text:reasoningText.slice(-1200),status});
+  const thoughtStep=(status:'running'|'done'):FreeChatStep=>({id:`reasoning-${reasoningRound}`,kind:'reasoning',label:t('思考'),text:reasoningText.slice(-4000),status});
   const onThought=(text:string)=>{if(!text)return;reasoningText+=text;options.onReasoning?.(text);emitStep(thoughtStep('running'));};
-  const closeThinking=()=>{if(reasoningText)emitStep(thoughtStep('done'));};
+  const closeThinking=()=>{if(reasoningText)emitStep(thoughtStep('done'));reasoningText='';};
   const collected:{tool:string;result:string}[]=[];
   const cache=new Map<string,{result:string;query:FreeChatQuery}>();
   const summarizeCollected=async(reason='本次查询达到上限')=>{
@@ -369,6 +382,8 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
       emitStep({id:stepId,kind:'tool',label:name,text:detail.title,status:query.status==='error'?'error':'done',input:validJson?JSON.stringify(input,null,2).slice(0,1200):call.function.arguments.slice(0,1200),output:result.slice(0,1500)});
       wire.push({role:'tool',tool_call_id:call.id,content:result});
     }
+    reasoningRound+=1;
+    reasoningText='';
     if(!freshResults)return summarizeCollected('模型重复查询了相同资料');
     if(boundedCalls.length<calls.length)return summarizeCollected();
   }
