@@ -72,10 +72,8 @@ export function FreeChatPage() {
   };
   const [textSize]=useSetting<'sm'|'md'|'lg'>('chat.textSize','md');
   return <div style={{['--chat-text' as string]:`${CHAT_TEXT_PX[chatTextSize(textSize)]}px`}} className="flex h-full min-h-0 w-full bg-background">
-    <aside style={collapsed?undefined:{width:list.width}} className={`hidden shrink-0 flex-col bg-muted/20 md:flex ${collapsed?'w-14 border-r':''}`}>
-      {collapsed?<div className="flex flex-col items-center gap-1 p-2">
-        <button onClick={()=>openSession(crypto.randomUUID())} aria-label={t('新对话')} title={t('新对话')} className="rounded-lg border bg-background p-2 shadow-xs hover:bg-muted"><Plus size={16}/></button>
-      </div>:<>
+    {!collapsed&&<>
+    <aside style={{width:list.width}} className="hidden shrink-0 flex-col bg-muted/20 md:flex">
       <div className="flex items-center gap-1 p-3"><button className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button><button onClick={()=>setCollapsed(true)} aria-label={t('收起侧栏')} title={t('收起侧栏')} className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftClose size={15}/></button></div>
       <div className="px-3">
         <div className="relative">
@@ -94,8 +92,8 @@ export function FreeChatPage() {
             </div>)}
         {visible.length===0&&<p className="px-2 py-6 text-center text-xs text-muted-foreground">{query?t('没有匹配的对话'):t('还没有对话，说点什么开始吧。')}</p>}
       </div>
-      </>}
     </aside>
+    </>}
     {!collapsed&&<ResizeHandle label={t('调整对话列表宽度')} dragging={list.dragging} onPointerDown={list.onPointerDown}/>}
     <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} listCollapsed={collapsed} onExpandList={()=>setCollapsed(false)} permission={permission} onPermissionChange={setPermission} onCallEnd={callEnded} onDelete={async()=>{
       if(!window.confirm(t('删除这段对话？此操作无法撤销。')))return;
