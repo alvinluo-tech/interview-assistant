@@ -13,6 +13,8 @@ export interface SelectedTurns<T> {
   omitted: number;
   /** 因预算未纳入的较早字符数，用于给用户一个量级。 */
   omittedChars: number;
+  /** 因预算未纳入的较早消息本身，供摘要使用。 */
+  older: T[];
 }
 
 /** 一条用户消息开启一轮；其后的助手消息并入本轮。 */
@@ -44,6 +46,7 @@ export function selectChatTurns<T extends ChatTurnLike>(messages: T[], maxTokens
     recent: kept.flat(),
     omitted: dropped.reduce((sum, turn) => sum + turn.length, 0),
     omittedChars: dropped.reduce((sum, turn) => sum + turn.reduce((size, message) => size + message.content.length, 0), 0),
+    older: dropped.flat(),
   };
 }
 

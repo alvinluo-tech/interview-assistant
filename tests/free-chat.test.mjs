@@ -354,3 +354,30 @@ test('a long conversation is budgeted instead of rejected and says what was left
   assert.ok(!JSON.stringify(sent.slice(1)).includes('早早早'));
   assert.ok(sent.some(message=>message.content==='现在的问题'));
 });
+
+test('summarizing only happens when the budget actually drops earlier turns',async()=>{
+  const h=harness();
+  const small=[{role:'user',content:'问题一'},{role:'assistant',content:'回答一'},{role:'user',content:'问题二'}];
+  assert.equal(await h.api.summarizeFreeChat(small,{}),null);
+  assert.equal(h.chatCalls.length,0);
+  const large=[{role:'user',content:'旧提问'.repeat(2000)},{role:'assistant',content:'旧回答'.repeat(2000)},{role:'user',content:'现在的问题'}];
+  const summary=await h.api.summarizeFreeChat(large,{});
+  assert.equal(summary.covered,2);
+  assert.match(summary.text,/普通回答/);
+  assert.match(h.chatCalls[0].messages[0].content,/只保留事实/);
+});
+
+test('a saved summary survives message saves and is sent with the next request',async()=>{
+  const h=harness();
+  const messages=[{role:'user',content:'问题'},{role:'assistant',content:'回答'}];
+  await h.api.saveFreeChat('c1',messages,undefined,undefined,{text:'早前结论：用 Redis',covered:2,updatedAt:1});
+  await h.api.saveFreeChat('c1',messages);
+  assert.equal(h.data.freeChats[0].contextSummary.text,'早前结论：用 Redis');
+  assert.equal(h.data.freeChats[0].summary,undefined,'data layer rejects non-string summary');
+  const sent=[];
+  const big=[{role:'user',content:'旧'.repeat(30000)},{role:'assistant',content:'答'.repeat(30000)},{role:'user',content:'接着聊'}];
+  await h.api.askFreeChat(big,{signal:new AbortController().signal,onDelta:()=>{},summary:{text:'早前结论：用 Redis',covered:2,updatedAt:1}});
+  const system=h.chatCalls.at(-1).messages[0].content;
+  assert.match(system,/早前结论：用 Redis/);
+  assert.match(system,/较早对话的摘要/);
+});

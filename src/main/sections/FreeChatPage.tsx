@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import {ActionBarPrimitive, AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime, unstable_useComposerInput, type ChatModelAdapter, type ThreadMessage} from '@assistant-ui/react';
 import {ArrowDown, ArrowUp, AudioLines, Brain, Check, ChevronDown, Copy as CopyIcon, FileText, Image as ImageIcon, LoaderCircle, Mic, MicOff, Paperclip, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Phone, PhoneOff, Plus, RotateCcw, Search, ShieldQuestion, Square, Trash2, Volume2, VolumeX, Wrench, X} from 'lucide-react';
 import {useData} from '@/lib/backend';
-import {askFreeChat, saveFreeChat, setFreeChatModel, setFreeChatPermission, renameFreeChat, deleteFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession, type FreeChatApproval, type FreeChatApprovalRequest, type FreeChatStep} from '@/lib/freeChat';
+import {askFreeChat, chatHistorySnapshot, summarizeFreeChat, type ChatHistorySnapshot, type FreeChatSummary, saveFreeChat, setFreeChatModel, setFreeChatPermission, renameFreeChat, deleteFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession, type FreeChatApproval, type FreeChatApprovalRequest, type FreeChatStep} from '@/lib/freeChat';
 import {ModelPicker, describeRoute} from './ModelPicker';
 import type {AiRoute, AiSettings} from '@/lib/aiConfig';
 import {openMicrophone, type MicrophoneCapture} from '@/lib/microphone';
@@ -107,7 +107,7 @@ export function FreeChatPage() {
     </aside>
     </>}
     {!collapsed&&<ResizeHandle label={t('调整对话列表宽度')} dragging={list.dragging} onPointerDown={list.onPointerDown}/>}
-    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} listCollapsed={collapsed} onExpandList={()=>setCollapsed(false)} permission={permission} onPermissionChange={changePermission} onCallEnd={callEnded} onDelete={async()=>{
+    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} initialSummary={current?.contextSummary ?? null} listCollapsed={collapsed} onExpandList={()=>setCollapsed(false)} permission={permission} onPermissionChange={changePermission} onCallEnd={callEnded} onDelete={async()=>{
       if(!await confirm({title:t('删除这段对话？此操作无法撤销。')}))return;
       await deleteFreeChat(id);
       openSession(crypto.randomUUID());
@@ -115,11 +115,16 @@ export function FreeChatPage() {
   </div>;
 }
 
-function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permission,onPermissionChange,onDelete,onCallEnd}:{id:string;initial:FreeChatMessage[];initialModel:AiRoute|null;listCollapsed:boolean;onExpandList:()=>void;permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;onDelete:()=>Promise<void>;onCallEnd:()=>void}) {
+function ChatThread({id,initial,initialModel,initialSummary,listCollapsed,onExpandList,permission,onPermissionChange,onDelete,onCallEnd}:{id:string;initial:FreeChatMessage[];initialModel:AiRoute|null;initialSummary:FreeChatSummary|null;listCollapsed:boolean;onExpandList:()=>void;permission:LocalPermission;onPermissionChange:(permission:LocalPermission)=>void;onDelete:()=>Promise<void>;onCallEnd:()=>void}) {
   const {allowLocal,categories}=permission;
   const [speak,setSpeak]=useState(false),[speaking,setSpeaking]=useState(false),[tool,setTool]=useState(''),[error,setError]=useState('');
   const [model,setModel]=useState<AiRoute|null>(initialModel);
   const modelRef=useRef<AiRoute|null>(initialModel);modelRef.current=model;
+  const summaryRef=useRef<FreeChatSummary|null>(initialSummary);
+  const [contextInfo,setContextInfo]=useState<ChatHistorySnapshot>({tokens:0,omitted:0});
+  const [summarizing,setSummarizing]=useState(false);
+  // 打开已有对话时先按已保存的消息算一次，否则读数栏要等到下次发送才出现。
+  useEffect(()=>{setContextInfo(chatHistorySnapshot(initial.map(message=>({role:message.role,content:message.content})),modelRef.current));},[initial]);
   const roomy=useAtLeast(1180);
   const resources=usePanelWidth('freechat.resourcesWidth',288,220,520,'right');
   const [columnRef,columnWidth]=useElementWidth<HTMLDivElement>();
@@ -194,6 +199,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
     const controller=new AbortController(),epoch=permissionEpoch.current,grant=config.current;
     const cancel=()=>controller.abort(abortSignal.reason);abortSignal.addEventListener('abort',cancel,{once:true});if(abortSignal.aborted)cancel();textRequest.current=controller;
     const history=savedMessages(messages);
+    setContextInfo(chatHistorySnapshot(history,modelRef.current));
     const pending=attachmentsRef.current;
     if(pending.length&&history.length&&history[history.length-1].role==='user'){
       const last=history[history.length-1];
@@ -228,7 +234,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
       const upsertStep=(step:FreeChatStep)=>{const index=steps.findIndex(item=>item.id===step.id);if(index>=0)steps[index]=step;else steps.push(step);stepChanged();};
       const shots=imagesRef.current;imagesRef.current=[];
       const work=askFreeChat(history,{
-        signal:controller.signal,allowLocal:grant.allowLocal,categories:grant.categories,...(modelRef.current?{model:modelRef.current}:{}),...(shots.length?{images:shots}:{}),
+        signal:controller.signal,allowLocal:grant.allowLocal,categories:grant.categories,...(modelRef.current?{model:modelRef.current}:{}),...(summaryRef.current?{summary:summaryRef.current}:{}),...(shots.length?{images:shots}:{}),
         canQueryLocal:()=>permissionEpoch.current===epoch&&config.current.allowLocal,
         onDelta:delta=>{if(!controller.signal.aborted){full+=delta;stepChanged();}},
         onReasoning:text=>{reasoningRef.current+=text;},
@@ -265,6 +271,23 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
     }
   }}),[id,speaker,recordTool,askApproval,rememberStamp]);
   const runtime=useLocalRuntime(adapter,{initialMessages:initial.map(message=>({role:message.role,content:[{type:'text' as const,text:message.content}],metadata:{custom:{localQueries:readFreeChatQueries(message.queries),localSteps:readFreeChatSteps(message.steps),localElapsedMs:message.elapsedMs ?? 0,localAt:message.at ?? 0}},...(message.role==='assistant'&&message.status?{status:{type:'incomplete' as const,reason:'error' as const,error:message.error || t('上次回答未完成，请重试。')}}:{})}))});
+
+  // 把被预算挤出原文的较早对话压成摘要，后面的请求就能带着它继续。
+  const tidyContext=async()=>{
+    if(summarizing)return;
+    const history=savedMessages(runtime.thread.getState().messages);
+    if(!history.length)return;
+    setSummarizing(true);
+    try{
+      const next=await summarizeFreeChat(history,{model:modelRef.current,...(summaryRef.current?{previous:summaryRef.current}:{})});
+      if(!next){showToast({type:'info',title:t('对话还在预算内，暂时不需要整理')});return;}
+      summaryRef.current=next;
+      await saveFreeChat(id,history,undefined,undefined,next);
+      setContextInfo(chatHistorySnapshot(history,modelRef.current));
+      showToast({type:'success',title:t('已整理较早的对话')});
+    }catch(e){showToast({type:'error',title:t('整理上下文失败'),description:String((e as Error).message||e)});}
+    finally{setSummarizing(false);}
+  };
   const changePermission=(next:LocalPermission)=>{permissionEpoch.current++;config.current={...config.current,...next};textRequest.current?.abort();runtime.thread.cancelRun();voiceRequest.current?.abort();speaker.stop();setTool('');onPermissionChange(next);};
   const voiceCall=useMemo(()=>createVoiceCall({
     ...(speechInputMode==='realtime'?{openRealtime:async (onPreview:(text:string)=>void,onError:(message:string)=>void,signal:AbortSignal)=>{
@@ -346,7 +369,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
         {error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
       </div></StampContext.Provider></FileIndexContext.Provider>
     </ThreadPrimitive.Viewport><ConversationRail visible={!roomy || !resourcesOpen}/></div>
-    <div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} onPreview={setPreview} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
+    <div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{contextInfo.tokens>0&&<div className="mb-1 flex items-center justify-end gap-2 text-[11px] text-muted-foreground"><span className="tabular-nums" title={t('上下文占用的是本次请求的预算，超出部分会被挤成摘要')}>{contextInfo.percent!==undefined?t('上下文 {percent}%',{percent:contextInfo.percent}):t('上下文约 {tokens} token',{tokens:contextInfo.tokens.toLocaleString()})}</span><button type="button" disabled={summarizing||contextInfo.omitted===0} onClick={()=>void tidyContext()} title={contextInfo.omitted===0?t('对话还在预算内，暂时不需要整理'):t('把较早的对话压成摘要，给后面的回答腾出空间')} className="rounded-md border px-2 py-0.5 transition hover:bg-muted disabled:cursor-default disabled:opacity-40">{summarizing?t('整理中…'):t('整理上下文')}</button></div>}{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} onPreview={setPreview} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {preview&&<ImageLightbox src={preview} onClose={()=>setPreview(null)}/>}
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} muted={muted} onToggleMute={()=>{setMuted(next=>{voiceCall.setMuted(!next);return !next;});}} bargeIn={bargeIn} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
   </ThreadPrimitive.Root>
