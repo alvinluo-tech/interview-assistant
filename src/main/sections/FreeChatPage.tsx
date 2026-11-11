@@ -79,10 +79,12 @@ export function FreeChatPage() {
     catch{showToast({type:'error',title:t('删除失败')});}
   };
   const [textSize]=useSetting<'sm'|'md'|'lg'>('chat.textSize','md');
+  // 界面放大（CSS zoom）或窗口很窄时，两栏并排挤不出聊天区，列表让位给聊天。
+  const showList=useAtLeast(760);
   return <div style={{['--chat-text' as string]:`${CHAT_TEXT_PX[chatTextSize(textSize)]}px`}} className="flex h-full min-h-0 w-full bg-background">
     {confirmDialog}
-    {!collapsed&&<>
-    <aside style={{width:list.width}} className="hidden shrink-0 flex-col bg-muted/20 md:flex">
+    {!collapsed&&showList&&<>
+    <aside style={{width:list.width}} className="flex shrink-0 flex-col bg-muted/20">
       <div className="flex items-center gap-1 p-3"><button className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button><button onClick={()=>setCollapsed(true)} aria-label={t('收起侧栏')} title={t('收起侧栏')} className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftClose size={15}/></button></div>
       <div className="px-3">
         <div className="relative">
@@ -303,7 +305,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
   return <AssistantRuntimeProvider runtime={runtime}><div className="flex min-w-0 flex-1"><ThreadPrimitive.Root ref={columnRef} inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
-    <div className={`flex items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}>{listCollapsed&&<button onClick={onExpandList} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="shrink-0 rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>}<div className={`${cramped?'hidden':''} flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary`}><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div><div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground"><span className="truncate">{describeRoute(aiSettings,model)}</span><span className="opacity-40">·</span><span className="shrink-0">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span></div></div>
+    <div className={`flex flex-wrap items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}>{listCollapsed&&<button onClick={onExpandList} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="shrink-0 rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>}<div className={`${cramped?'hidden':''} flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary`}><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div><div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground"><span className="truncate">{describeRoute(aiSettings,model)}</span><span className="opacity-40">·</span><span className="shrink-0">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span></div></div>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?t('关闭语音回复'):t('开启语音回复')} title={speak?t('关闭语音回复'):t('开启语音回复')}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
       <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError(t('请先在「设置 → AI 服务」配置对话模型和语音转写模型。'));return;}inputOwner.current='call';voiceHistory.current=savedMessages(runtime.thread.getState().messages);voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
       <DeleteButton onDelete={onDelete} onError={setError}/>
@@ -423,14 +425,25 @@ function ResizeHandle({ label, dragging, onPointerDown, border = false }: { labe
   </div>;
 }
 
+/*
+ * 主窗口的「界面大小」是用 CSS zoom 放大的（desktopAppearance.ts 的 applyUiScale）。
+ * zoom 不改变 window.innerWidth，却等比例缩小了可用布局宽度，所以这里必须先把
+ * 视口宽度除回 zoom，否则放大到 200% 时仍按 1180px 排三栏，右侧控件会被挤出窗口。
+ */
+function layoutWidth():number {
+  const zoom=Number.parseFloat(getComputedStyle(document.documentElement).zoom||'1');
+  return window.innerWidth/(Number.isFinite(zoom)&&zoom>0?zoom:1);
+}
 function useAtLeast(width:number) {
-  const [enough,setEnough]=useState(()=>window.innerWidth>=width);
+  const [enough,setEnough]=useState(()=>layoutWidth()>=width);
   useEffect(()=>{
-    const query=window.matchMedia(`(min-width:${width}px)`);
-    const update=()=>setEnough(query.matches);
+    const update=()=>setEnough(layoutWidth()>=width);
     update();
-    query.addEventListener('change',update);
-    return ()=>query.removeEventListener('change',update);
+    window.addEventListener('resize',update);
+    // zoom 是改 documentElement 的 style，不会触发 resize。
+    const observer=new MutationObserver(update);
+    observer.observe(document.documentElement,{attributes:true,attributeFilter:['style']});
+    return ()=>{window.removeEventListener('resize',update);observer.disconnect();};
   },[width]);
   return enough;
 }
@@ -745,8 +758,8 @@ function Composer({compact,onPreview,settings,model,onModelChange,permission,onP
       <button type="button" onClick={()=>fileInput.current?.click()} disabled={blocked||parsing>0} className="shrink-0 rounded-lg p-2 text-muted-foreground transition hover:bg-muted disabled:opacity-40" aria-label={t('添加附件')} title={t('添加附件：PDF、图片、文本')}><Paperclip size={17}/></button>
       <span className="min-w-0 flex-1 truncate px-1 text-[11px] text-muted-foreground">{recording?t('正在录音，再点一次结束'):busy?t('正在识别…'):''}</span>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-      <ModelPicker settings={settings} value={model} onChange={onModelChange} placement="up"/>
+      <div className="flex min-w-0 shrink items-center gap-1.5">
+      <ModelPicker settings={settings} value={model} onChange={onModelChange} placement="up" narrow={compact}/>
       <button type="button" onClick={()=>void record()} disabled={busy||blocked||running} className={`shrink-0 rounded-lg p-2 transition ${recording?'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400':'text-muted-foreground hover:bg-muted'}`} aria-label={recording?t('结束录音'):t('语音输入')} title={recording?t('结束录音'):t('语音输入')}>{busy?<LoaderCircle size={17} className="animate-spin"/>:recording?<Square size={17}/>:<Mic size={17}/>}</button>
       <ComposerPrimitive.Cancel className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={t('停止生成')}><Square size={16}/></ComposerPrimitive.Cancel>
       <ComposerPrimitive.Send disabled={busy||recording||blocked} className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition disabled:opacity-40" aria-label={t('发送')}><ArrowUp size={16}/></ComposerPrimitive.Send>

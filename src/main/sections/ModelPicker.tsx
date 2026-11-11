@@ -45,7 +45,7 @@ export function describeRoute(settings: AiSettings, route: AiRoute | null): stri
  * the option stays first and is selected by default, so a user who never opens the picker
  * keeps the old behaviour.
  */
-export function ModelPicker({settings, value, onChange, placement = 'down'}: { settings: AiSettings; value: AiRoute | null; onChange: (next: AiRoute | null) => void; placement?: 'up' | 'down' }) {
+export function ModelPicker({settings, value, onChange, placement = 'down', narrow = false}: { settings: AiSettings; value: AiRoute | null; onChange: (next: AiRoute | null) => void; placement?: 'up' | 'down'; narrow?: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const options = useMemo(() => chatModels(settings), [settings]);
@@ -58,7 +58,7 @@ export function ModelPicker({settings, value, onChange, placement = 'down'}: { s
   const pick = (next: AiRoute | null) => { onChange(next); setOpen(false); setQuery(''); };
   return <div ref={ref} className="relative min-w-0 shrink">
     <button type="button" onClick={() => setOpen(v => !v)} aria-haspopup="listbox" aria-expanded={open}
-      className="flex w-full min-w-0 max-w-[15rem] items-center gap-1.5 overflow-hidden rounded-lg border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted" title={t('模型：{model}', { model: current })}>
+      className={`flex w-full min-w-0 items-center gap-1.5 overflow-hidden rounded-lg border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted ${narrow ? 'max-w-[8rem]' : 'max-w-[15rem]'}`} title={t('模型：{model}', { model: current })}>
       <span className="min-w-0 flex-1 truncate">{current}</span><ChevronDown size={13} className="shrink-0"/>
     </button>
     {open && <div role="listbox" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); } }} className={`absolute right-0 z-30 w-72 rounded-xl border bg-[hsl(var(--popover))] p-1.5 shadow-lg ${placement === 'up' ? 'bottom-full mb-2' : 'mt-1'}`}>
