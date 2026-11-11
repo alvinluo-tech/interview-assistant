@@ -6,7 +6,7 @@ import {selectSolverTurn} from '@/lib/examEngine';
  * 多页收集态）。文案与悬停时长集中定义。
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Copy, Puzzle } from 'lucide-react';
+import { ArrowDown, Copy, Puzzle } from 'lucide-react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { showToast } from '@/ui/primitives';
 import {
@@ -191,10 +191,31 @@ function ExamShell({
   const isDark = skin.theme === 'dark';
   const { interactive, setInteractive } = usePlatform();
 
+  // 恢复会话与流式输出时贴底：followBottom 关掉后不再自动滚动。
+  const followBottom = useRef(true);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
+
   useEffect(() => {
     registerOverlayList(listRef.current);
     return () => registerOverlayList(null);
   }, []);
+
+  const jumpToBottom = () => {
+    followBottom.current = true;
+    setAwayFromBottom(false);
+    const el = listRef.current;
+    if (!el) return;
+    // 长答案动辄上万像素，平滑滚动会拖好几秒；短距离才用动画。
+    const far = el.scrollHeight - el.clientHeight - el.scrollTop > 2000;
+    el.scrollTo({ top: el.scrollHeight, behavior: far ? 'auto' : 'smooth' });
+  };
+
+  // 新的一轮答案出现时回到最新：用户可能正翻着旧题按了「解题」。
+  useEffect(() => {
+    if (solver.turns.length > 0) jumpToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solver.turns.length]);
 
   const modeInfo = examModeInfo(solver.mode);
   const multiPage = solver.pendingScreenshots.length > 0;
@@ -230,6 +251,38 @@ function ExamShell({
   };
 
   const empty = solver.turns.length === 0 && !multiPage && !solving && !solver.errorMessage;
+  // 恢复会话时吸到底部；之后只要用户没往上翻，内容变高（流式输出、图片解码）也继续贴底。
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    let frame = 0;
+    const measure = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
+        setAwayFromBottom(gap > 24);
+        if (followBottom.current && gap > 1) el.scrollTop = el.scrollHeight;
+      });
+    };
+    const onScroll = () => {
+      const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
+      // 用户主动往上翻就停止跟随；滚回底部附近再恢复。
+      if (gap <= 24) followBottom.current = true;
+      else if (gap > 160) followBottom.current = false;
+      measure();
+    };
+    measure();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const observer = new ResizeObserver(measure);
+    if (contentRef.current) observer.observe(contentRef.current);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [empty]);
+
 
   return (
     <div
@@ -265,61 +318,64 @@ function ExamShell({
       <ScrollEdgePillProxy id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
 
       {/* 消息区 */}
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-3">
-        {empty ? (
-          <div className="ov-text-2 flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-            <div className="ov-text text-[13px] font-medium">{t('把鼠标悬停到下方「解题」按钮 1.2 秒')}</div>
-            <div className="ov-text-2 text-[11px] opacity-80">{t('AI 会自动截屏并解答')}</div>
-            <div className="ov-text-3 text-[10.5px] opacity-60">
-              {t('也可以直接按 {keys}，手不用离开键盘', { keys: hotkeyBadge(hotkeys.answer, isMac()) })}
+      <div className="relative min-h-0 flex-1">
+        <div ref={listRef} className="h-full overflow-y-auto p-3">
+          {empty ? (
+            <div className="ov-text-2 flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+              <div className="ov-text text-[13px] font-medium">{t('把鼠标悬停到下方「解题」按钮 1.2 秒')}</div>
+              <div className="ov-text-2 text-[11px] opacity-80">{t('AI 会自动截屏并解答')}</div>
+              <div className="ov-text-3 text-[10.5px] opacity-60">
+                {t('也可以直接按 {keys}，手不用离开键盘', { keys: hotkeyBadge(hotkeys.answer, isMac()) })}
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            {multiPage && (
-              <div className="ov-chip mb-2 rounded-md border px-2 py-1 text-[11px]">
-                {t('已截 {n} 页，按「发送」开始解答', { n: solver.pendingScreenshots.length })}
-              </div>
-            )}
-            {solver.statusText && (
-              <div className="ov-text-2 mb-2 flex items-center gap-1.5 text-[11px]">
-                <span className="ov-dot size-1.5 animate-pulse rounded-full" />
-                {solver.statusText}
-              </div>
-            )}
-            {waitingFirstToken && (
-              <ThinkingLine
-                elapsedSec={solver.elapsedSec}
-                chars={solver.reasoningChars}
-                preview={solver.reasoningPreview}
-                quietSec={solver.quietSec}
-                firstTokenMs={solver.firstTokenMs}
-              />
-            )}
-            {solver.turns.map((turn, i) => (
-              <div key={turn.id} className="mb-3">
-                <DwellChip id={`select-${turn.id}`} hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)} label={t('{index} · {kind}{state}', { index: i+1, kind: turn.parentTurnId?t('追问'):t('原题'), state: selected?.id===turn.id?t(' · 当前追问对象'):t(' · 选择此题追问') })} />
-                {turn.body.startsWith('> ') && (
-                  <div className="ov-text-3 mb-1 text-[11px] italic opacity-80">
-                    {turn.body.split('\n')[0].slice(2)}
-                  </div>
-                )}
-                <div data-overlay-scroll-anchor={i === solver.turns.length - 1 || undefined}>
-                  <Md text={turn.body.replace(/^> .*\n\n/, '')} />
-                  <GenerationDetails status={turn.completionStatus} request={turn.request}/>
-                  {turn.verification && <div className="ov-text-3 mt-1 text-[10px]" role="status">{verificationLabel(turn.verification, turn.codeLanguage)}</div>}
-                  {turn.verification && <VerificationDetails verdict={turn.verification} />}
-                  {turn.imageSaveError && <div role="alert" className="ov-text-2">{t('原题截图未保存，请保留题目并在需要时重新截图。')}</div>}
+          ) : (
+            <div ref={contentRef}>
+              {multiPage && (
+                <div className="ov-chip mb-2 rounded-md border px-2 py-1 text-[11px]">
+                  {t('已截 {n} 页，按「发送」开始解答', { n: solver.pendingScreenshots.length })}
                 </div>
-              </div>
-            ))}
-            {solver.errorMessage && (
-              <div className="ov-text-2 rounded-md border border-dashed px-2 py-1.5 text-[11px]">
-                {solver.errorMessage}
-              </div>
-            )}
-          </>
-        )}
+              )}
+              {solver.statusText && (
+                <div className="ov-text-2 mb-2 flex items-center gap-1.5 text-[11px]">
+                  <span className="ov-dot size-1.5 animate-pulse rounded-full" />
+                  {solver.statusText}
+                </div>
+              )}
+              {waitingFirstToken && (
+                <ThinkingLine
+                  elapsedSec={solver.elapsedSec}
+                  chars={solver.reasoningChars}
+                  preview={solver.reasoningPreview}
+                  quietSec={solver.quietSec}
+                  firstTokenMs={solver.firstTokenMs}
+                />
+              )}
+              {solver.turns.map((turn, i) => (
+                <div key={turn.id} className="mb-3">
+                  <DwellChip id={`select-${turn.id}`} hoverMs={1200} onTrigger={()=>selectSolverTurn(turn.id)} label={t('{index} · {kind}{state}', { index: i+1, kind: turn.parentTurnId?t('追问'):t('原题'), state: selected?.id===turn.id?t(' · 当前追问对象'):t(' · 选择此题追问') })} />
+                  {turn.body.startsWith('> ') && (
+                    <div className="ov-text-3 mb-1 text-[11px] italic opacity-80">
+                      {turn.body.split('\n')[0].slice(2)}
+                    </div>
+                  )}
+                  <div data-overlay-scroll-anchor={i === solver.turns.length - 1 || undefined}>
+                    <Md text={turn.body.replace(/^> .*\n\n/, '')} />
+                    <GenerationDetails status={turn.completionStatus} request={turn.request}/>
+                    {turn.verification && <div className="ov-text-3 mt-1 text-[10px]" role="status">{verificationLabel(turn.verification, turn.codeLanguage)}</div>}
+                    {turn.verification && <VerificationDetails verdict={turn.verification} />}
+                    {turn.imageSaveError && <div role="alert" className="ov-text-2">{t('原题截图未保存，请保留题目并在需要时重新截图。')}</div>}
+                  </div>
+                </div>
+              ))}
+              {solver.errorMessage && (
+                <div className="ov-text-2 rounded-md border border-dashed px-2 py-1.5 text-[11px]">
+                  {solver.errorMessage}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {awayFromBottom && <ScrollToBottomButton onJump={jumpToBottom} />}
       </div>
 
       <ScrollEdgePillProxy id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
@@ -589,6 +645,32 @@ function DwellChip({
 /** 一键配色：截屏采样背景色 → 推导主题（本地版 overlay.suggestPalette） */
 function PaletteButton() {
   return <ConfirmPaletteButton id="auto-palette" onApply={() => applyOverlayPalette('exam')} />;
+}
+
+/** 一键回到底部：只在离开底部时出现，与自由对话的箭头一致 */
+function ScrollToBottomButton({ onJump }: { onJump: () => void }) {
+  const { interactive, registerZone, simulate } = usePlatform();
+  const progress = useDwell('scroll-bottom', 400, onJump, { disabled: interactive });
+  const [refEl, setRefEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    registerZone('scroll-bottom', refEl);
+    return () => registerZone('scroll-bottom', null);
+  }, [refEl, registerZone]);
+  return (
+    <button
+      ref={setRefEl as (el: HTMLButtonElement | null) => void}
+      type="button"
+      onClick={interactive && !simulate ? onJump : undefined}
+      aria-label={t('滚动到底部')}
+      title={t('滚动到底部')}
+      className="ov-chip ov-text absolute bottom-2 right-2 z-10 flex size-7 items-center justify-center rounded-full border shadow-md"
+    >
+      <ArrowDown size={14} />
+      {!interactive && progress > 0 && (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-current opacity-25" />
+      )}
+    </button>
+  );
 }
 
 /** ScrollEdgePill 包装（保持 JSX 顺序清晰） */
