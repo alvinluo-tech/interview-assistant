@@ -884,6 +884,7 @@ export const es419: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "No se pudieron leer los datos; se bloqueó la sobrescritura: {message}",
   "刷新设备": "Actualizar dispositivos",
   "刷新状态": "Actualizar estado",
+  "当前没有单独选择视觉模型，会使用对话模型；如果它不支持图片输入，识别会失败。": "No hay un modelo de visión seleccionado, así que se usará el modelo de conversación. Si no admite imágenes, el reconocimiento fallará.",
   "删除资料：{name}": "Eliminar material: {name}",
   "双机位": "Cámara doble",
   "双机位笔试": "Examen con doble cámara",

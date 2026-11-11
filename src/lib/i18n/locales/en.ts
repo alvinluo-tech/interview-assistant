@@ -884,6 +884,7 @@ export const en: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Failed to read data; overwriting was blocked: {message}",
   "刷新设备": "Refresh devices",
   "刷新状态": "Refresh status",
+  "当前没有单独选择视觉模型，会使用对话模型；如果它不支持图片输入，识别会失败。": "No vision model is selected, so the chat model is used. If it cannot read images, recognition will fail.",
   "删除资料：{name}": "Delete material: {name}",
   "双机位": "Dual camera",
   "双机位笔试": "Dual-camera written test",

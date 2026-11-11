@@ -884,6 +884,7 @@ export const ptBr: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Falha ao ler os dados; a substituição foi bloqueada: {message}",
   "刷新设备": "Atualizar dispositivos",
   "刷新状态": "Atualizar estado",
+  "当前没有单独选择视觉模型，会使用对话模型；如果它不支持图片输入，识别会失败。": "Nenhum modelo de visão foi selecionado, então o modelo de conversa será usado. Se ele não aceitar imagens, o reconhecimento falhará.",
   "删除资料：{name}": "Excluir material: {name}",
   "双机位": "Câmera dupla",
   "双机位笔试": "Prova com câmera dupla",

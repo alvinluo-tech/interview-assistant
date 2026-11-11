@@ -884,6 +884,7 @@ export const vi: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Đọc dữ liệu thất bại nên đã chặn ghi đè: {message}",
   "刷新设备": "Làm mới thiết bị",
   "刷新状态": "Làm mới trạng thái",
+  "当前没有单独选择视觉模型，会使用对话模型；如果它不支持图片输入，识别会失败。": "Chưa chọn mô hình thị giác nên sẽ dùng mô hình hội thoại. Nếu mô hình không nhận ảnh, việc nhận dạng sẽ thất bại.",
   "删除资料：{name}": "Xóa tài liệu: {name}",
   "双机位": "Hai camera",
   "双机位笔试": "Thi viết hai camera",

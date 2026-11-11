@@ -884,6 +884,7 @@ export const tr: Record<string, string> = {
   "数据读取失败，已阻止覆盖：{message}": "Veri okunamadı; üzerine yazma engellendi: {message}",
   "刷新设备": "Cihazları yenile",
   "刷新状态": "Durumu yenile",
+  "当前没有单独选择视觉模型，会使用对话模型；如果它不支持图片输入，识别会失败。": "Görsel modeli seçilmediği için sohbet modeli kullanılacak. Görüntü desteklemiyorsa tanıma başarısız olur.",
   "删除资料：{name}": "Materyali sil: {name}",
   "双机位": "Çift kamera",
   "双机位笔试": "Çift kameralı yazılı sınav",

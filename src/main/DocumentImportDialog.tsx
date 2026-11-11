@@ -18,7 +18,11 @@ export function DocumentImportDialog({ file, initial, title = t('检查文档正
   const controller = useRef<AbortController | null>(null);
   const visionReady = useAiReady('vision');
   const ai = useAiSettings();
-  const vision = ai.providers.find(provider => provider.id === ai.routes.vision?.providerId);
+  // 视觉路由没单独选时会回退到对话路由（见 resolveAiRoute），提示里的名字与模型要跟着回退，
+  // 否则未配置视觉模型时会出现「」和空模型名。
+  const visionRoute = ai.routes.vision ?? ai.routes.chat;
+  const vision = ai.providers.find(provider => provider.id === visionRoute?.providerId);
+  const visionModel = visionRoute?.modelId ?? '';
 
   async function read(allowVision = false) {
     if (!file) return;
@@ -44,7 +48,8 @@ export function DocumentImportDialog({ file, initial, title = t('检查文档正
     {reading && <p role="status" className="my-3 text-sm">{progress}</p>}
     {error && <p role="alert" className="my-3 rounded border border-amber-500/40 p-3 text-sm">{t(error)}</p>}
     {needsVision && <div className="mb-3 space-y-2 text-xs">
-      <p>{visionReady ? t('将发送至「{name}」的 {model}，可能产生服务调用费用。', { name: vision?.name ?? '', model: ai.routes.vision?.modelId ?? '' }) : t('请先到「设置 → AI 服务」配置支持图片输入的视觉模型，再回来重试。')}</p>
+      <p>{visionReady ? t('将发送至「{name}」的 {model}，可能产生服务调用费用。', { name: vision?.name ?? '', model: visionModel }) : t('请先到「设置 → AI 服务」配置支持图片输入的视觉模型，再回来重试。')}</p>
+      {visionReady && !ai.routes.vision && <p>{t('当前没有单独选择视觉模型，会使用对话模型；如果它不支持图片输入，识别会失败。')}</p>}
       <Button size="sm" disabled={!visionReady || reading} onClick={() => void read(true)}>{t('确认发送图片/扫描页并识别')}</Button>
     </div>}
     {document && <>
