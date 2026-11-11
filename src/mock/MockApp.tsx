@@ -19,6 +19,7 @@ import {
   askedQuestionCount,
   generateHint,
   generateMockReport,
+  generateWeakPoints,
   generateNextQuestion,
   generateOpeningQuestion,
   mockMeta,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/mock';
 import { updateSession, useData, type ChatMessage, type InterviewSession } from '@/lib/backend';
 import { AvatarMark } from './AvatarMark';
+import { WeakPoints } from '@/main/sections/WeakPoints';
 import { questionSpeaker } from '@/lib/questionSpeech';
 import {normalizeSpeechProfile,speechRenderSpec,recognitionLanguage,type SpeechProfile} from '@/lib/speechProfile';
 import {SpeechProfilePanel} from '@/main/sections/SpeechProfilePanel';
@@ -336,6 +338,16 @@ function MockRoom() {
           metadata: { ...(session.metadata ?? {}), report: text, reportStatus: 'ready', reportError: undefined },
         });
         setReport(text);
+        // Weak spots ride after the report: they cost one small call and never block it.
+        try {
+          const points = await generateWeakPoints(finalMessages, reportRequest.signal, config?currentMockKnowledge(config):undefined);
+          if (reportRequest.signal.aborted) return;
+          await updateSession(session.id, {
+            metadata: { ...(session.metadata ?? {}), report: text, reportStatus: 'ready', reportError: undefined, weakPoints: points, weakPointsStatus: 'ready' },
+          });
+        } catch {
+          // The report is already stored; a failed extraction just leaves the list empty.
+        }
       } catch (e) {
         const message = reportRequest.signal.aborted ? '复盘已取消，可在历史记录中重新生成。' : String((e as Error).message ?? e);
         await updateSession(session.id, {
@@ -422,6 +434,18 @@ function MockRoom() {
             <pre className="whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-[13px] leading-relaxed">
               {shownReport}
             </pre>
+          )}
+          {meta?.weakPoints && meta.weakPoints.length > 0 && (
+            <WeakPoints
+              variant="dark"
+              points={meta.weakPoints}
+              accepted={meta.weakPointsAccepted ?? []}
+              onSaved={(texts) =>
+                updateSession(session.id, {
+                  metadata: { ...(session.metadata ?? {}), weakPointsAccepted: [...(meta.weakPointsAccepted ?? []), ...texts] },
+                })
+              }
+            />
           )}
           {!shownReport && !generatingReport && (
             <pre className="whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-[13px] leading-relaxed">

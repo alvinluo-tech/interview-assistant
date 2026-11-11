@@ -22,6 +22,9 @@ export interface MockMetadata {
     report?: string;
     reportStatus?: 'pending' | 'ready' | 'error';
     reportError?: string;
+    weakPoints?: string[];
+    weakPointsStatus?: 'pending' | 'ready' | 'error';
+    weakPointsAccepted?: string[];
     abandoned?: boolean;
 }
 const MAX_QUESTION_CHARS = 400;
@@ -147,4 +150,32 @@ export async function generateMockReport(messages: ChatMessage[], signal?: Abort
                     config ? `目标岗位：${config.goalName || ''}；难度：${config.difficultyLabel}。` : '没有完整岗位量表，仅评价已观察到的回答。'
                 ].join('\n') },
             ...(config ? [transcriptData(config, config.goalName || '')] : []), { role: 'user', content: dialogueTranscript(messages, 36000) || '没有有效问答，不得推断候选人能力。' }], temperature: 0.4 });
+}
+const WEAK_POINT_RULES = [
+    '你在整理一场模拟面试的复盘。只根据实际问答，指出候选人这次真正暴露的薄弱点：知识缺口、表达结构问题、项目依据不足。',
+    '每条不超过 40 字，要具体可练——写「MVCC 的版本链讲不清」而不是「数据库薄弱」。',
+    '不要推测没有考察到的能力，不要重复同一个点，最多 4 条；没有明确弱项就输出空数组。',
+    '只输出 JSON 字符串数组，不要解释、不要 Markdown。',
+].join('\n');
+/** Distils the weak spots a mock session actually exposed; an empty list is a valid answer. */
+export async function generateWeakPoints(messages: ChatMessage[], signal?: AbortSignal, config?: MockConfig): Promise<string[]> {
+    const text = await chatStream({ signal, task: 'mock-report', messages: [
+                { role: 'system', content: WEAK_POINT_RULES + (config ? `\n目标岗位：${config.goalName || ''}；难度：${config.difficultyLabel}。` : '') },
+                { role: 'user', content: dialogueTranscript(messages, 24000) || '没有有效问答，输出空数组。' },
+            ], temperature: 0.3, maxTokens: 400 });
+    const start = text.indexOf('[');
+    const end = text.lastIndexOf(']');
+    if (start < 0 || end <= start) return [];
+    try {
+        const parsed: unknown = JSON.parse(text.slice(start, end + 1));
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((item): item is string => typeof item === 'string')
+            .map(item => item.replace(/\s+/g, ' ').trim().slice(0, 80))
+            .filter(item => item.length >= 4)
+            .slice(0, 4);
+    }
+    catch {
+        return [];
+    }
 }

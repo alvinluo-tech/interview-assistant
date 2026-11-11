@@ -58,3 +58,13 @@ test('candidate speech and old questions retain their actual roles when requesti
   assert.doesNotMatch(JSON.stringify(calls[0]),/已作废/);
   assert.match(calls[0].messages.at(-1).content,/面试官/);
 });
+test('weak spots are distilled as a short list and an empty answer stays empty',async()=>{
+  const {api,calls}=harness('```json\n["MVCC 的版本链讲不清","回答缺少取舍对比",42,"  ","没有给出压测数据"]\n```');
+  const points=await api.generateWeakPoints([{id:'q',role:'INTERVIEWER',text:'说说 MVCC。'},{id:'a',role:'ASSISTANT',text:'就是多版本。'}],undefined,config);
+  assert.deepEqual(Array.from(points),['MVCC 的版本链讲不清','回答缺少取舍对比','没有给出压测数据']);
+  assert.equal(calls[0].maxTokens,400);
+  assert.equal(calls[0].temperature,0.3);
+  assert.match(calls[0].messages[0].content,/JSON 字符串数组/);
+  const empty=harness('没有明显弱项。');
+  assert.deepEqual(Array.from(await empty.api.generateWeakPoints([],undefined)),[]);
+});

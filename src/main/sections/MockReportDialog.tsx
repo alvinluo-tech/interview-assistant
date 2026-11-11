@@ -3,8 +3,9 @@
  */
 import { Dialog, DialogTitle, DialogDesc, Button } from '@/ui/primitives';
 import { Md } from '@/overlay/Md';
-import type { InterviewSession } from '@/lib/backend';
+import { updateSession, type InterviewSession } from '@/lib/backend';
 import { mockMeta } from '@/lib/mock';
+import { WeakPoints } from './WeakPoints';
 import { t } from '@/lib/i18n';
 
 export function MockReportDialog({
@@ -15,6 +16,7 @@ export function MockReportDialog({
   onClose: () => void;
 }) {
   const meta = session ? mockMeta(session) : null;
+  const accepted = meta?.weakPointsAccepted ?? [];
   return (
     <Dialog open={session != null} onClose={onClose} className="sm:max-w-2xl">
       <DialogTitle>{t('复盘报告')}</DialogTitle>
@@ -22,7 +24,7 @@ export function MockReportDialog({
         {session?.title}
         {meta?.report ? '' : t(' · 报告还没有生成')}
       </DialogDesc>
-      <div className="mt-3 max-h-[60vh] overflow-y-auto rounded-md border bg-muted/30 p-3 text-[13px] leading-relaxed">
+      <div className="mt-3 max-h-[52vh] overflow-y-auto rounded-md border bg-muted/30 p-3 text-[13px] leading-relaxed">
         {meta?.report ? (
           <Md text={meta.report} />
         ) : (
@@ -32,6 +34,17 @@ export function MockReportDialog({
               : t('这场还没有复盘报告。')}
           </p>
         )}
+      </div>
+      <div className="mt-3">
+        <WeakPoints
+          points={meta?.weakPoints ?? []}
+          accepted={accepted}
+          onSaved={(texts) =>
+            updateSession(session!.id, {
+              metadata: { ...(session!.metadata ?? {}), weakPointsAccepted: [...accepted, ...texts] },
+            })
+          }
+        />
       </div>
       <div className="mt-3 flex justify-end">
         <Button size="sm" variant="outline" onClick={onClose}>

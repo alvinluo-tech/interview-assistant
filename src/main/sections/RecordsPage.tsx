@@ -23,7 +23,7 @@ import {
   type ExamSessionRecord,
   type InterviewSession,
 } from '@/lib/backend';
-import { generateMockReport, mockMeta } from '@/lib/mock';
+import { generateMockReport, generateWeakPoints, mockMeta } from '@/lib/mock';
 import {currentMockKnowledge} from '@/lib/sessionKnowledge';
 import { useAiReady } from '@/lib/aiSettings';
 import { mdToPlain, Md } from '@/overlay/Md';
@@ -152,8 +152,14 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
       });
       const config=mockMeta(s)?.config;
       const report = await generateMockReport(s.messages,undefined,config?currentMockKnowledge(config):undefined);
+      let weakPoints: string[] = [];
+      try {
+        weakPoints = await generateWeakPoints(s.messages,undefined,config?currentMockKnowledge(config):undefined);
+      } catch {
+        // Optional follow-up; the report stands on its own.
+      }
       await updateSession(s.id, {
-        metadata: { ...(s.metadata ?? {}), report, reportStatus: 'ready', reportError: undefined },
+        metadata: { ...(s.metadata ?? {}), report, reportStatus: 'ready', reportError: undefined, weakPoints, weakPointsStatus: 'ready' },
       });
       showToast({ type: 'success', title: t('复盘报告已生成') });
     } catch (e) {
