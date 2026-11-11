@@ -189,6 +189,7 @@ function ExamShell({
   const hotkeys = effectiveHotkeys(scheme, customKeys);
   const showCopyCode = useSetting('exam.showCopyCodeButton', false)[0];
   const isDark = skin.theme === 'dark';
+  const { interactive, setInteractive } = usePlatform();
 
   useEffect(() => {
     registerOverlayList(listRef.current);
@@ -211,6 +212,18 @@ function ExamShell({
   // 样例没全过：让用户决定要不要按失败样例重写（最多两轮，硬上限）。
   const fixable = selected?.verification?.verdict === 'failed' && (selected?.fixRound ?? 0) < 2;
   const copy = () => copyAnswerToClipboard(selected?.body ?? '');
+  // 追问输入框要能打字：浮窗默认穿透，打开时临时投影为可交互，关闭后还原原状态。
+  const [askOpen, setAskOpen] = useState(false), [askText, setAskText] = useState('');
+  const askRestore = useRef(false);
+  const openAsk = () => {askRestore.current = interactive; setInteractive(true); setAskOpen(true);};
+  const closeAsk = () => {setAskOpen(false); setInteractive(askRestore.current);};
+  const sendAsk = () => {
+    const message = askText.trim();
+    if (!message) return;
+    setAskText('');
+    closeAsk();
+    void followUp({ message, turnId: selected?.id });
+  };
 
   const doSolve = async () => {
     await solve();
@@ -384,6 +397,41 @@ function ExamShell({
             onTrigger={() => void followUp({ intent: 'code-review' })}
             label={t('截图检查当前代码')}
           />
+          <DwellChip
+            id="fu-optimize"
+            hoverMs={HOVER_MS.followUp}
+            onTrigger={() => void followUp({ intent: 'optimize' })}
+            label={t('优化复杂度')}
+          />
+          <DwellChip
+            id="fu-ask"
+            hoverMs={HOVER_MS.followUp}
+            onTrigger={() => (askOpen ? closeAsk() : openAsk())}
+            label={t('追问')}
+          />
+        </div>
+      )}
+
+      {askOpen && !solving && (
+        <div className="mt-2 px-2">
+          <textarea
+            autoFocus
+            rows={2}
+            value={askText}
+            onChange={event => setAskText(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey) {event.preventDefault(); sendAsk();}
+              else if (event.key === 'Escape') {event.preventDefault(); closeAsk();}
+            }}
+            placeholder={t('追问：例如时间复杂度太高，请换成能满足题面限制的写法')}
+            className="ov-input w-full resize-none rounded-md border px-2 py-1.5 text-[11px] outline-none"
+          />
+          <div className="mt-1 flex items-center gap-2">
+            <span className="ov-text-3 text-[10px]">{t('Enter 发送 · Shift + Enter 换行')}</span>
+            <div className="flex-1" />
+            <button type="button" onClick={closeAsk} className="ov-chip ov-text rounded px-2 py-0.5 text-[10.5px]">{t('取消')}</button>
+            <button type="button" disabled={!askText.trim()} onClick={sendAsk} className="ov-chip ov-text rounded px-2 py-0.5 text-[10.5px] disabled:opacity-40">{t('发送')}</button>
+          </div>
         </div>
       )}
 

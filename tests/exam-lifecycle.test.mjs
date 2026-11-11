@@ -35,6 +35,7 @@ function engine({ completionFails = false, imageSaveFails = false, captureFails 
         if (deferred) return new Promise((resolve,reject) => { resolveRequest = resolve;rejectRequest=reject; });
         opts.onDelta?.(text); return text;
       } };
+      if (name === './examConstraints') return { constraintBrief: () => 'constraints', parseExamConstraints: () => ({}) };
       if (name === './codeQuestion') return sampleFix
         ? { extractCodeBlock: text => { const m = /```[a-zA-Z]*\n([\s\S]*?)```/.exec(text); return m ? { language: 'python', code: m[1] } : null; }, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [{ input: '1', output: '2' }] }
         : { extractCodeBlock: () => null, detectLanguage: () => 'python', detectRunMode: () => 'core', parseSamples: () => [] };
@@ -173,6 +174,15 @@ test('repeated solve actions cannot start competing generation requests', async 
   const second = h.api.solve({ screenshots: ['synthetic'] }); await flush();
   assert.equal(h.requests(), 1);
   h.resolve('answer'); await Promise.all([first, second]);
+});
+
+test('every answer asks the model to check complexity against the stated limits', async () => {
+  const h = engine({ deferred: false });
+  await h.api.solve({ screenshots: ['synthetic'] });
+  assert.match(String(h.options().system), /constraints/);
+  await h.api.followUp({ intent: 'optimize', turnId: h.api.getSolverState().turns[0].id });
+  assert.match(h.prompts.at(-1), /现在请：.*时间\/空间限制/s);
+  assert.match(h.prompts.at(-1), /constraints/);
 });
 
 test('streamed follow-ups are not appended a second time on completion', async () => {

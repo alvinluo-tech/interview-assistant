@@ -25,6 +25,7 @@ export interface OverlayPlatform {
   mode: OverlayMode;
   interactive: boolean;
   toggleInteractive: () => void;
+  setInteractive: (on: boolean) => void;
   registerZone: (id: string, el: HTMLElement | null) => void;
   /** 穿透模式下当前命中的 zone（悬停驻留用） */
   activeZoneId: string | null;
@@ -222,6 +223,7 @@ export function OverlayPlatformProvider({
     mode,
     interactive,
     toggleInteractive: () => setInteractiveState((v) => !v),
+    setInteractive: setInteractiveState,
     registerZone,
     activeZoneId: interactive ? null : activeZoneId,
     bindHotkey,

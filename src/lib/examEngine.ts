@@ -11,6 +11,7 @@ import { t } from './i18n';
 import {assembleExamContext} from './aiContext';
 import type {AiRequestTrace} from './aiTaskPolicy';
 import { extractCodeBlock, detectLanguage, detectRunMode, parseSamples, type RunMode } from './codeQuestion';
+import { constraintBrief, parseExamConstraints } from './examConstraints';
 import { buildScaffold } from './codeScaffold';
 import { verifyCode, judgedSamples, type CodeVerdict } from './codeRunner';
 
@@ -430,7 +431,7 @@ export async function solve(opts?: { screenshots?: string[] }): Promise<void> {
       task:'exam-solve',
       onTrace:request=>{noteTraceLatency(request);if(current===generation)setState({turns:state.turns.map(t=>t.id===turn.id?{...t,request,completionStatus:request.completionStatus}:t)});},
       signal: controller.signal,
-      system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'结论优先：先用一两句话把思路和答案说清，再给必要步骤，避免长篇铺垫。':state.mode==='programming'?'先按「题意→关键观察→做法与理由→复杂度」讲清思路（3 到 5 句），再给完整可运行代码；代码里对关键分支、边界与易错处写一句注释。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路：思路讲 3 到 5 句，说明为什么这么做，再给结论。'),
+      system: EXAM_SYSTEM_PROMPT+'\n先用 <exam-question>完整转写题干、选项、约束与样例</exam-question>，再用 <exam-answer>给出答案</exam-answer>。不添加这两个区块以外的内容。\n'+(state.mode==='instant'?'结论优先：先用一两句话把思路和答案说清，再给必要步骤，避免长篇铺垫。':state.mode==='programming'?'先按「题意→关键观察→做法与理由→复杂度」讲清思路（3 到 5 句），再给完整可运行代码；代码里对关键分支、边界与易错处写一句注释。不要声称执行过代码或已通过样例，除非有真实执行结果。':'输出答案和关键思路：思路讲 3 到 5 句，说明为什么这么做，再给结论。')+'\n'+constraintBrief({}),
       onReasoning: (thought) => {
         if (current !== generation) return;
         liveReasoning += thought;
@@ -507,7 +508,7 @@ export async function answerNow(): Promise<void> {
 
 export async function followUp(opts: {
   turnId?:string;
-  intent?: 'partial-pass' | 'brute-force' | 'simplify' | 'code-review';
+  intent?: 'partial-pass' | 'brute-force' | 'simplify' | 'code-review' | 'optimize';
   level?: number;
   message?: string;
   screenshots?: string[];
@@ -519,6 +520,7 @@ export async function followUp(opts: {
     'partial-pass': '请给出更容易理解的基础解法，保持正确性，并诚实说明复杂度与适用数据范围，不编造通过率。',
     'brute-force': '请给出暴力解法版本，直接可提交，不强求最优复杂度。',
     simplify: '请继续简化上面的代码，让它更像普通面试者现场写出来的，同时保持可以通过。',
+    optimize: '当前解法在题面的时间/空间限制下可能不达标。先指出瓶颈（哪一层循环、哪次拷贝、哪种数据结构），再给出满足限制的改法；标出时间与空间复杂度，并说明为什么这版能满足限制。如果已经是最优解，说明原因与可接受的取舍。',
     'code-review': '这是我照着上面的解法手敲的代码，帮我检查有没有问题（不用重写整段，指出要改的行即可）。',
   };
   const prompt = opts.message ?? map[opts.intent ?? ''] ?? opts.message ?? '';
@@ -540,7 +542,7 @@ export async function followUp(opts: {
     createdAt: Date.now(),
   };
   function labelOfIntent(intent?: string): string {
-    return { 'partial-pass': t('基础解法'), 'brute-force': t('换暴力解法'), simplify: t('继续简化'), 'code-review': t('检查代码') }[intent ?? ''] ?? t('追问');
+    return { 'partial-pass': t('基础解法'), 'brute-force': t('换暴力解法'), simplify: t('继续简化'), 'code-review': t('检查代码'), optimize: t('优化复杂度') }[intent ?? ''] ?? t('追问');
   }
   const turns = [...state.turns, turn];
   setState({
@@ -568,7 +570,7 @@ export async function followUp(opts: {
     }
     if(current!==generation)return;
     const answer = await chatWithImages(
-      `以下是之前的题目与答案：\n\n${context}\n\n现在请：${prompt}`,
+      `以下是之前的题目与答案：\n\n${context}\n\n现在请：${prompt}\n\n${constraintBrief(parseExamConstraints(last.questionText))}`,
       images,
       {
         task:'exam-followup',
