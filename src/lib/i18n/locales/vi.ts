@@ -11,6 +11,7 @@ export const vi: Record<string, string> = {
   "输入": "Đầu vào",
   "输出": "Đầu ra",
   "思考过程": "Quá trình suy nghĩ",
+  "表格": "Bảng",
   "已完成，用时 {duration}": "Xong sau {duration}",
   "{minutes} 分 {seconds} 秒": "{minutes} phút {seconds} giây",
   "{seconds} 秒": "{seconds} giây",

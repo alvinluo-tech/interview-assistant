@@ -379,7 +379,7 @@ function StepsView({steps,elapsedMs}:{steps:FreeChatStep[];elapsedMs:number}) {
       <span className="min-w-0 flex-1 truncate">{busy?t('正在处理…'):elapsedMs>0?t('已完成，用时 {duration}',{duration:formatElapsed(elapsedMs)}):t('已完成')}</span>
       <ChevronDown size={12} className={`shrink-0 transition ${open?'rotate-180':''}`}/>
     </button>
-    {open&&<div className="pl-1">{known.map(step=><StepRow key={step.id} step={step}/>)}</div>}
+    {open&&<div className="max-h-64 overflow-y-auto pl-1 pr-1">{known.map(step=><StepRow key={step.id} step={step}/>)}</div>}
   </div>;
 }
 

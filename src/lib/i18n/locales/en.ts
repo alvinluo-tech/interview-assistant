@@ -11,6 +11,7 @@ export const en: Record<string, string> = {
   "输入": "Input",
   "输出": "Output",
   "思考过程": "Reasoning",
+  "表格": "Table",
   "已完成，用时 {duration}": "Done in {duration}",
   "{minutes} 分 {seconds} 秒": "{minutes}m {seconds}s",
   "{seconds} 秒": "{seconds}s",

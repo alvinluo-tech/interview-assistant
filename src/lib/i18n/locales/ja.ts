@@ -11,6 +11,7 @@ export const ja: Record<string, string> = {
   "输入": "入力",
   "输出": "出力",
   "思考过程": "思考の流れ",
+  "表格": "表",
   "已完成，用时 {duration}": "{duration}で完了",
   "{minutes} 分 {seconds} 秒": "{minutes}分{seconds}秒",
   "{seconds} 秒": "{seconds}秒",

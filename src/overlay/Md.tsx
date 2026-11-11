@@ -9,7 +9,7 @@
  *
  * 流式更新统一节流：每 RENDER_THROTTLE_MS 最多重新解析一次，避免每个 token 都跑一遍 AST。
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { t } from '@/lib/i18n';
@@ -77,20 +77,60 @@ function useThrottled(value: string, ms: number): string {
   return shown;
 }
 
+function writeClipboard(text: string) {
+  void import('@tauri-apps/plugin-clipboard-manager')
+    .then(({ writeText }) => writeText(text))
+    .catch(() => {});
+}
+
 /** 代码块右上角的复制按钮：浮窗走驻留按钮，主窗口（无平台容器）退化成普通按钮。 */
 function CopyCodeButton({ code }: { code: string }) {
   const platform = usePlatformOptional();
   // 每块代码一个唯一 zone id，否则多个代码块会抢同一个热区。
   const id = `md-copy-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const copy = () => writeClipboard(code);
+  if (!platform) {
+    return <button type="button" className="overlay-code-copy" onClick={copy}>{t('复制')}</button>;
+  }
+  return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{t('复制')}</DwellButton>;
+}
+
+/**
+ * 表格复制：按 TSV 拼，粘进 Excel / 飞书表格能直接分列；纯文本粘贴也还算可读。
+ * 用 DOM 而不是 hast 取单元格文本，行内代码、加粗之类渲染后的结果才能原样带过去。
+ */
+function CopyTableButton({ target }: { target: RefObject<HTMLDivElement | null> }) {
+  const platform = usePlatformOptional();
+  const id = `md-table-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const copy = () => {
-    void import('@tauri-apps/plugin-clipboard-manager')
-      .then(({ writeText }) => writeText(code))
-      .catch(() => {});
+    const table = target.current?.querySelector('table');
+    if (!table) return;
+    const rows = Array.from(table.querySelectorAll('tr')).map((row) =>
+      Array.from(row.querySelectorAll('th, td'))
+        .map((cell) => (cell.textContent ?? '').replace(/\s+/g, ' ').trim())
+        .join('\t'),
+    );
+    writeClipboard(rows.join('\n'));
   };
   if (!platform) {
     return <button type="button" className="overlay-code-copy" onClick={copy}>{t('复制')}</button>;
   }
   return <DwellButton id={id} inline hoverMs={900} onTrigger={copy}>{t('复制')}</DwellButton>;
+}
+
+function TableBlock({ children }: { children?: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div className="md-table-block">
+      <div className="overlay-code-head">
+        <span className="overlay-code-lang">{t('表格')}</span>
+        <CopyTableButton target={ref} />
+      </div>
+      <div ref={ref} className="md-table-scroll">
+        <table>{children}</table>
+      </div>
+    </div>
+  );
 }
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
@@ -140,6 +180,7 @@ const COMPONENTS = {
     <CodeBlock language={hastLanguage(node)} code={hastText(node).replace(/\n$/, '')} />
   ),
   code: ({ children }: { children?: ReactNode }) => <code className="inline-code">{children}</code>,
+  table: ({ children }: { children?: ReactNode }) => <TableBlock>{children}</TableBlock>,
   a: ({ href, children }: { href?: string; children?: ReactNode }) => (
     <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
   ),

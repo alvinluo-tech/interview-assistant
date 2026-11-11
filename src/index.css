@@ -242,6 +242,15 @@ html.ov-palette-fade body.overlay #root * {
   font-size: calc(11.5px * var(--ov-font-scale, 1));
   line-height: 1.5;
 }
+.md-table-block {
+  margin: 6px 0;
+}
+.md-table-scroll {
+  overflow-x: auto;
+}
+.md-table-scroll table {
+  margin: 0;
+}
 .overlay-code-head {
   display: flex;
   align-items: center;

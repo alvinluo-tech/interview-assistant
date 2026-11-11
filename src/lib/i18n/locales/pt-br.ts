@@ -11,6 +11,7 @@ export const ptBr: Record<string, string> = {
   "输入": "Entrada",
   "输出": "Saída",
   "思考过程": "Raciocínio",
+  "表格": "Tabela",
   "已完成，用时 {duration}": "Concluído em {duration}",
   "{minutes} 分 {seconds} 秒": "{minutes} min {seconds} s",
   "{seconds} 秒": "{seconds} s",

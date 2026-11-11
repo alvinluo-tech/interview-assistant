@@ -11,6 +11,7 @@ export const es419: Record<string, string> = {
   "输入": "Entrada",
   "输出": "Salida",
   "思考过程": "Razonamiento",
+  "表格": "Tabla",
   "已完成，用时 {duration}": "Listo en {duration}",
   "{minutes} 分 {seconds} 秒": "{minutes} min {seconds} s",
   "{seconds} 秒": "{seconds} s",

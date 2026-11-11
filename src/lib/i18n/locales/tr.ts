@@ -11,6 +11,7 @@ export const tr: Record<string, string> = {
   "输入": "Girdi",
   "输出": "Çıktı",
   "思考过程": "Düşünme süreci",
+  "表格": "Tablo",
   "已完成，用时 {duration}": "{duration} içinde tamamlandı",
   "{minutes} 分 {seconds} 秒": "{minutes} dk {seconds} sn",
   "{seconds} 秒": "{seconds} sn",

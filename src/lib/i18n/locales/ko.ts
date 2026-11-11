@@ -11,6 +11,7 @@ export const ko: Record<string, string> = {
   "输入": "입력",
   "输出": "출력",
   "思考过程": "사고 과정",
+  "表格": "표",
   "已完成，用时 {duration}": "{duration} 만에 완료",
   "{minutes} 分 {seconds} 秒": "{minutes}분 {seconds}초",
   "{seconds} 秒": "{seconds}초",
