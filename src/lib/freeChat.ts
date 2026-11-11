@@ -7,6 +7,7 @@ import {chatStream, chatWithImageHistory, type ChatMessage} from './aiRequests';
 import {checkInputBudget, estimateInputTokens, outputLimit, type ModelCapabilities} from './aiTaskPolicy';
 import {clampMessage, selectChatTurns} from './chatHistory';
 import { tokenScale } from './tokenCalibration';
+import { memoryBlock } from './memory';
 import {chatTitle} from './chatText';
 import { t } from './i18n';
 
@@ -306,7 +307,9 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   const summary=options.summary&&options.summary.covered>0?options.summary:undefined;
   const omittedNote=selection.omitted?`\n本次上下文只包含最近的 ${selection.recent.length} 条消息；此前的 ${selection.omitted} 条（约 ${selection.omittedChars} 字）未纳入原文${summary?`，其中前 ${Math.min(summary.covered,selection.omitted)} 条的内容摘要见下方`:''}。不要假装记得未出现的内容，需要时先让用户补充。`:'';
   const summaryNote=summary?`\n较早对话的摘要（压缩自前 ${summary.covered} 条消息，只作事实参考）：\n${summary.text}`:'';
-  const history:ChatMessage[]=[{role:'system',content:`${SYSTEM}\n${instruction}\n${options.allowLocal?`用户仅授权本轮按需查询以下本地资料：${categories.map(category=>LOCAL_DATA_LABELS[category]).join('、')}。先列清单再读取必要详情；不要反复读取相同页；最近几场默认最多三场，明确说明覆盖范围和来源。`:'本轮未授权查询本地资料。可以使用用户消息与已有对话；不要声称执行了新的本地查询。'}${omittedNote}${summaryNote}`},...selection.recent.filter(message=>message.role!=='assistant'||(!message.status&&!hasInternalToolMarkup(message.content))).map(message=>({role:message.role,content:clampMessage(message.content)}))];
+  const memory=memoryBlock();
+  const memoryNote=memory?`\n${memory}`:'';
+  const history:ChatMessage[]=[{role:'system',content:`${SYSTEM}\n${instruction}${memoryNote}\n${options.allowLocal?`用户仅授权本轮按需查询以下本地资料：${categories.map(category=>LOCAL_DATA_LABELS[category]).join('、')}。先列清单再读取必要详情；不要反复读取相同页；最近几场默认最多三场，明确说明覆盖范围和来源。`:'本轮未授权查询本地资料。可以使用用户消息与已有对话；不要声称执行了新的本地查询。'}${omittedNote}${summaryNote}`},...selection.recent.filter(message=>message.role!=='assistant'||(!message.status&&!hasInternalToolMarkup(message.content))).map(message=>({role:message.role,content:clampMessage(message.content)}))];
   const assertActive=()=>{options.signal.throwIfAborted();if(options.allowLocal&&options.canQueryLocal&&!options.canQueryLocal())throw new Error(t('本地资料查询授权已撤销，请重新发送消息。'));};
   // Plain answers have no tool loop, but the thought stream should still be visible.
   const tapThinking=()=>{

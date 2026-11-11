@@ -17,6 +17,8 @@ import {showToast, useClickOutside, useEscapeKey} from '@/ui/primitives';
 import { t } from '@/lib/i18n';
 import {CHAT_ATTACH_ACCEPT, CHAT_ATTACH_MAX, IMAGE_MARKER, chatFileKind, composeAttachmentContent, conversationFiles, formatFileSize, readChatAttachment, splitAttachments, stripAttachmentBlocks, type ChatAttachment, type ParsedFile} from '@/lib/chatFiles';
 import {useSetting} from '@/lib/store';
+import {addMemory, extractMemory} from '@/lib/memory';
+import {Dialog, DialogDesc, DialogTitle, Button as UiButton} from '@/ui/primitives';
 import {CHAT_TEXT_PX,chatTextSize,formatClock} from '@/lib/chatText';
 import {useCopyFeedback} from '@/lib/clipboard';
 import {useConfirm} from '@/ui/confirm';
@@ -123,6 +125,9 @@ function ChatThread({id,initial,initialModel,initialSummary,listCollapsed,onExpa
   const summaryRef=useRef<FreeChatSummary|null>(initialSummary);
   const [contextInfo,setContextInfo]=useState<ChatHistorySnapshot>({tokens:0,omitted:0});
   const [summarizing,setSummarizing]=useState(false);
+  const [memoryDraft,setMemoryDraft]=useState<string[]|null>(null);
+  const [memoryPicked,setMemoryPicked]=useState<Set<number>>(new Set());
+  const [remembering,setRemembering]=useState(false);
   // 打开已有对话时先按已保存的消息算一次，否则读数栏要等到下次发送才出现。
   useEffect(()=>{setContextInfo(chatHistorySnapshot(initial.map(message=>({role:message.role,content:message.content})),modelRef.current));},[initial]);
   const roomy=useAtLeast(1180);
@@ -286,8 +291,31 @@ function ChatThread({id,initial,initialModel,initialSummary,listCollapsed,onExpa
       setContextInfo(chatHistorySnapshot(history,modelRef.current));
       showToast({type:'success',title:t('已整理较早的对话')});
     }catch(e){showToast({type:'error',title:t('整理上下文失败'),description:String((e as Error).message||e)});}
+
     finally{setSummarizing(false);}
   };
+  /** 从已发生的对话里提炼候选记忆，先给用户勾选，不直接写入。 */
+  async function recallMemory(){
+    if(remembering)return;
+    const history=savedMessages(runtime.thread.getState().messages).map(message=>({role:message.role,content:message.content}));
+    if(history.length<2){showToast({type:'info',title:t('对话太短，先聊几轮再提炼')});return;}
+    setRemembering(true);
+    try{
+      const next=await extractMemory(history,{...(modelRef.current?{model:modelRef.current}:{})});
+      if(!next.length){showToast({type:'info',title:t('这段对话里没有值得长期记住的事实')});return;}
+      setMemoryPicked(new Set(next.map((_,index)=>index)));
+      setMemoryDraft(next);
+    }catch(e){showToast({type:'error',title:t('提炼记忆失败'),description:String((e as Error).message||e)});}
+    finally{setRemembering(false);}
+  }
+  async function saveMemory(){
+    const picks=(memoryDraft??[]).filter((_,index)=>memoryPicked.has(index));
+    setMemoryDraft(null);
+    if(!picks.length)return;
+    try{await addMemory(picks);showToast({type:'success',title:t('已加入长期记忆')});}
+    catch(e){showToast({type:'error',title:t('记忆未保存'),description:String((e as Error).message||e)});}
+  }
+
   const changePermission=(next:LocalPermission)=>{permissionEpoch.current++;config.current={...config.current,...next};textRequest.current?.abort();runtime.thread.cancelRun();voiceRequest.current?.abort();speaker.stop();setTool('');onPermissionChange(next);};
   const voiceCall=useMemo(()=>createVoiceCall({
     ...(speechInputMode==='realtime'?{openRealtime:async (onPreview:(text:string)=>void,onError:(message:string)=>void,signal:AbortSignal)=>{
@@ -369,7 +397,8 @@ function ChatThread({id,initial,initialModel,initialSummary,listCollapsed,onExpa
         {error&&<p role="alert" className="py-2 text-xs text-destructive">{error}</p>}
       </div></StampContext.Provider></FileIndexContext.Provider>
     </ThreadPrimitive.Viewport><ConversationRail visible={!roomy || !resourcesOpen}/></div>
-    <div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{contextInfo.tokens>0&&<div className="mb-1 flex items-center justify-end gap-2 text-[11px] text-muted-foreground"><span className="tabular-nums" title={t('上下文占用的是本次请求的预算，超出部分会被挤成摘要')}>{contextInfo.percent!==undefined?t('上下文 {percent}%',{percent:contextInfo.percent}):t('上下文约 {tokens} token',{tokens:contextInfo.tokens.toLocaleString()})}</span><button type="button" disabled={summarizing||contextInfo.omitted===0} onClick={()=>void tidyContext()} title={contextInfo.omitted===0?t('对话还在预算内，暂时不需要整理'):t('把较早的对话压成摘要，给后面的回答腾出空间')} className="rounded-md border px-2 py-0.5 transition hover:bg-muted disabled:cursor-default disabled:opacity-40">{summarizing?t('整理中…'):t('整理上下文')}</button></div>}{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} onPreview={setPreview} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
+    <Dialog open={memoryDraft!==null} onClose={()=>setMemoryDraft(null)}><DialogTitle>{t('要记住这些吗？')}</DialogTitle><DialogDesc>{t('勾选后加入长期记忆，之后的对话和面试回答会带上它们。可以随时在设置里修改。')}</DialogDesc><div className="mb-4 space-y-1.5">{(memoryDraft??[]).map((text,index)=><label key={index} className="flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 text-sm hover:bg-muted"><input type="checkbox" className="mt-0.5 size-3.5 accent-[var(--primary)]" checked={memoryPicked.has(index)} onChange={event=>setMemoryPicked(current=>{const next=new Set(current);if(event.target.checked)next.add(index);else next.delete(index);return next;})}/><span className="min-w-0 flex-1">{text}</span></label>)}</div><div className="flex justify-end gap-2"><UiButton variant="ghost" onClick={()=>setMemoryDraft(null)}>{t('取消')}</UiButton><UiButton variant="secondary" disabled={memoryPicked.size===0} onClick={()=>void saveMemory()}>{t('加入记忆')}</UiButton></div></Dialog>
+<div className={`mx-auto w-full pb-4 ${compact?'px-3':'max-w-2xl px-5'}`}>{<div className="mb-1 flex items-center justify-end gap-2 text-[11px] text-muted-foreground">{contextInfo.tokens>0&&<span className="tabular-nums" title={t('上下文占用的是本次请求的预算，超出部分会被挤成摘要')}>{contextInfo.percent!==undefined?t('上下文 {percent}%',{percent:contextInfo.percent}):t('上下文约 {tokens} token',{tokens:contextInfo.tokens.toLocaleString()})}</span>}<button type="button" disabled={summarizing||contextInfo.omitted===0} onClick={()=>void tidyContext()} title={contextInfo.omitted===0?t('对话还在预算内，暂时不需要整理'):t('把较早的对话压成摘要，给后面的回答腾出空间')} className="rounded-md border px-2 py-0.5 transition hover:bg-muted disabled:cursor-default disabled:opacity-40">{summarizing?t('整理中…'):t('整理上下文')}</button><button type="button" disabled={remembering} onClick={()=>void recallMemory()} title={t('从这段对话里提炼值得长期记住的事实')} className="rounded-md border px-2 py-0.5 transition hover:bg-muted disabled:cursor-default disabled:opacity-40">{remembering?t('提炼中…'):t('记住要点')}</button></div>}{approval&&<ApprovalCard request={approval} onDecide={decideApproval}/>}{!approval&&receipt&&<p role="status" aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Check size={12} className="text-primary"/>{receipt}</p>}<Composer compact={compact} onPreview={setPreview} settings={aiSettings} model={model} onModelChange={next=>{setModel(next);void setFreeChatModel(id,next).catch(()=>{});}} permission={permission} onPermissionChange={changePermission} askBeforeRead={askBeforeRead} onAskBeforeReadChange={setAskBeforeRead} attachments={attachments} onAttach={next=>setAttachments(list=>[...list,...next])} onDetach={target=>setAttachments(list=>list.filter(item=>item.id!==target))} destination={model?describeRoute(aiSettings,model):provider?`${provider.name} · ${aiSettings.routes.chat?.modelId}`:t('未配置对话服务')} setError={setError} speakerStop={speaker.stop} inputOwner={inputOwner} blocked={callPhase!=='idle'||closingCall} onInputBusy={setManualBusy}/></div>
     {preview&&<ImageLightbox src={preview} onClose={()=>setPreview(null)}/>}
     {callPhase!=='idle'&&createPortal(<VoiceCallDialog phase={callPhase} messages={voicePreview?[...voiceMessages,{role:'user',content:voicePreview}]:voiceMessages} level={voiceLevel} tool={tool} onStop={endVoice} onInterrupt={voiceCall.interrupt} muted={muted} onToggleMute={()=>{setMuted(next=>{voiceCall.setMuted(!next);return !next;});}} bargeIn={bargeIn} localAccess={allowLocal?categories.map(category=>t(LOCAL_DATA_LABELS[category])).join('、'):undefined} onRevokeLocal={()=>{changePermission({...permission,allowLocal:false});endVoice();}}/>,document.body)}
   </ThreadPrimitive.Root>

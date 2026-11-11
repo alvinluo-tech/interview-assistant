@@ -37,6 +37,7 @@ import { tokenScale } from './tokenCalibration';
 import { openMicrophone, type MicrophoneCapture } from './microphone';
 import { joinTranscript } from './speechProtocol';
 import { buildKnowledgeContext,captureKnowledge,authorizedKnowledge,type KnowledgeSnapshot,type ContextSource } from './knowledgeContext';
+import { memoryBlock } from './memory';
 import {assembleInterviewHistory,assembleExamContext} from './aiContext';
 import type { RealtimeCapture } from './realtimeAsr';
 import {cmd} from './bridge';
@@ -796,6 +797,9 @@ function buildSystemPromptForSession(question: string,throughMessageId:string): 
     lang: getSpeechProfile('interview').answerLanguage==='en-US'?'en-US':'zh-CN',
   });
   prompt+='\n'+languagePrompt(getSpeechProfile('interview'));
+  // 长期记忆放最后：它是跨会话稳定内容，和 system 一起构成可命中的前缀。
+  const memory=memoryBlock();
+  if(memory)prompt+='\n\n'+memory;
   return { prompt, sources: context.sources,referenceBlock:[context.text,/(流程|第几轮|offer|面试结果)/i.test(question)?priorProgressBlock(goalId):'',solverMemoryBlock(Math.max(2000,Math.floor(interviewContextBudget().referenceChars/2)))].filter(Boolean).join('\n\n') };
 }
 

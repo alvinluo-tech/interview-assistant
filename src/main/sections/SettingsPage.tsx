@@ -41,6 +41,7 @@ import { SimulatedPlatform } from '@/overlay/platform';
 import { ExamOverlay } from '@/overlay/ExamOverlay';
 import { InterviewOverlay } from '@/overlay/InterviewOverlay';
 import { StealthTab } from './StealthTab';
+import { MemoryTab } from './MemoryTab';
 import { backupData, getDataError } from '@/lib/backend';
 import { UpdateStatusButton } from '../UpdateNotice';
 import { DeveloperInfo } from './DeveloperInfo';
@@ -53,7 +54,7 @@ const THEMES: { key: DesktopTheme; label: string; desc: string }[] = [
   { key: 'dark', label: '深色', desc: '始终深色' },
 ];
 
-type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'prompts' | 'storage' | 'changelog' | 'about';
+type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'prompts' | 'memory' | 'storage' | 'changelog' | 'about';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overlay-style', label: '浮窗样式' },
@@ -62,6 +63,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'stealth', label: '隐蔽' },
   { key: 'ai', label: 'AI 服务' },
   { key: 'prompts',label:'AI 指令' },
+  { key: 'memory', label: '长期记忆' },
   { key: 'changelog', label: '更新日志' },
   { key: 'storage', label: '存储' },
   { key: 'about', label: '关于' },
@@ -96,6 +98,7 @@ export function SettingsPage() {
         {tab === 'stealth' && <StealthTab />}
         {tab === 'ai' && <AiServicesTab onDirtyChange={setAiDirty} />}
         {tab === 'prompts' && <PromptWorkbench onDirtyChange={setAiDirty}/>}
+        {tab === 'memory' && <MemoryTab />}
         {tab === 'changelog' && <ChangelogTab />}
         {tab === 'about' && <AboutTab />}
       {tab === 'storage' && <StorageSettings />}

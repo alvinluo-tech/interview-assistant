@@ -51,6 +51,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     './store': { getSetting: (key, fallback) => settings[key] ?? fallback, setSetting: async (key,value) => { settings[key] = value; } },
     './aiTaskPolicy': { estimateInputTokens: () => 1 },
     './tokenCalibration': { tokenScale: () => 1 },
+    './memory': { memoryBlock: () => '' },
     './latencyStats': { estimateFirstToken: () => null, recordFirstToken: () => {} },
     './events': { bus: { emit() {} } },
     './i18n': evaluateModuleFixture('src/lib/i18n.ts'),

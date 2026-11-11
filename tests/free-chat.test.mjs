@@ -17,6 +17,7 @@ function harness(responses=[], stream) {
     if(name==='./aiTaskPolicy')return {checkInputBudget:()=>{},outputLimit:()=>4096};
     if(name==='./chatHistory')return evaluateModuleFixture('src/lib/chatHistory.ts');
     if(name==='./tokenCalibration')return {tokenScale:()=>1};
+    if(name==='./memory')return {memoryBlock:()=>'【用户长期记忆】\n- 目标岗位是平台工程'};
     throw Error(name);
   }});
   return {api,data,requests,chatCalls,route};
@@ -381,4 +382,12 @@ test('a saved summary survives message saves and is sent with the next request',
   const system=h.chatCalls.at(-1).messages[0].content;
   assert.match(system,/早前结论：用 Redis/);
   assert.match(system,/较早对话的摘要/);
+});
+
+test('long-term memory rides along with the system prompt',async()=>{
+  const h=harness();
+  await h.api.askFreeChat([{role:'user',content:'我现在该准备什么'}],{signal:new AbortController().signal,onDelta:()=>{}});
+  const system=h.chatCalls.at(-1).messages[0].content;
+  assert.match(system,/【用户长期记忆】/);
+  assert.match(system,/目标岗位是平台工程/);
 });

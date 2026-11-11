@@ -215,6 +215,7 @@ export const ALL_KEYS = [
   'interview.speechProfile','mock.speechProfile','interview.speakerMode',
   'ai.taskPreferences',
   'ai.tokenCalibration',
+  'memory.facts',
   'updates.repository',
   'updates.reminder',
   'update.dismissedVersion',
