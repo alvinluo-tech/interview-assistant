@@ -458,6 +458,7 @@ export const ptBr: Record<string, string> = {
   "期望 {value}": "Esperado {value}",
   "实际 {value}": "Obtido {value}",
   "报错：{error}": "Erro: {error}",
+  "按原始比例显示，可滚动查看": "Exibido no tamanho original — role para ver o resto",
   "按样例修正": "Corrigir pelos exemplos",
   "按样例修正中…": "Corrigindo pelos exemplos…",
   "恢复上一版": "Restaurar versão anterior",

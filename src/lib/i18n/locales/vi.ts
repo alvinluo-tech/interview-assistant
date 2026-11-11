@@ -458,6 +458,7 @@ export const vi: Record<string, string> = {
   "期望 {value}": "Mong đợi {value}",
   "实际 {value}": "Thực tế {value}",
   "报错：{error}": "Lỗi: {error}",
+  "按原始比例显示，可滚动查看": "Hiển thị theo tỷ lệ gốc — cuộn để xem phần còn lại",
   "按样例修正": "Sửa theo mẫu",
   "按样例修正中…": "Đang sửa theo mẫu…",
   "恢复上一版": "Khôi phục bản trước",

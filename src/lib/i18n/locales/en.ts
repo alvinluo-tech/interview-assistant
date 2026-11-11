@@ -458,6 +458,7 @@ export const en: Record<string, string> = {
   "期望 {value}": "Expected {value}",
   "实际 {value}": "Actual {value}",
   "报错：{error}": "Error: {error}",
+  "按原始比例显示，可滚动查看": "Shown at original size — scroll to see the rest",
   "按样例修正": "Fix from samples",
   "按样例修正中…": "Fixing from samples…",
   "恢复上一版": "Restore previous version",

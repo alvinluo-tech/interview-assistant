@@ -458,6 +458,7 @@ export const es419: Record<string, string> = {
   "期望 {value}": "Esperado {value}",
   "实际 {value}": "Obtenido {value}",
   "报错：{error}": "Error: {error}",
+  "按原始比例显示，可滚动查看": "Se muestra en tamaño original; desplázate para ver el resto",
   "按样例修正": "Corregir con los ejemplos",
   "按样例修正中…": "Corrigiendo con los ejemplos…",
   "恢复上一版": "Restaurar versión anterior",

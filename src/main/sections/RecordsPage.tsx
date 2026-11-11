@@ -2,8 +2,10 @@
  * 历史记录：面试问答记录 + 笔试题目答案，支持展开、
  * 重命名、删除、导出 markdown；模拟面试附复盘报告（查看/重新生成）。
  */
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Download, FileSearch, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useModalFocus } from '@/ui/useModalFocus';
+import { ChevronDown, ChevronRight, Download, FileSearch, Pencil, Trash2, X } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -576,8 +578,11 @@ void SectionHeader;
 
 function ExamImageViewer({references, onClose}: {references: string[] | null; onClose: () => void}) {
   const [index, setIndex] = useState(0), [url, setUrl] = useState(''), [error, setError] = useState('');
-  const [zoom, setZoom] = useState(false);
-  useEffect(() => {setIndex(0); setZoom(false);}, [references]);
+  const [full, setFull] = useState(false);
+  const fullRoot = useRef<HTMLDivElement | null>(null), fullClose = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {setIndex(0); setFull(false);}, [references]);
+  // 走同一个模态栈：Escape 只关最上面这层，详情对话框留在后面。
+  useModalFocus(fullRoot, full, () => setFull(false), fullClose);
   useEffect(() => {
     let disposed = false; setUrl(''); setError('');
     if (references?.[index]) void cmd<string>('cmd_exam_read_image', {reference: references[index]})
@@ -590,9 +595,24 @@ function ExamImageViewer({references, onClose}: {references: string[] | null; on
       <span className="text-xs text-muted-foreground">{t('第 {index} / {total} 张 · 已压缩保存', { index: index + 1, total: references?.length || 0 })}</span>
       <Button size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)}>{t('上一张')}</Button>
       <Button size="sm" variant="outline" disabled={index >= (references?.length || 0) - 1} onClick={() => setIndex(index + 1)}>{t('下一张')}</Button>
-      <Button size="sm" variant="ghost" onClick={() => setZoom(!zoom)}>{zoom ? t('适应窗口') : t('放大查看')}</Button>
+      <Button size="sm" variant="ghost" disabled={!url} onClick={() => setFull(true)}>{t('放大查看')}</Button>
     </div>
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : !url ? <p className="text-sm">{t('读取截图中…')}</p> :
-      <div className="max-h-[72vh] overflow-auto rounded border bg-neutral-900 p-2"><img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className={zoom ? 'max-w-none' : 'mx-auto max-h-[68vh] max-w-full object-contain'} /></div>}
+      <div className="max-h-[72vh] overflow-auto rounded border bg-neutral-900 p-2"><img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className="mx-auto max-h-[68vh] max-w-full object-contain" /></div>}
+    {full && url && createPortal(
+      <div ref={fullRoot} className="fixed inset-0 z-50 flex flex-col bg-black/85" role="dialog" aria-modal="true" aria-label={t('原题截图')} tabIndex={-1} onClick={() => setFull(false)}>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 py-3 text-xs text-white/80" onClick={event => event.stopPropagation()}>
+          <span>{t('第 {index} / {total} 张 · 已压缩保存', { index: index + 1, total: references?.length || 0 })}</span>
+          <Button size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)}>{t('上一张')}</Button>
+          <Button size="sm" variant="outline" disabled={index >= (references?.length || 0) - 1} onClick={() => setIndex(index + 1)}>{t('下一张')}</Button>
+          <span className="ml-auto text-[11px] text-white/55">{t('按原始比例显示，可滚动查看')}</span>
+          <button ref={fullClose} type="button" aria-label={t('关闭预览')} title={t('关闭预览')} onClick={() => setFull(false)} className="ml-1 rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"><X size={16} /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className="mx-auto block max-w-none" onClick={event => event.stopPropagation()} />
+        </div>
+      </div>,
+      document.body,
+    )}
   </Dialog>;
 }
