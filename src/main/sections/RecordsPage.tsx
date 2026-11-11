@@ -578,9 +578,10 @@ void SectionHeader;
 
 function ExamImageViewer({references, onClose}: {references: string[] | null; onClose: () => void}) {
   const [index, setIndex] = useState(0), [url, setUrl] = useState(''), [error, setError] = useState('');
-  const [full, setFull] = useState(false);
+  const [full, setFull] = useState(false), [actual, setActual] = useState(false);
+  const [natural, setNatural] = useState({w: 0, h: 0});
   const fullRoot = useRef<HTMLDivElement | null>(null), fullClose = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {setIndex(0); setFull(false);}, [references]);
+  useEffect(() => {setIndex(0); setFull(false); setActual(false);}, [references]);
   // 走同一个模态栈：Escape 只关最上面这层，详情对话框留在后面。
   useModalFocus(fullRoot, full, () => setFull(false), fullClose);
   useEffect(() => {
@@ -601,16 +602,23 @@ function ExamImageViewer({references, onClose}: {references: string[] | null; on
       <div className="max-h-[72vh] overflow-auto rounded border bg-neutral-900 p-2"><img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className="mx-auto max-h-[68vh] max-w-full object-contain" /></div>}
     {full && url && createPortal(
       <div ref={fullRoot} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t('原题截图')} tabIndex={-1} onClick={() => setFull(false)}>
-        <div className="flex h-[80vh] w-[80vw] flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-950 shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div className="flex max-h-[92vh] w-fit min-w-[420px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-950 shadow-2xl" onClick={event => event.stopPropagation()}>
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3 text-xs text-white/80">
           <span>{t('第 {index} / {total} 张 · 已压缩保存', { index: index + 1, total: references?.length || 0 })}</span>
           <Button size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)}>{t('上一张')}</Button>
           <Button size="sm" variant="outline" disabled={index >= (references?.length || 0) - 1} onClick={() => setIndex(index + 1)}>{t('下一张')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setActual(value => !value)}>{actual ? t('适应窗口') : t('实际大小')}</Button>
           <span className="ml-auto text-[11px] text-white/55">{t('按原始比例显示，可滚动查看')}</span>
           <button ref={fullClose} type="button" aria-label={t('关闭预览')} title={t('关闭预览')} onClick={() => setFull(false)} className="ml-1 rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"><X size={16} /></button>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          <img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className="mx-auto block max-w-none" />
+        <div className={`min-h-0 flex-1 ${actual ? 'overflow-auto' : 'overflow-hidden'} p-3`}>
+          <img
+            alt={t('原题截图 {index}', { index: index + 1 })}
+            src={url}
+            onLoad={event => setNatural({w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight})}
+            style={actual && natural.w ? {width: natural.w, height: natural.h} : undefined}
+            className={actual ? 'mx-auto block max-w-none' : 'mx-auto block max-h-[78vh] max-w-[calc(92vw-24px)] object-contain'}
+          />
         </div>
         </div>
       </div>,

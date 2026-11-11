@@ -459,6 +459,7 @@ export const tr: Record<string, string> = {
   "实际 {value}": "Gerçekleşen {value}",
   "报错：{error}": "Hata: {error}",
   "按原始比例显示，可滚动查看": "Orijinal boyutta gösteriliyor — gerisini kaydırarak görün",
+  "实际大小": "Gerçek boyut",
   "按样例修正": "Örneklere göre düzelt",
   "按样例修正中…": "Örneklere göre düzeltiliyor…",
   "恢复上一版": "Önceki sürüme dön",
