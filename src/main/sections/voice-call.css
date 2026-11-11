@@ -11,8 +11,8 @@
 .voice-header { display: flex; justify-content: space-between; align-items: center; padding: 22px 26px; }
 .voice-brand { display: flex; gap: 9px; align-items: center; font-size: 13px; font-weight: 600; letter-spacing: .02em; }
 .voice-brand-mark { display: grid; place-items: center; width: 28px; height: 28px; color: #bceaf0; border: 1px solid rgba(181,231,236,.22); border-radius: 9px; background: rgba(163,223,229,.08); }
-.voice-live { display: flex; align-items: center; gap: 6px; color: #a7c3c8; font-size: 11px; }
-.voice-live span { width: 6px; height: 6px; border-radius: 50%; background: #80ddd0; box-shadow: 0 0 10px #8ddfd6; }
+.voice-live { display: flex; align-items: center; gap: 6px; padding-left: 2px; color: #a7c3c8; font-size: 11px; }
+.voice-live span { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #80ddd0; box-shadow: 0 0 6px #8ddfd6; }
 .voice-body { min-height: 0; flex: 1; display: flex; flex-direction: column; align-items: center; }
 .voice-visual { position: relative; flex: 0 0 auto; display: grid; place-items: center; width: 210px; height: 210px; margin-top: 7px; }
 .voice-orbit { position: absolute; border: 1px solid rgba(158, 226, 230, .16); border-radius: 50%; }
@@ -44,7 +44,7 @@
 .voice-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 18px; border-radius: 13px; font-size: 13px; font-weight: 600; transition: background .2s, transform .2s; }
 .voice-actions button:focus-visible { outline: 2px solid #b8fff2; outline-offset: 3px; }
 .voice-actions button:active { transform: scale(.97); }
-.voice-time { margin-left: auto; color: #7f9aa0; font-size: 11px; font-variant-numeric: tabular-nums; }
+.voice-time { margin-left: auto; margin-right: 14px; color: #7f9aa0; font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 .voice-mute { color: #cfe6e8; border: 1px solid rgba(204,237,239,.18); background: transparent; }
 .voice-mute:hover { background: rgba(255,255,255,.1); }
 .voice-mute[aria-pressed='true'] { color: #ffd8a8; border-color: rgba(255,190,120,.45); }
