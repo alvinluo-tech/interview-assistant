@@ -291,3 +291,13 @@ test('legacy entry origins remain unknown even inside an AI-created container',(
   const context=buildKnowledgeContext({query:'Redis',materials:[{id:'old',name:'旧资料',source:'ai',content:'',entries:[{question:'Redis',answer:'旧条目'}]}]});
   assert.equal(context.sources[0].origin,'legacy_unknown');assert.match(context.text,/来源未逐条确认/);
 });
+
+test('history that does not fit is disclosed so the model does not pretend to remember',()=>{
+  const {assembleInterviewHistory}=load('src/lib/aiContext.ts');
+  const history=[message('q0','INTERVIEWER','旧问题'.repeat(200)),message('a0','ASSISTANT','旧回答'.repeat(200)),message('q1','INTERVIEWER','最近问题'),message('a1','ASSISTANT','最近回答')];
+  const result=assembleInterviewHistory(history,'新问题',{maxChars:400});
+  const notice=result[0];
+  assert.equal(notice.role,'user');
+  assert.match(notice.content,/此前的 1 组问答/);
+  assert.match(notice.content,/不要假装记得/);
+});

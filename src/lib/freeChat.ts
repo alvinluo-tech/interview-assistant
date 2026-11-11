@@ -5,6 +5,7 @@ import {aiFetch} from './aiTransport';
 import {aiHeaders, withAiRequest} from './aiProtocol';
 import {chatStream, chatWithImageHistory, type ChatMessage} from './aiRequests';
 import {checkInputBudget, outputLimit, type ModelCapabilities} from './aiTaskPolicy';
+import {clampMessage, selectChatTurns} from './chatHistory';
 import {chatTitle} from './chatText';
 import { t } from './i18n';
 
@@ -244,12 +245,24 @@ async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider
   return round;
 }
 
+/** 留出系统提示、工具定义与输出额度后，历史可用的 token 预算。 */
+function chatHistoryBudget(capabilities?:ModelCapabilities):number{
+  const window=capabilities?.contextWindow;
+  if(!window)return 12000;
+  return Math.max(2000,Math.floor((window-outputLimit('free-chat',capabilities)-1200)*0.85));
+}
+
 export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOptions):Promise<string> {
   options.signal.throwIfAborted();
-  if(messages.length>100 || messages.some(message=>message.content.length>30000))throw new Error(t('对话内容过长，请开始新对话。'));
   const instruction=options.voice?'这是实时语音对话，回答会被朗读出来：要像当面说话，用短句和口语词，先给结论再补必要说明。长度跟着问题走——简单问题两三句说完，复杂问题可以讲清楚，但不要念清单、长表格、大段代码或文件名。避免 Markdown 标记、代码围栏、括号补充与难以朗读的符号；数字和单位按口语读法表达。':'已进入文字对话。';
   const categories=options.categories || LOCAL_DATA_CATEGORIES;
-  const history:ChatMessage[]=[{role:'system',content:`${SYSTEM}\n${instruction}\n${options.allowLocal?`用户仅授权本轮按需查询以下本地资料：${categories.map(category=>LOCAL_DATA_LABELS[category]).join('、')}。先列清单再读取必要详情；不要反复读取相同页；最近几场默认最多三场，明确说明覆盖范围和来源。`:'本轮未授权查询本地资料。可以使用用户消息与已有对话；不要声称执行了新的本地查询。'}`},...messages.filter(message=>message.role!=='assistant'||(!message.status&&!hasInternalToolMarkup(message.content)))];
+  if(getAiLoadError())throw new Error(t('AI 配置读取失败，请检查 AI 服务设置。'));
+  const settings=getAiSettings(),{provider,modelId}=resolveAiRoute(settings,'chat',options.model);
+  const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
+  // 预算按 token 估：老版本用「100 条 / 单条 3 万字」判死，长对话只能弃用；现在改成装得下多少带多少。
+  const selection=selectChatTurns(messages,chatHistoryBudget(capabilities));
+  const omittedNote=selection.omitted?`\n本次上下文只包含最近的 ${selection.recent.length} 条消息；此前的 ${selection.omitted} 条（约 ${selection.omittedChars} 字）因预算未纳入。不要假装记得未出现的内容，需要时先让用户补充。`:'';
+  const history:ChatMessage[]=[{role:'system',content:`${SYSTEM}\n${instruction}\n${options.allowLocal?`用户仅授权本轮按需查询以下本地资料：${categories.map(category=>LOCAL_DATA_LABELS[category]).join('、')}。先列清单再读取必要详情；不要反复读取相同页；最近几场默认最多三场，明确说明覆盖范围和来源。`:'本轮未授权查询本地资料。可以使用用户消息与已有对话；不要声称执行了新的本地查询。'}${omittedNote}`},...selection.recent.filter(message=>message.role!=='assistant'||(!message.status&&!hasInternalToolMarkup(message.content))).map(message=>({role:message.role,content:clampMessage(message.content)}))];
   const assertActive=()=>{options.signal.throwIfAborted();if(options.allowLocal&&options.canQueryLocal&&!options.canQueryLocal())throw new Error(t('本地资料查询授权已撤销，请重新发送消息。'));};
   // Plain answers have no tool loop, but the thought stream should still be visible.
   const tapThinking=()=>{
@@ -293,9 +306,6 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   // Pictures go to the vision model as-is; no tool loop, because the model can already see them.
   if(options.images?.length) return plainAnswerImages(history,options.images);
   if(!options.allowLocal) return plainAnswer(history);
-  if(getAiLoadError())throw new Error(t('AI 配置读取失败，请检查 AI 服务设置。'));
-  const settings=getAiSettings(),{provider,modelId}=resolveAiRoute(settings,'chat',options.model);
-  const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
   const wire:WireMessage[]=history.map(({role,content})=>({role,content:typeof content==='string'?content:''}));
   // Each model round gets its own thought step so the log reads思考→工具→思考→…
   let reasoningText='', reasoningRound=0;

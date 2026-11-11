@@ -1,5 +1,6 @@
 /** Task-scoped context. Archive history is never trimmed or rewritten by these selectors. */
 import { t } from './i18n';
+import { estimateInputTokens } from './aiTaskPolicy';
 interface HistoryMessage {
     id: string;
     role: string;
@@ -14,7 +15,10 @@ interface HistoryMessage {
 }
 export function assembleInterviewHistory(messages: HistoryMessage[], question: string, options: {
     throughMessageId?: string;
+    /** 字符预算（旧调用方仍在用）。 */
     maxChars?: number;
+    /** token 预算；给了它就用估算器量，避免把 token 数当字符数用。 */
+    maxTokens?: number;
 } = {}) {
     const cutoff = options.throughMessageId ? messages.findIndex(message => message.id === options.throughMessageId) : -1;
     const past = (cutoff >= 0 ? messages.slice(0, cutoff) : messages).filter(message => !message.pending && !message.metadata?.superseded && message.text.trim() && (!message.metadata?.speaker||['candidate','interviewer'].includes(message.metadata.speaker.role)));
@@ -23,7 +27,11 @@ export function assembleInterviewHistory(messages: HistoryMessage[], question: s
         content: string;
     }[] = [];
     const groups: typeof selected[] = [];
-    let remaining = options.maxChars ?? 18000;
+    // 给了 token 预算就按估算器量，否则沿用字符口径。
+    const measure = (group: { content: string }[]) => options.maxTokens !== undefined
+        ? estimateInputTokens(group.map(message => ({ content: message.content })))
+        : group.reduce((sum, message) => sum + message.content.length, 0);
+    let remaining = options.maxTokens ?? options.maxChars ?? 18000;
     for (let i = 0; i < past.length; i++) {
         const message = past[i];
         if (i === past.length - 1 && message.role === 'INTERVIEWER' && message.text.trim() === question.trim())
@@ -36,17 +44,21 @@ export function assembleInterviewHistory(messages: HistoryMessage[], question: s
             groups.push([]);
         groups[groups.length - 1].push({ role: message.role === 'INTERVIEWER' || message.metadata?.origin === 'candidate_response' ? 'user' : 'assistant', content });
     }
+    let omitted = 0;
     for (let i = groups.length - 1; i >= 0; i--) {
-        const size = groups[i].reduce((sum, message) => sum + message.content.length, 0);
+        const size = measure(groups[i]);
         if (size > remaining) {
             if (i === groups.length - 1)
                 throw new Error(t('上一轮完整问答超过当前上下文预算，请减少本轮资料或使用更大窗口的模型；历史记录仍完整保留。'));
+            omitted = i + 1;
             break;
         }
         selected.unshift(...groups[i]);
         remaining -= size;
     }
-    return [...selected, { role: 'user' as const, content: question }];
+    // 丢掉的老轮次要明说：否则模型会以「我们刚才聊过」的口吻接话，把没看到的约束当成记得。
+    const notice = omitted ? [{ role: 'user' as const, content: `【上下文提示：此前的 ${omitted} 组问答因预算未纳入本次上下文，不要假装记得未出现的内容；需要时先请对方补充。】` }] : [];
+    return [...notice, ...selected, { role: 'user' as const, content: question }];
 }
 interface ExamContextTurn {
     id: string;

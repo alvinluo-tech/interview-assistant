@@ -640,7 +640,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
     const cutoffId=source.metadata?.contextCutoffId || source.id;
     const { prompt, sources,referenceBlock } = buildSystemPromptForSession(question,cutoffId);
     setState({ contextSources: sources });
-    const history=assembleInterviewHistory(state.messages,question,{throughMessageId:cutoffId,maxChars:interviewContextBudget().history});
+    const history=assembleInterviewHistory(state.messages,question,{throughMessageId:cutoffId,maxTokens:interviewContextBudget().historyTokens});
     setState({messages:state.messages.map(message=>message.id===assistantMsg.id?{...message,metadata:{...message.metadata,sources}}:message)});
     const answer = await chatStream({
       task:'interview-answer',
@@ -756,13 +756,14 @@ function interviewContextBudget(){
   const settings=getAiSettings(),route=settings.routes?.chat;
   const capabilities=settings.providers?.find(provider=>provider.id===route?.providerId)?.models.find(model=>model.id===route?.modelId)?.capabilities;
   const contextWindow=capabilities?.contextWindow;
-  if(!contextWindow) return {history:18000, reference:12000};
+  if(!contextWindow) return {historyTokens:12000, referenceChars:18000};
   // 从窗口里先扣掉输出预算和系统提示/格式余量，再把剩余额度按历史/资料分配，
   // 避免「历史 0.6 + 资料 0.25 + 输出 1/3」相加直接越过窗口。
   const output=Math.min(8192, capabilities?.maxOutputTokens || 8192);
   const reserved=Math.max(1500, Math.floor(contextWindow*0.08));
   const available=Math.max(2000, contextWindow - output - reserved);
-  return {history:Math.max(1500,Math.floor(available*0.7)), reference:Math.max(500,Math.floor(available*0.3))};
+  // history 按 token 计（窗口本身就是 token），reference 仍按字符给知识检索做滑窗。
+  return {historyTokens:Math.max(1500,Math.floor(available*0.7)), referenceChars:Math.max(500,Math.floor(available*0.3))};
 }
 
 function buildSystemPromptForSession(question: string,throughMessageId:string): { prompt: string; sources: ContextSource[];referenceBlock:string } {
@@ -783,7 +784,7 @@ function buildSystemPromptForSession(question: string,throughMessageId:string): 
   sessionKnowledge ??= captureKnowledge(currentKnowledge);
   const cutoff=state.messages.findIndex(message=>message.id===throughMessageId);
   const priorQuestion=[...state.messages.slice(0,Math.max(0,cutoff))].reverse().find(knownInterviewer)?.text || '';
-  const context = buildKnowledgeContext({...authorizedKnowledge(sessionKnowledge,currentKnowledge),query:`${question}\n${priorQuestion}`,maxChars:interviewContextBudget().reference});
+  const context = buildKnowledgeContext({...authorizedKnowledge(sessionKnowledge,currentKnowledge),query:`${question}\n${priorQuestion}`,maxChars:interviewContextBudget().referenceChars});
   let prompt = buildInterviewSystemPrompt({
     answerStyle: prefs.answerStyle ?? 'natural',
     customAnswerStyle: prefs.customAnswerStyle ?? '',
@@ -792,7 +793,7 @@ function buildSystemPromptForSession(question: string,throughMessageId:string): 
     lang: getSpeechProfile('interview').answerLanguage==='en-US'?'en-US':'zh-CN',
   });
   prompt+='\n'+languagePrompt(getSpeechProfile('interview'));
-  return { prompt, sources: context.sources,referenceBlock:[context.text,/(流程|第几轮|offer|面试结果)/i.test(question)?priorProgressBlock(goalId):'',solverMemoryBlock(Math.max(2000,Math.floor(interviewContextBudget().reference/2)))].filter(Boolean).join('\n\n') };
+  return { prompt, sources: context.sources,referenceBlock:[context.text,/(流程|第几轮|offer|面试结果)/i.test(question)?priorProgressBlock(goalId):'',solverMemoryBlock(Math.max(2000,Math.floor(interviewContextBudget().referenceChars/2)))].filter(Boolean).join('\n\n') };
 }
 
 /** 同岗位此前几轮的进度标记（本地版 jobProgress：标过结果的面试/笔试进入回答上下文） */

@@ -170,6 +170,8 @@ const POLICY = {
     'src/lib/ai.ts',
     'src/lib/aiContext.ts',
     'src/lib/freeChat.ts',
+    // 对话历史装配：截断标记与预算提示写进提示词，不渲染到界面。
+    'src/lib/chatHistory.ts',
     'src/lib/mock.ts',
     'src/lib/taskPrompts.ts',
     'src/lib/knowledgeContext.ts',

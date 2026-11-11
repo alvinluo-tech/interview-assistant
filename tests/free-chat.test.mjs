@@ -15,6 +15,7 @@ function harness(responses=[], stream) {
     if(name==='./aiProtocol')return {aiHeaders:()=>({}),withAiRequest:async(_p,_url,init,_timeout,consume)=>{requests.push(JSON.parse(init.body));const next=responses.shift();const body=typeof next==='function'?next():next;if(consume&&body instanceof Response)return consume(body);return body;}};
     if(name==='./aiRequests')return {chatStream:async(options)=>{chatCalls.push(options);if(stream)return stream(options);options.onDelta?.('普通回答');return '普通回答';}};
     if(name==='./aiTaskPolicy')return {checkInputBudget:()=>{},outputLimit:()=>4096};
+    if(name==='./chatHistory')return evaluateModuleFixture('src/lib/chatHistory.ts');
     throw Error(name);
   }});
   return {api,data,requests,chatCalls,route};
@@ -341,4 +342,15 @@ test('a per-chat local-data grant survives message saves and new conversations',
   assert.equal(data.freeChats[0].permission.allowLocal,false);
   await api.setFreeChatPermission('missing',{allowLocal:true,categories:['resumes']});
   assert.equal(data.freeChats.length,1);
+});
+
+test('a long conversation is budgeted instead of rejected and says what was left out',async()=>{
+  const h=harness();
+  const messages=[{role:'user',content:'早'.repeat(30000)},{role:'assistant',content:'答'.repeat(30000)},{role:'user',content:'现在的问题'}];
+  const answer=await h.api.askFreeChat(messages,{signal:new AbortController().signal,onDelta:()=>{}});
+  assert.equal(answer,'普通回答');
+  const sent=h.chatCalls[0].messages;
+  assert.match(sent[0].content,/此前的 2 条/);
+  assert.ok(!JSON.stringify(sent.slice(1)).includes('早早早'));
+  assert.ok(sent.some(message=>message.content==='现在的问题'));
 });
