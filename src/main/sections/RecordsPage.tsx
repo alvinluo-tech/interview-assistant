@@ -90,6 +90,11 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState<InterviewSession | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [deletingMany, setDeletingMany] = useState(false);
+  const toggleSelect = (id: string) => setSelected(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  const leaveSelect = () => { setSelecting(false); setSelected([]); };
   const [reportViewingId, setReportViewingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   // 重命名遮罩是手写的，补上 Esc 关闭：键盘用户不该被困在里面。
@@ -190,6 +195,22 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
           )}
         </div>
       )}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+        {selecting ? (
+          <>
+            <span>{t('已选择 {count} 项', { count: selected.length })}</span>
+            <button type="button" className="text-primary hover:underline" onClick={() => setSelected(visible.map(s => s.id))}>{t('全选')}</button>
+            <button type="button" className="text-primary hover:underline" onClick={() => setSelected([])}>{t('清空选择')}</button>
+            <button type="button" className="text-destructive hover:underline disabled:opacity-40" disabled={selected.length === 0} onClick={() => setDeletingMany(true)}>{t('删除所选')}</button>
+            <button type="button" className="hover:underline" onClick={leaveSelect}>{t('取消选择')}</button>
+          </>
+        ) : (
+          <>
+            <span>{t('共 {count} 条记录', { count: visible.length })}</span>
+            <button type="button" className="text-primary hover:underline" onClick={() => setSelecting(true)}>{t('批量选择')}</button>
+          </>
+        )}
+      </div>
       {visible.length === 0 && (
         <Card className="p-8 text-center text-sm text-muted-foreground">{t('没有可显示的记录。')}</Card>
       )}
@@ -211,10 +232,19 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
         return (
           <Card key={s.id} className="overflow-hidden">
             <div className="flex items-center gap-2 p-3">
+              {selecting && (
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 accent-[hsl(var(--primary))]"
+                  aria-label={t('选择「{name}」', { name: cleanTitle(s.title) })}
+                  checked={selected.includes(s.id)}
+                  onChange={() => toggleSelect(s.id)}
+                />
+              )}
               <button
                 type="button"
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={() => setOpenId(open ? null : s.id)}
+                onClick={() => (selecting ? toggleSelect(s.id) : setOpenId(open ? null : s.id))}
               >
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 <div className="min-w-0">
@@ -228,6 +258,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
                   </div>
                 </div>
               </button>
+              {!selecting && (<>
               {s.type === 'MOCK_INTERVIEW' && reportReady && (
                 <Button size="sm" variant="secondary" onClick={() => setReportViewingId(s.id)}>
                   <FileSearch size={13} />
@@ -257,6 +288,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
               <Button size="sm" variant="ghost" onClick={() => setDeleting(s)} title={t('删除')}>
                 <Trash2 size={13} />
               </Button>
+              </>)}
             </div>
             {open && (
               <div className="border-t bg-muted/30 p-3">
@@ -335,6 +367,18 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
           setDeleting(null);
         }}
       />
+      <ConfirmDialog
+        open={deletingMany}
+        title={t('删除 {count} 条记录', { count: selected.length })}
+        body={t('删除后无法恢复。')}
+        onCancel={() => setDeletingMany(false)}
+        onConfirm={() => {
+          const ids = new Set(selected);
+          setSessions(prev => prev.filter(session => !ids.has(session.id)));
+          setDeletingMany(false);
+          leaveSelect();
+        }}
+      />
       <MockReportDialog session={reportViewing} onClose={() => setReportViewingId(null)} />
     </div>
   );
@@ -344,6 +388,11 @@ function ExamRecords() {
   const [records, setRecords] = useData<ExamSessionRecord[]>('examSessions', []);
   const [openId, setOpenId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<ExamSessionRecord | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [deletingMany, setDeletingMany] = useState(false);
+  const toggleSelect = (id: string) => setSelected(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  const leaveSelect = () => { setSelecting(false); setSelected([]); };
   const [images, setImages] = useState<string[] | null>(null);
   const [showEmpty, setShowEmpty] = useSetting<boolean>('history.showEmpty', false);
   const emptyCount = records.filter(r => r.questions.length === 0).length;
@@ -386,6 +435,22 @@ function ExamRecords() {
           )}
         </div>
       )}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+        {selecting ? (
+          <>
+            <span>{t('已选择 {count} 项', { count: selected.length })}</span>
+            <button type="button" className="text-primary hover:underline" onClick={() => setSelected(visible.map(r => r.id))}>{t('全选')}</button>
+            <button type="button" className="text-primary hover:underline" onClick={() => setSelected([])}>{t('清空选择')}</button>
+            <button type="button" className="text-destructive hover:underline disabled:opacity-40" disabled={selected.length === 0} onClick={() => setDeletingMany(true)}>{t('删除所选')}</button>
+            <button type="button" className="hover:underline" onClick={leaveSelect}>{t('取消选择')}</button>
+          </>
+        ) : (
+          <>
+            <span>{t('共 {count} 条记录', { count: visible.length })}</span>
+            <button type="button" className="text-primary hover:underline" onClick={() => setSelecting(true)}>{t('批量选择')}</button>
+          </>
+        )}
+      </div>
       {visible.length === 0 && (
         <Card className="p-8 text-center text-sm text-muted-foreground">{t('没有可显示的记录。')}</Card>
       )}
@@ -397,10 +462,19 @@ function ExamRecords() {
         return (
           <Card key={r.id} className="overflow-hidden">
             <div className="flex items-center gap-2 p-3">
+              {selecting && (
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 accent-[hsl(var(--primary))]"
+                  aria-label={t('选择「{name}」', { name: cleanTitle(r.title) })}
+                  checked={selected.includes(r.id)}
+                  onChange={() => toggleSelect(r.id)}
+                />
+              )}
               <button
                 type="button"
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={() => setOpenId(open ? null : r.id)}
+                onClick={() => (selecting ? toggleSelect(r.id) : setOpenId(open ? null : r.id))}
               >
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 <div className="min-w-0">
@@ -414,7 +488,7 @@ function ExamRecords() {
                   </div>
                 </div>
               </button>
-              <select
+              {!selecting && <select
                 className="h-7 rounded border bg-background px-1 text-[11px]"
                 value={r.outcome ?? ''}
                 onChange={(e) =>
@@ -429,10 +503,12 @@ function ExamRecords() {
                 <option value="PASSED">{t('过了')}</option>
                 <option value="FAILED">{t('没过')}</option>
                 <option value="WAITING">{t('还在等')}</option>
-              </select>
-              <Button size="sm" variant="ghost" onClick={() => setDeleting(r)}>
-                <Trash2 size={13} />
-              </Button>
+              </select>}
+              {!selecting && (
+                <Button size="sm" variant="ghost" onClick={() => setDeleting(r)} aria-label={t('删除')} title={t('删除')}>
+                  <Trash2 size={13} />
+                </Button>
+              )}
             </div>
             {open && (
               <div className="border-t bg-muted/30 p-3">
@@ -464,6 +540,19 @@ function ExamRecords() {
         </div>
       ))}
       <ExamImageViewer references={images} onClose={() => setImages(null)} />
+      <ConfirmDialog
+        open={deletingMany}
+        title={t('删除 {count} 条记录', { count: selected.length })}
+        body={t('删除后无法恢复。')}
+        onCancel={() => setDeletingMany(false)}
+        onConfirm={() => {
+          const ids = new Set(selected);
+          setRecords(prev => prev.filter(record => !ids.has(record.id)));
+          for (const id of selected) void cmd('cmd_exam_delete_images', { sessionId: id }).catch(() => {});
+          setDeletingMany(false);
+          leaveSelect();
+        }}
+      />
       <ConfirmDialog
         open={deleting != null}
         title={t('删除记录')}
