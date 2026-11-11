@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import {ActionBarPrimitive, AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime, unstable_useComposerInput, type ChatModelAdapter, type ThreadMessage} from '@assistant-ui/react';
 import {ArrowDown, ArrowUp, AudioLines, Brain, Check, ChevronDown, Copy as CopyIcon, FileText, Image as ImageIcon, LoaderCircle, Mic, Paperclip, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Phone, PhoneOff, Plus, RotateCcw, Search, ShieldQuestion, Square, Trash2, Volume2, VolumeX, Wrench, X} from 'lucide-react';
 import {useData} from '@/lib/backend';
-import {askFreeChat, saveFreeChat, setFreeChatModel, renameFreeChat, deleteFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession, type FreeChatApproval, type FreeChatApprovalRequest, type FreeChatStep} from '@/lib/freeChat';
+import {askFreeChat, saveFreeChat, setFreeChatModel, setFreeChatPermission, renameFreeChat, deleteFreeChat, displayFreeChatText, readFreeChatQueries, LOCAL_DATA_CATEGORIES, LOCAL_DATA_LABELS, type LocalDataCategory, type FreeChatQuery, type FreeChatMessage, type FreeChatSession, type FreeChatApproval, type FreeChatApprovalRequest, type FreeChatStep} from '@/lib/freeChat';
 import {ModelPicker, describeRoute} from './ModelPicker';
 import type {AiRoute, AiSettings} from '@/lib/aiConfig';
 import {openMicrophone, type MicrophoneCapture} from '@/lib/microphone';
@@ -42,16 +42,22 @@ function savedMessages(messages:readonly ThreadMessage[]):FreeChatMessage[] {
     return [{role:message.role,content,...(Number(message.metadata.custom.localAt)>0?{at:Number(message.metadata.custom.localAt)}:{}),...(message.role==='assistant'?{queries:readFreeChatQueries(message.metadata.custom.localQueries),...(()=>{const steps=readFreeChatSteps(message.metadata.custom.localSteps);return steps.length?{steps}:{};})(),...(()=>{const elapsed=Number(message.metadata.custom.localElapsedMs);return Number.isFinite(elapsed)&&elapsed>0?{elapsedMs:Math.round(elapsed)}:{};})()}:{}),...(incomplete?{status:content?'partial' as const:'failed' as const,error:message.status.reason==='error'?String(message.status.error || t('回答失败')):undefined}:{})}];
   });
 }
+function freshPermission():LocalPermission{return {allowLocal:false,categories:[...LOCAL_DATA_CATEGORIES]};}
 export function FreeChatPage() {
   const [sessions]=useData<FreeChatSession[]>('freeChats',[]);
   const [id,setId]=useState<string>(()=>crypto.randomUUID());
   const [revision,setRevision]=useState(0);
-  const [permission,setPermission]=useState<LocalPermission>({allowLocal:false,categories:[...LOCAL_DATA_CATEGORIES]});
+  const [permission,setPermission]=useState<LocalPermission>(freshPermission);
   const [query,setQuery]=useState('');
   const [renaming,setRenaming]=useState<string|null>(null);
   const [draft,setDraft]=useState('');
   const [collapsed,setCollapsed]=useSetting<boolean>('freechat.sidebarCollapsed',false);
-  const openSession=(next:string)=>{setPermission({allowLocal:false,categories:[...LOCAL_DATA_CATEGORIES]});setQuery('');setId(next);};
+  const changePermission=(next:LocalPermission)=>{
+    setPermission(next);
+    void setFreeChatPermission(id,{allowLocal:next.allowLocal,categories:[...next.categories]}).catch(()=>{});
+  };
+  // Each conversation keeps its own grant, so switching away and back must restore it.
+  const openSession=(next:string)=>{setPermission(sessions.find(session=>session.id===next)?.permission ?? freshPermission());setQuery('');setId(next);};
   const callEnded=useCallback(()=>setRevision(value=>value+1),[]);
   const current=sessions.find(session=>session.id===id);
   const visible=useMemo(()=>{
@@ -95,7 +101,7 @@ export function FreeChatPage() {
     </aside>
     </>}
     {!collapsed&&<ResizeHandle label={t('调整对话列表宽度')} dragging={list.dragging} onPointerDown={list.onPointerDown}/>}
-    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} listCollapsed={collapsed} onExpandList={()=>setCollapsed(false)} permission={permission} onPermissionChange={setPermission} onCallEnd={callEnded} onDelete={async()=>{
+    <ChatThread key={`${id}:${revision}`} id={id} initial={current?.messages || []} initialModel={current?.model ?? null} listCollapsed={collapsed} onExpandList={()=>setCollapsed(false)} permission={permission} onPermissionChange={changePermission} onCallEnd={callEnded} onDelete={async()=>{
       if(!window.confirm(t('删除这段对话？此操作无法撤销。')))return;
       await deleteFreeChat(id);
       openSession(crypto.randomUUID());
@@ -197,7 +203,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
     }
     try {
       try {
-        await saveFreeChat(id,history,modelRef.current);
+        await saveFreeChat(id,history,modelRef.current,config.current);
       } catch(e) {
         const message=t('对话保存失败：{message}',{message:String((e as Error).message || e)});
         yield {status:{type:'incomplete',reason:'error',error:message}};
@@ -234,7 +240,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
       const message=failure?t('对话失败：{message}',{message:String((failure as Error).message || failure)}):undefined;
       if(full || (failure&&!controller.signal.aborted)){
         try {
-          await saveFreeChat(id,[...history,{role:'assistant',content:full,queries,elapsedMs,at:finishedAt,...(steps.length?{steps}:{}),...(message?{status:full?'partial' as const:'failed' as const,error:message}:{})}]);
+          await saveFreeChat(id,[...history,{role:'assistant',content:full,queries,elapsedMs,at:finishedAt,...(steps.length?{steps}:{}),...(message?{status:full?'partial' as const:'failed' as const,error:message}:{})}],undefined,config.current);
         } catch(e) {setError(t('回答保存失败：{message}',{message:String((e as Error).message || e)}));}
       }
       if(controller.signal.aborted){yield {metadata:{custom:{localQueries:queries,localSteps:[...steps],localElapsedMs:elapsedMs,localAt:finishedAt}},status:{type:'incomplete',reason:'cancelled'}};return;}
@@ -720,7 +726,7 @@ function Composer({compact,onPreview,settings,model,onModelChange,permission,onP
     </div>}
     <ComposerPrimitive.Input rows={2} onPaste={event=>{const files=event.clipboardData?.files;if(files&&files.length){event.preventDefault();void attach(files);}}} placeholder={compact?t('输入消息，Enter 发送'):t('输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片')} className="max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-6 outline-none placeholder:text-muted-foreground"/>
     <div className="flex items-center gap-1.5 px-2 pb-2">
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
       <div className="relative" ref={permRef}>
         <button type="button" onClick={()=>setPermOpen(value=>!value)} aria-expanded={permOpen} aria-label={allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')} title={allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition ${allowLocal?'border-primary/40 bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted'}`}><ShieldQuestion size={13}/>{!compact&&<span className="truncate">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span>}<ChevronDown size={12}/></button>
         {permOpen&&<div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border bg-[hsl(var(--popover))] p-3 shadow-xl">
@@ -728,7 +734,7 @@ function Composer({compact,onPreview,settings,model,onModelChange,permission,onP
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">{LOCAL_DATA_CATEGORIES.map(category=><label key={category} className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><input type="checkbox" checked={categories.includes(category)} disabled={blocked} onChange={event=>{const selected=event.target.checked?[...categories,category]:categories.filter(item=>item!==category);onPermissionChange({allowLocal:allowLocal&&selected.length>0,categories:selected});}}/>{t(LOCAL_DATA_LABELS[category])}</label>)}</div>
           <label className="mt-2 flex items-center justify-between gap-3 border-t pt-2 text-[11px] text-muted-foreground"><span>{t('每次读取前询问')}</span><input type="checkbox" checked={askBeforeRead} onChange={event=>onAskBeforeReadChange(event.target.checked)}/></label>
           <p className="mt-2 text-[11px] leading-5 text-muted-foreground">{allowLocal?(askBeforeRead?t('每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。',{destination}):t('已关闭逐次确认，开启本地资料后会直接读取。读取到的文字片段将发送至：{destination}。',{destination})):t('本轮不查询本地资料，已有对话仍会作为上下文发送。')}</p>
-          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。')}</p>
+          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{t('只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。授权只对这个对话生效，随时可以关闭。')}</p>
         </div>}
       </div>
       <input ref={fileInput} type="file" multiple accept={CHAT_ATTACH_ACCEPT} className="hidden" onChange={event=>void attach(event.target.files)}/>

@@ -326,3 +326,19 @@ test('streamed rounds surface thinking and each tool step as it happens',async()
   assert.match(tools.at(-1).output,/工程师/);
   assert.equal(steps.filter(step=>step.kind==='reasoning').at(-1).status,'done');
 });
+
+test('a per-chat local-data grant survives message saves and new conversations',async()=>{
+  const {api,data}=harness();
+  const messages=[{role:'user',content:'你好'},{role:'assistant',content:'你好呀'}];
+  await api.saveFreeChat('c1',messages,undefined,{allowLocal:true,categories:['resumes']});
+  // Arrays cross the vm realm boundary, so compare the serialized shape.
+  assert.equal(JSON.stringify(data.freeChats[0].permission),JSON.stringify({allowLocal:true,categories:['resumes']}));
+  // Saving again without a grant argument must not reset what the user already allowed.
+  await api.saveFreeChat('c1',[...messages,{role:'user',content:'再来'}]);
+  assert.equal(JSON.stringify(data.freeChats[0].permission),JSON.stringify({allowLocal:true,categories:['resumes']}));
+  // Turning it off is persisted too, and unknown ids are ignored instead of creating rows.
+  await api.setFreeChatPermission('c1',{allowLocal:false,categories:['resumes']});
+  assert.equal(data.freeChats[0].permission.allowLocal,false);
+  await api.setFreeChatPermission('missing',{allowLocal:true,categories:['resumes']});
+  assert.equal(data.freeChats.length,1);
+});

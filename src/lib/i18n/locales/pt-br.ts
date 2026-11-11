@@ -1649,7 +1649,7 @@ export const ptBr: Record<string, string> = {
   "资料：关闭": "Dados: desativado",
   "每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。": "Perguntamos antes de cada leitura; permita uma vez ou sempre nesta conversa. Trechos lidos são enviados para: {destination}.",
   "本轮不查询本地资料，已有对话仍会作为上下文发送。": "Nenhum dado local é lido nesta rodada; a conversa existente ainda é enviada como contexto.",
-  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。": "Somente leitura: nada é modificado ou excluído; arquivos de captura, arquivos do sistema e configurações de chave nunca são lidos. Trocar de conversa ou sair desta página exige nova autorização.",
+  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。授权只对这个对话生效，随时可以关闭。": "Somente leitura: nada é modificado ou excluído; arquivos de captura, arquivos do sistema e configurações de chave nunca são lidos. A autorização vale só para esta conversa e pode ser desligada a qualquer momento.",
   "正在录音，再点一次结束": "Gravando — clique de novo para parar",
   "正在识别…": "Transcrevendo…",
   "帮我梳理一下最近的项目经历": "Ajude-me a organizar minha experiência recente",

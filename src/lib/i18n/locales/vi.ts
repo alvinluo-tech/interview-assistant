@@ -1649,7 +1649,7 @@ export const vi: Record<string, string> = {
   "资料：关闭": "Dữ liệu: tắt",
   "每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。": "Bạn sẽ được hỏi trước mỗi lần đọc; cho phép một lần hoặc luôn luôn trong cuộc trò chuyện này. Phần văn bản đọc được gửi đến: {destination}.",
   "本轮不查询本地资料，已有对话仍会作为上下文发送。": "Lượt này không đọc dữ liệu cục bộ; cuộc trò chuyện vẫn được gửi làm ngữ cảnh.",
-  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。": "Chỉ đọc: không sửa hay xóa gì; không đọc tệp ảnh chụp, tệp hệ thống hay cấu hình khóa. Chuyển cuộc trò chuyện hoặc rời trang này cần cấp quyền lại.",
+  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。授权只对这个对话生效，随时可以关闭。": "Chỉ đọc: không sửa hay xóa gì; không đọc tệp ảnh chụp, tệp hệ thống hay cấu hình khóa. Quyền chỉ áp dụng cho cuộc trò chuyện này và có thể tắt bất cứ lúc nào.",
   "正在录音，再点一次结束": "Đang ghi âm — bấm lần nữa để dừng",
   "正在识别…": "Đang nhận dạng…",
   "帮我梳理一下最近的项目经历": "Giúp tôi dựng lại câu chuyện dự án gần đây",

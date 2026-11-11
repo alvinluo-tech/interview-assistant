@@ -1649,7 +1649,7 @@ export const es419: Record<string, string> = {
   "资料：关闭": "Datos: desactivado",
   "每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。": "Te preguntamos antes de cada lectura; permite una vez o siempre en este chat. Los fragmentos leídos se envían a: {destination}.",
   "本轮不查询本地资料，已有对话仍会作为上下文发送。": "No se leen datos locales en este turno; la conversación existente se sigue enviando como contexto.",
-  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。": "Solo lectura: nada se modifica ni se elimina; nunca se leen capturas, archivos del sistema ni la configuración de claves. Cambiar de chat o salir de esta página exige una nueva autorización.",
+  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。授权只对这个对话生效，随时可以关闭。": "Solo lectura: nada se modifica ni se elimina; nunca se leen capturas, archivos del sistema ni la configuración de claves. La autorización vale solo para esta conversación y puede desactivarse cuando quieras.",
   "正在录音，再点一次结束": "Grabando: pulsa otra vez para parar",
   "正在识别…": "Transcribiendo…",
   "帮我梳理一下最近的项目经历": "Ayúdame a estructurar mi experiencia reciente",

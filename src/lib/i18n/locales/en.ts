@@ -1649,7 +1649,7 @@ export const en: Record<string, string> = {
   "资料：关闭": "Data: off",
   "每次读取前会先问你，允许一次或在本对话内始终允许。读取到的文字片段将发送至：{destination}。": "You are asked before each read; allow once or always in this chat. Text read from local data is sent to: {destination}.",
   "本轮不查询本地资料，已有对话仍会作为上下文发送。": "No local data is read this turn; the existing conversation is still sent as context.",
-  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。切换对话或离开本页后需重新授权。": "Read-only: nothing is modified or deleted, and screenshot files, system files and key settings are never read. Switching chats or leaving this page requires a new grant.",
+  "只允许读取，不修改或删除资料，也不读取截图文件、系统文件或密钥设置。授权只对这个对话生效，随时可以关闭。": "Read-only: nothing is modified or deleted, and screenshot files, system files and key settings are never read. The grant covers this conversation only and can be turned off anytime.",
   "正在录音，再点一次结束": "Recording — click again to stop",
   "正在识别…": "Transcribing…",
   "帮我梳理一下最近的项目经历": "Help me structure my recent project story",
