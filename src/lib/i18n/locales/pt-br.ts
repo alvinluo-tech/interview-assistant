@@ -4,6 +4,13 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const ptBr: Record<string, string> = {
+  "思考": "Pensamento",
+  "工具调用": "Chamada de ferramenta",
+  "已调用 {count} 个工具": "{count} ferramentas chamadas",
+  "正在处理…": "Processando…",
+  "输入": "Entrada",
+  "输出": "Saída",
+  "思考过程": "Raciocínio",
   " · {count} 条": " · {count} itens",
   " · 报告还没有生成": " · relatório ainda não gerado",
   " · 不作为你的背景": " · não entra como seu histórico",

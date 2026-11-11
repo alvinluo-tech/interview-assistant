@@ -4,7 +4,7 @@ import {resolveAiRoute, type AiRoute} from './aiConfig';
 import {aiFetch} from './aiTransport';
 import {aiHeaders, withAiRequest} from './aiProtocol';
 import {chatStream, chatWithImageHistory, type ChatMessage} from './aiRequests';
-import {checkInputBudget, outputLimit} from './aiTaskPolicy';
+import {checkInputBudget, outputLimit, type ModelCapabilities} from './aiTaskPolicy';
 import {chatTitle} from './chatText';
 import { t } from './i18n';
 
@@ -12,7 +12,9 @@ export const LOCAL_DATA_CATEGORIES = ['resumes','goals','materials','interviews'
 export type LocalDataCategory = typeof LOCAL_DATA_CATEGORIES[number];
 export const LOCAL_DATA_LABELS:Record<LocalDataCategory,string> = {resumes:'简历',goals:'岗位',materials:'面试资料',interviews:'面试记录',exams:'笔试记录'};
 export interface FreeChatQuery {name:string;status:'success'|'error'|'cached';category?:string;title?:string;recordId?:string;count?:number}
-export interface FreeChatMessage { role:'user'|'assistant'; content:string; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[] }
+/** One entry of the visible work log: thinking, a tool call, or its result. */
+export interface FreeChatStep { id:string; kind:'reasoning'|'tool'; label:string; text:string; status?:'running'|'done'|'error'; input?:string; output?:string }
+export interface FreeChatMessage { role:'user'|'assistant'; content:string; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[]; steps?:FreeChatStep[] }
 export interface FreeChatSession { id:string; title:string; updatedAt:number; messages:FreeChatMessage[]; /** Per-conversation model; absent means the global chat route. */ model?:AiRoute }
 /** 语音对话仍要短答，但上限必须给思考模型留出思维链预算，否则会在正文前被截断。 */
 const VOICE_OUTPUT_LIMIT = 2048;
@@ -153,7 +155,7 @@ export function displayFreeChatText(text:string):string {
 }
 export interface FreeChatApprovalRequest {tool:string;category?:LocalDataCategory;title:string;summary:string}
 export type FreeChatApproval = 'once'|'always'|'deny';
-interface FreeChatOptions {signal:AbortSignal;images?:string[];allowLocal:boolean;categories?:readonly LocalDataCategory[];canQueryLocal?:()=>boolean;voice?:boolean;model?:AiRoute;onDelta:(text:string)=>void;onTool:(name:string)=>void;onToolResult?:(query:FreeChatQuery)=>void;/** Asked before a local tool reads data the user has not granted for this conversation. */requestApproval?:(request:FreeChatApprovalRequest)=>Promise<FreeChatApproval>}
+interface FreeChatOptions {signal:AbortSignal;images?:string[];allowLocal:boolean;categories?:readonly LocalDataCategory[];canQueryLocal?:()=>boolean;voice?:boolean;model?:AiRoute;onDelta:(text:string)=>void;onTool:(name:string)=>void;onToolResult?:(query:FreeChatQuery)=>void;onReasoning?:(text:string)=>void;onStep?:(step:FreeChatStep)=>void;/** Asked before a local tool reads data the user has not granted for this conversation. */requestApproval?:(request:FreeChatApprovalRequest)=>Promise<FreeChatApproval>}
 
 /** What a pending tool call is about to read, phrased for the approval card. */
 export function describeToolCall(name:string,input:Record<string,unknown>):{category?:LocalDataCategory;title:string;summary:string} {
@@ -163,6 +165,70 @@ export function describeToolCall(name:string,input:Record<string,unknown>):{cate
   if(name==='read_local_record')return{category,title:t('读取{label}正文',{label}),summary:typeof input.id==='string'?t('读取记录 {id}',{id:input.id.slice(0,40)}):t('读取一条记录的正文')};
   return{category,title:t('搜索{label}',{label}),summary:typeof input.query==='string'?t('关键词：{query}',{query:input.query.slice(0,60)}):t('按关键词搜索本地资料')};
 }
+interface ToolCallDraft { id:string; name:string; arguments:string }
+interface ChatRound { content:string; reasoning:string; finishReason:string; calls:ToolCallDraft[]; invalidCalls?:boolean }
+
+/** Accumulate one OpenAI-compatible payload, streaming or not, into a single round. */
+function readRound(payload:Record<string,unknown>, round:ChatRound) {
+  const choice=(payload?.choices as Array<Record<string,unknown>>|undefined)?.[0];
+  if(!choice)return;
+  if(typeof choice.finish_reason==='string')round.finishReason=choice.finish_reason;
+  const message=(choice.delta || choice.message || {}) as Record<string,unknown>;
+  const thought=message.reasoning_content ?? message.reasoning;
+  if(typeof thought==='string'&&thought)round.reasoning+=thought;
+  const text=message.content;
+  if(typeof text==='string'&&text)round.content+=text;
+  const calls=message.tool_calls;
+  if(calls!=null&&!Array.isArray(calls)){round.invalidCalls=true;return;}
+  if(!Array.isArray(calls))return;
+  calls.forEach((call, position) => {
+    const fn=(call?.function || {}) as Record<string,unknown>;
+    const index=Number.isSafeInteger(call?.index)?call.index:position;
+    const draft=round.calls[index] ?? (round.calls[index]={id:'',name:'',arguments:''});
+    if(typeof call?.id==='string'&&call.id)draft.id=call.id;
+    if(typeof fn.name==='string')draft.name+=fn.name;
+    if(typeof fn.arguments==='string')draft.arguments+=fn.arguments;
+  });
+}
+
+/** One tool-enabled round. Streams when the transport says so, and still accepts a plain JSON body. */
+async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider'], modelId:string, wire:WireMessage[], tools:unknown, limit:number, capabilities:ModelCapabilities|undefined, settings:{timeoutMs:number}, signal:AbortSignal|undefined, onReasoning?:((text:string)=>void)) {
+  const round:ChatRound={content:'',reasoning:'',finishReason:'',calls:[]};
+  const outputParameter=capabilities?.outputParameter || 'max_tokens';
+  const result:unknown=await withAiRequest(provider,'chat/completions',{method:'POST',headers:aiHeaders(provider,true),body:JSON.stringify({model:modelId,messages:wire,tools,tool_choice:'auto',stream:true,...(outputParameter!=='none'?{[outputParameter]:limit}:{})})},settings.timeoutMs,async response=>{
+    const type=response?.headers?.get?.('content-type') || '';
+    if(!response?.body || type.includes('application/json')){readRound(await response.json(),round);return;}
+    // Minimal SSE reader: only `data:` lines matter, and the stream may split anywhere.
+    const reader=response.body.getReader();
+    const decoder=new TextDecoder();
+    let buffer='';
+    for(;;){
+      const {value,done}=await reader.read();
+      if(done)break;
+      signal?.throwIfAborted();
+      buffer+=decoder.decode(value,{stream:true});
+      const lines=buffer.split(/\r?\n/);
+      buffer=lines.pop() ?? '';
+      for(const line of lines){
+        const trimmed=line.trim();
+        if(!trimmed.startsWith('data:'))continue;
+        const data=trimmed.slice(5).trim();
+        if(!data||data==='[DONE]')continue;
+        try{readRound(JSON.parse(data),round);}catch{/* ignore keep-alive or partial frames */}
+      }
+      if(round.reasoning){onReasoning?.(round.reasoning);round.reasoning='';}
+    }
+    if(buffer.trim().startsWith('data:')){
+      const data=buffer.trim().slice(5).trim();
+      if(data&&data!=='[DONE]'){try{readRound(JSON.parse(data),round);}catch{/* ignore */}}
+    }
+    if(round.reasoning){onReasoning?.(round.reasoning);round.reasoning='';}
+  },aiFetch,signal,true);
+  // Some transports resolve to the decoded body instead of calling the consumer.
+  if(result && typeof result==='object' && 'choices' in result)readRound(result as Record<string,unknown>,round);
+  return round;
+}
+
 export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOptions):Promise<string> {
   options.signal.throwIfAborted();
   if(messages.length>100 || messages.some(message=>message.content.length>30000))throw new Error(t('对话内容过长，请开始新对话。'));
@@ -184,7 +250,7 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
       const delta=pending.slice(0,end);pending=pending.slice(end);
       if(delta){const part=(emitted?'':prefix)+delta;emitted+=part;options.onDelta(part);}
     };
-    const answer=await chatStream({messages:prompt,task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);}});
+    const answer=await chatStream({messages:prompt,task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);},...(options.onReasoning?{onReasoning:options.onReasoning}:{})});
     // Transports normally emit all text through onDelta. Also accept a buffered adapter.
     if(!pending&&!emitted)pending=answer;
     assertActive();if(hasInternalToolMarkup(answer))throw new Error(t('模型返回了无效的内部工具标记，请更换模型后重试。'));
@@ -193,7 +259,7 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   const plainAnswerImages=async(prompt:ChatMessage[],images:string[])=>{
     let pending='',emitted='';
     const flush=(final:boolean)=>{if(!pending)return;const delta=pending;pending='';emitted+=delta;options.onDelta(delta);void final;};
-    const answer=await chatWithImageHistory(prompt,images,{task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);}});
+    const answer=await chatWithImageHistory(prompt,images,{task:'free-chat',...(options.voice?{maxTokens:VOICE_OUTPUT_LIMIT}:{}),...(options.model?{model:options.model}:{}),signal:options.signal,onDelta:delta=>{pending+=delta;flush(false);},...(options.onReasoning?{onReasoning:options.onReasoning}:{})});
     if(!pending&&!emitted)pending=answer;
     assertActive();flush(true);return emitted;
   };
@@ -204,6 +270,11 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
   const settings=getAiSettings(),{provider,modelId}=resolveAiRoute(settings,'chat',options.model);
   const capabilities=provider.models.find(model=>model.id===modelId)?.capabilities;
   const wire:WireMessage[]=history.map(({role,content})=>({role,content:typeof content==='string'?content:''}));
+  let reasoningText='';
+  const emitStep=(step:FreeChatStep)=>options.onStep?.(step);
+  const thoughtStep=(status:'running'|'done'):FreeChatStep=>({id:'reasoning',kind:'reasoning',label:t('思考'),text:reasoningText.slice(-1200),status});
+  const onThought=(text:string)=>{if(!text)return;reasoningText+=text;options.onReasoning?.(text);emitStep(thoughtStep('running'));};
+  const closeThinking=()=>{if(reasoningText)emitStep(thoughtStep('done'));};
   const collected:{tool:string;result:string}[]=[];
   const cache=new Map<string,{result:string;query:FreeChatQuery}>();
   const summarizeCollected=async(reason='本次查询达到上限')=>{
@@ -221,15 +292,17 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
     assertActive();
     if(step===5)return summarizeCollected();
     checkInputBudget([...wire.map(item=>({content:(item.content || '') + (item.tool_calls ? JSON.stringify(item.tool_calls) : '')})),{content:JSON.stringify(tools)}],limit,capabilities);
-    const outputParameter=capabilities?.outputParameter || 'max_tokens';
-    const response=await withAiRequest(provider,'chat/completions',{method:'POST',headers:aiHeaders(provider,true),body:JSON.stringify({model:modelId,messages:wire,tools,tool_choice:'auto',stream:false,...(outputParameter!=='none'?{[outputParameter]:limit}:{})})},settings.timeoutMs,async r=>r.json(),aiFetch,options.signal);
+    const round=await requestRound(provider,modelId,wire,tools,limit,capabilities,settings,options.signal,onThought);
     assertActive();
-    const choice=response?.choices?.[0], message=choice?.message;
+    if(round.invalidCalls)throw new Error(t('模型返回了无效工具调用列表。'));
+    if(!round.finishReason)round.finishReason=round.calls.filter(Boolean).length?'tool_calls':'stop';
+    const message={content:round.content,...(round.calls.filter(Boolean).length?{tool_calls:round.calls.filter(Boolean).map(call=>({id:call.id,type:'function',function:{name:call.name,arguments:call.arguments}}))}:{})};
+    const choice={message,finish_reason:round.finishReason};
     if(!message)throw new Error(t('模型未完整返回结果，或不支持当前工具调用格式。'));
     if(!['stop','tool_calls'].includes(choice.finish_reason)){
       // 截断/内容过滤时正文仍然可用：按部分回答返回，而不是把已计费的内容丢掉。
       const partial=typeof message.content==='string'?message.content.trim():'';
-      if((choice.finish_reason==='length'||choice.finish_reason==='content_filter')&&partial){options.onDelta(partial);return partial;}
+      if((choice.finish_reason==='length'||choice.finish_reason==='content_filter')&&partial){closeThinking();options.onDelta(partial);return partial;}
       throw new Error(t('模型未完整返回结果，或不支持当前工具调用格式。'));
     }
     const calls=message.tool_calls;
@@ -241,7 +314,7 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
       wire[0].content += '\n调用工具时必须使用接口提供的结构化 tool_calls，禁止在回答正文输出工具调用标记；无法调用时直接说明。';
       continue;
     }
-    if(!calls?.length){if(typeof message.content!=='string'||!message.content.trim())throw new Error(t('模型未返回文字。'));if(message.content.length>100000)throw new Error(t('模型回答过长，请缩小问题范围。'));options.onDelta(message.content);return message.content;}
+    if(!calls?.length){if(typeof message.content!=='string'||!message.content.trim())throw new Error(t('模型未返回文字。'));if(message.content.length>100000)throw new Error(t('模型回答过长，请缩小问题范围。'));closeThinking();options.onDelta(message.content);return message.content;}
     if(!Array.isArray(calls)||calls.length>16)throw new Error(t('模型单次请求超过 16 个工具，请缩小问题范围后重试。'));
     const ids=new Set<string>();
     for(const call of calls){
@@ -263,6 +336,9 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
       const name=call.function.name; options.onTool(name);
       assertActive();
       let input:Record<string,unknown>={},validJson=false;try{input=JSON.parse(call.function.arguments);validJson=true;}catch{/* executor returns a bounded validation error */}
+      const stepId=`tool-${call.id}`,detail=describeToolCall(name,input);
+      closeThinking();
+      emitStep({id:stepId,kind:'tool',label:name,text:detail.title,status:'running',input:validJson?JSON.stringify(input,null,2).slice(0,1200):call.function.arguments.slice(0,1200)});
       const cacheKey=name+':'+(validJson?JSON.stringify(input&&typeof input==='object'&&!Array.isArray(input)?Object.fromEntries(Object.entries(input).sort(([a],[b])=>a.localeCompare(b))):input):call.function.arguments);
       const cached=cache.get(cacheKey);
       let result:string,query:FreeChatQuery;
@@ -278,6 +354,7 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
             const denied:FreeChatQuery={name,status:'error',...(detail.category?{category:detail.category}:{})};
             cache.set(cacheKey,{result:refused,query:denied});
             options.onToolResult?.(denied);
+            emitStep({id:stepId,kind:'tool',label:name,text:detail.title,status:'error',input:validJson?JSON.stringify(input,null,2).slice(0,1200):call.function.arguments.slice(0,1200),output:refused.slice(0,400)});
             wire.push({role:'tool',tool_call_id:call.id,content:refused});
             continue;
           }
@@ -289,6 +366,7 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
         resultChars+=result.length;freshResults++;cache.set(cacheKey,{result,query});collected.push({tool:name,result});
       }
       assertActive();options.onToolResult?.(query);
+      emitStep({id:stepId,kind:'tool',label:name,text:detail.title,status:query.status==='error'?'error':'done',input:validJson?JSON.stringify(input,null,2).slice(0,1200):call.function.arguments.slice(0,1200),output:result.slice(0,1500)});
       wire.push({role:'tool',tool_call_id:call.id,content:result});
     }
     if(!freshResults)return summarizeCollected('模型重复查询了相同资料');

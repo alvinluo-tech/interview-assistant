@@ -4,6 +4,13 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const tr: Record<string, string> = {
+  "思考": "Düşünce",
+  "工具调用": "Araç çağrısı",
+  "已调用 {count} 个工具": "{count} araç çağrıldı",
+  "正在处理…": "İşleniyor…",
+  "输入": "Girdi",
+  "输出": "Çıktı",
+  "思考过程": "Düşünme süreci",
   " · {count} 条": " · {count} kayıt",
   " · 报告还没有生成": " · Rapor henüz oluşturulmadı",
   " · 不作为你的背景": " · arka plan olarak kullanılmaz",

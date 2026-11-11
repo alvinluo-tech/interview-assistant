@@ -4,6 +4,13 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const es419: Record<string, string> = {
+  "思考": "Pensamiento",
+  "工具调用": "Llamada de herramienta",
+  "已调用 {count} 个工具": "Se usaron {count} herramientas",
+  "正在处理…": "Procesando…",
+  "输入": "Entrada",
+  "输出": "Salida",
+  "思考过程": "Razonamiento",
   " · {count} 条": " · {count} elementos",
   " · 报告还没有生成": " · El informe aún no se ha generado",
   " · 不作为你的背景": " · no se usa como tu contexto",

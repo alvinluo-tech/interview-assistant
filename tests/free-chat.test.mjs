@@ -5,14 +5,14 @@ import {evaluateFixture, evaluateModuleFixture} from './compile-fixture.mjs';
 function harness(responses=[], stream) {
   const data={goals:[{id:'g1',createdAt:1,name:'工程师',companyName:'示例',description:'岗位介绍'}],resumes:[{id:'r1',createdAt:1,title:'简历',summary:'摘要',content:'敏感完整正文'}],interviewSessions:[{id:'i1',createdAt:5,title:'面试记录',status:'COMPLETED',type:'INTERVIEW',messages:[{id:'m1',role:'INTERVIEWER',text:'谈谈项目'}, {id:'m2',role:'ASSISTANT',text:'参考方案',metadata:{origin:'model_generated'}},{id:'m3',role:'ASSISTANT',text:'我的实际回答',metadata:{origin:'candidate_response'}}]}],examSessions:[{id:'e1',createdAt:3,title:'笔试',status:'COMPLETED',questions:[{id:'q1',questionText:'题目',answer:'参考答案'}]}],freeChats:[]};
   const requests=[],chatCalls=[],route={provider:{id:'provider',baseUrl:'https://model.invalid/v1',apiKey:'',models:[]},modelId:'model'};
-  const api=evaluateFixture('src/lib/freeChat.ts',{exports:{},AbortController,Date,JSON,console,require:name=>{
+  const api=evaluateFixture('src/lib/freeChat.ts',{exports:{},AbortController,Date,JSON,console,TextDecoder,TextEncoder,ReadableStream,require:name=>{
     if(name==='./i18n')return evaluateModuleFixture('src/lib/i18n.ts');
     if(name==='./chatText')return evaluateModuleFixture('src/lib/chatText.ts');
     if(name==='./backend')return {getDataError:()=>null,readData:(key,fallback)=>data[key] ?? fallback,writeData:async(key,value)=>{data[key]=value;}};
     if(name==='./aiSettings')return {getAiSettings:()=>({timeoutMs:30000}),getAiLoadError:()=>null};
     if(name==='./aiConfig')return {resolveAiRoute:()=>route};
     if(name==='./aiTransport')return {aiFetch:()=>{}};
-    if(name==='./aiProtocol')return {aiHeaders:()=>({}),withAiRequest:async(_p,_url,init)=>{requests.push(JSON.parse(init.body));const next=responses.shift();return typeof next==='function'?next():next;}};
+    if(name==='./aiProtocol')return {aiHeaders:()=>({}),withAiRequest:async(_p,_url,init,_timeout,consume)=>{requests.push(JSON.parse(init.body));const next=responses.shift();const body=typeof next==='function'?next():next;if(consume&&body instanceof Response)return consume(body);return body;}};
     if(name==='./aiRequests')return {chatStream:async(options)=>{chatCalls.push(options);if(stream)return stream(options);options.onDelta?.('普通回答');return '普通回答';}};
     if(name==='./aiTaskPolicy')return {checkInputBudget:()=>{},outputLimit:()=>4096};
     throw Error(name);
@@ -294,4 +294,27 @@ test('malformed optional query metadata from imported history cannot crash the c
   const h=harness();for(const value of [null,'bad',{name:'app_guide'}])assert.equal(h.api.readFreeChatQueries(value).length,0);
   const queries=h.api.readFreeChatQueries([null,{name:'not_a_tool',status:'success'},{name:'read_local_record',status:'success',title:'标题',body:'不应重复保存的正文'},...Array.from({length:40},()=>({name:'app_guide',status:'cached'}))]);
   assert.equal(queries.length,24);assert.equal(queries[0].title,'标题');assert.doesNotMatch(JSON.stringify(queries),/不应重复保存/);
+});
+
+test('streamed rounds surface thinking and each tool step as it happens',async()=>{
+  const frames=[
+    {choices:[{delta:{reasoning_content:'先看看岗位，'}}]},
+    {choices:[{delta:{reasoning_content:'挑一个最近的。'}}]},
+    {choices:[{delta:{tool_calls:[{index:0,id:'c1',function:{name:'list_local_data',arguments:'{"category":"goals"}'}}]}}]},
+    {choices:[{delta:{},finish_reason:'tool_calls'}]},
+  ];
+  const sse=frames.map(frame=>`data: ${JSON.stringify(frame)}\n\n`).join('')+'data: [DONE]\n\n';
+  const stream=new Response(new ReadableStream({start(controller){const bytes=new TextEncoder().encode(sse);for(let i=0;i<bytes.length;i+=17)controller.enqueue(bytes.slice(i,i+17));controller.close();}}),{headers:{'content-type':'text/event-stream'}});
+  const h=harness([stream,{choices:[{finish_reason:'stop',message:{content:'有工程师岗位'}}]}]);
+  const steps=[],thoughts=[];
+  const text=await h.api.askFreeChat([{role:'user',content:'我有哪些岗位'}],{signal:new AbortController().signal,allowLocal:true,onTool:()=>{},onDelta:()=>{},onReasoning:value=>thoughts.push(value),onStep:step=>steps.push(step)});
+  assert.equal(text,'有工程师岗位');
+  assert.equal(thoughts.join(''),'先看看岗位，挑一个最近的。');
+  assert.equal(h.requests[0].stream,true);
+  const tools=steps.filter(step=>step.kind==='tool');
+  assert.equal(tools[0].status,'running');
+  assert.match(tools[0].input,/goals/);
+  assert.equal(tools.at(-1).status,'done');
+  assert.match(tools.at(-1).output,/工程师/);
+  assert.equal(steps.filter(step=>step.kind==='reasoning').at(-1).status,'done');
 });

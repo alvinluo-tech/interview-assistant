@@ -4,6 +4,13 @@
  * （tests/i18n.test.mjs 校验 key 对齐，缺失词条会回退英文造成混排）。
  */
 export const vi: Record<string, string> = {
+  "思考": "Suy nghĩ",
+  "工具调用": "Gọi công cụ",
+  "已调用 {count} 个工具": "Đã gọi {count} công cụ",
+  "正在处理…": "Đang xử lý…",
+  "输入": "Đầu vào",
+  "输出": "Đầu ra",
+  "思考过程": "Quá trình suy nghĩ",
   " · {count} 条": " · {count} mục",
   " · 报告还没有生成": " · Chưa tạo báo cáo",
   " · 不作为你的背景": " · không dùng làm thông tin nền của bạn",

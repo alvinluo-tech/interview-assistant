@@ -4,6 +4,13 @@
  * 新增词条时同步补齐其余 locale 字典（tests/i18n.test.mjs 会校验 key 对齐）。
  */
 export const en: Record<string, string> = {
+  "思考": "Thinking",
+  "工具调用": "Tool call",
+  "已调用 {count} 个工具": "Called {count} tools",
+  "正在处理…": "Working…",
+  "输入": "Input",
+  "输出": "Output",
+  "思考过程": "Reasoning",
   " · {count} 条": " · {count} items",
   " · 报告还没有生成": " · Report not generated yet",
   " · 不作为你的背景": " · not used as your background",
