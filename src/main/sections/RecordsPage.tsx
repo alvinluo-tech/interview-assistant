@@ -600,8 +600,9 @@ function ExamImageViewer({references, onClose}: {references: string[] | null; on
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : !url ? <p className="text-sm">{t('读取截图中…')}</p> :
       <div className="max-h-[72vh] overflow-auto rounded border bg-neutral-900 p-2"><img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className="mx-auto max-h-[68vh] max-w-full object-contain" /></div>}
     {full && url && createPortal(
-      <div ref={fullRoot} className="fixed inset-0 z-50 flex flex-col bg-black/85" role="dialog" aria-modal="true" aria-label={t('原题截图')} tabIndex={-1} onClick={() => setFull(false)}>
-        <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 py-3 text-xs text-white/80" onClick={event => event.stopPropagation()}>
+      <div ref={fullRoot} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t('原题截图')} tabIndex={-1} onClick={() => setFull(false)}>
+        <div className="flex h-[80vh] w-[80vw] flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-950 shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3 text-xs text-white/80">
           <span>{t('第 {index} / {total} 张 · 已压缩保存', { index: index + 1, total: references?.length || 0 })}</span>
           <Button size="sm" variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)}>{t('上一张')}</Button>
           <Button size="sm" variant="outline" disabled={index >= (references?.length || 0) - 1} onClick={() => setIndex(index + 1)}>{t('下一张')}</Button>
@@ -609,7 +610,8 @@ function ExamImageViewer({references, onClose}: {references: string[] | null; on
           <button ref={fullClose} type="button" aria-label={t('关闭预览')} title={t('关闭预览')} onClick={() => setFull(false)} className="ml-1 rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"><X size={16} /></button>
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          <img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className="mx-auto block max-w-none" onClick={event => event.stopPropagation()} />
+          <img alt={t('原题截图 {index}', { index: index + 1 })} src={url} className="mx-auto block max-w-none" />
+        </div>
         </div>
       </div>,
       document.body,
