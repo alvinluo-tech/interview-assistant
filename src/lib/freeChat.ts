@@ -192,12 +192,15 @@ function readRound(payload:Record<string,unknown>, round:ChatRound) {
 }
 
 /** One tool-enabled round. Streams when the transport says so, and still accepts a plain JSON body. */
-async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider'], modelId:string, wire:WireMessage[], tools:unknown, limit:number, capabilities:ModelCapabilities|undefined, settings:{timeoutMs:number}, signal:AbortSignal|undefined, onReasoning?:((text:string)=>void)) {
+async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider'], modelId:string, wire:WireMessage[], tools:unknown, limit:number, capabilities:ModelCapabilities|undefined, settings:{timeoutMs:number}, signal:AbortSignal|undefined, onReasoning?:((text:string)=>void), onContent?:()=>void) {
   const round:ChatRound={content:'',reasoning:'',finishReason:'',calls:[]};
+  // The answer starting to arrive means thinking for this round is over.
+  let answerStarted=false;
+  const noteContent=()=>{if(answerStarted||!round.content.trim())return;answerStarted=true;onContent?.();};
   const outputParameter=capabilities?.outputParameter || 'max_tokens';
   const result:unknown=await withAiRequest(provider,'chat/completions',{method:'POST',headers:aiHeaders(provider,true),body:JSON.stringify({model:modelId,messages:wire,tools,tool_choice:'auto',stream:true,...(outputParameter!=='none'?{[outputParameter]:limit}:{})})},settings.timeoutMs,async response=>{
     const type=response?.headers?.get?.('content-type') || '';
-    if(!response?.body || type.includes('application/json')){readRound(await response.json(),round);return;}
+    if(!response?.body || type.includes('application/json')){readRound(await response.json(),round);noteContent();return;}
     // Minimal SSE reader: only `data:` lines matter, and the stream may split anywhere.
     const reader=response.body.getReader();
     const decoder=new TextDecoder();
@@ -214,7 +217,7 @@ async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider
         if(!trimmed.startsWith('data:'))continue;
         const data=trimmed.slice(5).trim();
         if(!data||data==='[DONE]')continue;
-        try{readRound(JSON.parse(data),round);}catch{/* ignore keep-alive or partial frames */}
+        try{readRound(JSON.parse(data),round);noteContent();}catch{/* ignore keep-alive or partial frames */}
       }
       if(round.reasoning){onReasoning?.(round.reasoning);round.reasoning='';}
     }
@@ -225,7 +228,7 @@ async function requestRound(provider:ReturnType<typeof resolveAiRoute>['provider
     if(round.reasoning){onReasoning?.(round.reasoning);round.reasoning='';}
   },aiFetch,signal,true);
   // Some transports resolve to the decoded body instead of calling the consumer.
-  if(result && typeof result==='object' && 'choices' in result)readRound(result as Record<string,unknown>,round);
+  if(result && typeof result==='object' && 'choices' in result){readRound(result as Record<string,unknown>,round);noteContent();}
   return round;
 }
 
@@ -305,7 +308,7 @@ export async function askFreeChat(messages:FreeChatMessage[], options:FreeChatOp
     assertActive();
     if(step===5)return summarizeCollected();
     checkInputBudget([...wire.map(item=>({content:(item.content || '') + (item.tool_calls ? JSON.stringify(item.tool_calls) : '')})),{content:JSON.stringify(tools)}],limit,capabilities);
-    const round=await requestRound(provider,modelId,wire,tools,limit,capabilities,settings,options.signal,onThought);
+    const round=await requestRound(provider,modelId,wire,tools,limit,capabilities,settings,options.signal,onThought,()=>closeThinking());
     assertActive();
     if(round.invalidCalls)throw new Error(t('模型返回了无效工具调用列表。'));
     if(!round.finishReason)round.finishReason=round.calls.filter(Boolean).length?'tool_calls':'stop';

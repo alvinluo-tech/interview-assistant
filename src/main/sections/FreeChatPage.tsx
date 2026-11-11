@@ -476,7 +476,7 @@ function Composer({settings,model,onModelChange,permission,onPermissionChange,as
       {parsing>0&&<span className="flex items-center gap-1.5 rounded-lg border border-dashed px-2 py-1 text-[11px] text-muted-foreground"><LoaderCircle size={12} className="animate-spin"/>{t('正在解析…')}</span>}
     </div>}
     <ComposerPrimitive.Input rows={2} onPaste={event=>{const files=event.clipboardData?.files;if(files&&files.length){event.preventDefault();void attach(files);}}} placeholder={t('输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片')} className="max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-6 outline-none placeholder:text-muted-foreground"/>
-    <div className="flex items-center gap-1.5 overflow-hidden px-2 pb-2">
+    <div className="flex items-center gap-1.5 px-2 pb-2">
       <div className="relative" ref={permRef}>
         <button type="button" onClick={()=>setPermOpen(value=>!value)} aria-expanded={permOpen} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] transition ${allowLocal?'border-primary/40 bg-primary/10 text-primary':'text-muted-foreground hover:bg-muted'}`}><ShieldQuestion size={13}/>{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}<ChevronDown size={12}/></button>
         {permOpen&&<div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border bg-[hsl(var(--popover))] p-3 shadow-xl">

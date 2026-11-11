@@ -24,6 +24,16 @@ export const RENDER_THROTTLE_MS = 120;
 /** 插件数组提到模块级：react-markdown 每次渲染都会重建 processor，但保持引用稳定更利于审阅。 */
 const REMARK_PLUGINS = [remarkGfm];
 
+/**
+ * 流式中途拿到的文本可能只有开始的围栏、还没有结束的那一行，此时 remark 会把整段当成
+ * 普通文本，界面上就会闪过一行原样的 ```。渲染前补一个闭合围栏，落盘内容不受影响。
+ */
+export function balanceFences(source: string): string {
+  let fences = 0;
+  for (const line of source.split('\n')) if (/^\s*```/.test(line)) fences += 1;
+  return fences % 2 === 1 ? `${source}\n\`\`\`` : source;
+}
+
 export function Md({ text }: { text: string }) {
   const throttled = useThrottled(text, RENDER_THROTTLE_MS);
   // 两条路径都用节流后的文本：超长内容更不能每个 token 重渲染一次。
@@ -32,7 +42,7 @@ export function Md({ text }: { text: string }) {
   }
   return (
     <div className="overlay-md">
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>{throttled}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>{balanceFences(throttled)}</ReactMarkdown>
     </div>
   );
 }
