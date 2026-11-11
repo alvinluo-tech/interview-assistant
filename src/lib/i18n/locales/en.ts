@@ -1168,6 +1168,7 @@ export const en: Record<string, string> = {
   "语音提问音量": "Voice ask volume",
   "语音通话": "Voice call",
   "语音通话已停止": "Voice call stopped",
+  "语音识别中断，已自动重连": "Speech recognition dropped — reconnected",
   "语音文件下载失败（HTTP {status}）。": "Voice file download failed (HTTP {status}).",
   "语音已中断，定稿文字已保留。": "Voice was interrupted; the finalized text is kept.",
   "语音音频超过 32 MB，请缩短问题。": "The voice audio exceeds 32 MB — shorten the question.",

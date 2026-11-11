@@ -1168,6 +1168,7 @@ export const tr: Record<string, string> = {
   "语音提问音量": "Sesli soru düzeyi",
   "语音通话": "Sesli arama",
   "语音通话已停止": "Sesli arama durduruldu",
+  "语音识别中断，已自动重连": "Konuşma tanıma kesildi: yeniden bağlandı",
   "语音文件下载失败（HTTP {status}）。": "Ses dosyası indirilemedi (HTTP {status}).",
   "语音已中断，定稿文字已保留。": "Ses kesildi; kesinleşen metin korundu.",
   "语音音频超过 32 MB，请缩短问题。": "Ses dosyası 32 MB'ı aşıyor — soruyu kısalt.",

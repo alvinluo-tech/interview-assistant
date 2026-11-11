@@ -1168,6 +1168,7 @@ export const vi: Record<string, string> = {
   "语音提问音量": "Âm lượng hỏi bằng giọng nói",
   "语音通话": "Cuộc gọi thoại",
   "语音通话已停止": "Cuộc gọi thoại đã dừng",
+  "语音识别中断，已自动重连": "Nhận dạng giọng nói bị ngắt: đã kết nối lại",
   "语音文件下载失败（HTTP {status}）。": "Tải tệp giọng nói thất bại (HTTP {status}).",
   "语音已中断，定稿文字已保留。": "Giọng nói bị gián đoạn, chữ đã chốt được giữ lại.",
   "语音音频超过 32 MB，请缩短问题。": "Âm thanh giọng nói vượt quá 32 MB, hãy rút ngắn câu hỏi.",

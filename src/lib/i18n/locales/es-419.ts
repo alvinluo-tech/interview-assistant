@@ -1168,6 +1168,7 @@ export const es419: Record<string, string> = {
   "语音提问音量": "Volumen de la pregunta por voz",
   "语音通话": "Llamada de voz",
   "语音通话已停止": "Llamada de voz detenida",
+  "语音识别中断，已自动重连": "Se perdió el reconocimiento de voz: reconectado",
   "语音文件下载失败（HTTP {status}）。": "No se pudo descargar el archivo de voz (HTTP {status}).",
   "语音已中断，定稿文字已保留。": "La voz se interrumpió; el texto finalizado se conservó.",
   "语音音频超过 32 MB，请缩短问题。": "El audio de voz supera los 32 MB; acorta la pregunta.",

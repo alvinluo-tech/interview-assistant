@@ -13,10 +13,16 @@ export interface VoiceCallDrivers {
   cancelAnswer():void;
   state(phase:VoiceCallPhase):void;
   error(message:string):void;
+  /** A recoverable hiccup: the call keeps going, only a short notice is shown. */
+  notice?(message:string):void;
 }
 
 /** The realtime recogniser ends a turn on the same silence window. */
 const END_SILENCE_MS = 800;
+/** Keep enough audio before the first voiced frame so the opening word is never cut. */
+const PRE_ROLL_SAMPLES = 16000 * 0.6;
+/** One automatic retry covers a dropped recogniser without ending the call. */
+const CAPTURE_RETRIES = 1;
 /** Speech this long during playback interrupts the answer instead of talking over it. */
 const BARGE_IN_MS = 400;
 const BARGE_IN_VOLUME = 22;
@@ -26,13 +32,19 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
   let phase:VoiceCallPhase='idle',generation=0,mic:{close():Promise<void>}|undefined,request:AbortController|undefined;
   let realtime:Awaited<ReturnType<NonNullable<VoiceCallDrivers['openRealtime']>>>|undefined,realtimeAbort:AbortController|undefined;
   let chunks:Int16Array[]=[],samples=0,voiced=0,silence=0,pre:Int16Array[]=[];
-  let queue:string[]=[],playing=false,answerDone=true,monitor:{close():Promise<void>}|undefined,bargeVoiced=0;
+  let queue:string[]=[],playing=false,answerDone=true,monitor:{close():Promise<void>}|undefined,bargeVoiced=0,retries=0;
   const change=(next:VoiceCallPhase)=>{phase=next;drivers.state(next);};
   const reset=()=>{chunks=[];samples=0;voiced=0;silence=0;pre=[];};
   const resetSpeech=()=>{queue=[];playing=false;answerDone=true;bargeVoiced=0;};
   const closeMonitor=()=>{const old=monitor;monitor=undefined;void old?.close();};
   const stop=()=>{generation++;request?.abort();request=undefined;realtimeAbort?.abort();realtimeAbort=undefined;const stream=realtime;realtime=undefined;void stream?.close();const old=mic;mic=undefined;void old?.close();resetSpeech();closeMonitor();reset();drivers.preview?.('');drivers.stopSpeech();drivers.cancelAnswer();change('idle');};
-  const fail=(error:unknown)=>{const message=String((error as Error)?.message || error);stop();drivers.error(message);};
+  const teardown=()=>{request?.abort();request=undefined;realtimeAbort?.abort();realtimeAbort=undefined;const stream=realtime;realtime=undefined;void stream?.close();const old=mic;mic=undefined;void old?.close();reset();};
+  const fail=(error:unknown)=>{
+    const message=String((error as Error)?.message || error);
+    const retryable=phase==='connecting'||phase==='listening'||phase==='transcribing';
+    if(retryable&&retries<CAPTURE_RETRIES){retries+=1;generation+=1;teardown();drivers.preview?.('');drivers.notice?.(message);void listen(generation);return;}
+    stop();drivers.error(message);
+  };
   async function listen(current:number) {
     if(current!==generation)return;
     reset();change('connecting');
@@ -44,7 +56,7 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
       }
       const opened=await drivers.open(push,message=>{if(current===generation)fail(message);});
       if(current!==generation){await opened.close();return;}
-      mic=opened;change('listening');
+      mic=opened;retries=0;change('listening');
     } catch(error) {if(current===generation)fail(error);}
   }
   async function finish(current:number) {
@@ -118,7 +130,16 @@ export function createVoiceCall(drivers:VoiceCallDrivers) {
     if(phase!=='listening'||!pcm.length)return;
     realtime?.push(pcm);
     const voice=volume>=12;
-    if(!samples&&!voice){pre.push(pcm);while(pre.reduce((n,p)=>n+p.length,0)>3200)pre.shift();return;}
+    if(!samples&&!voice){
+      // Trim by samples, not by frame: a long frame must be kept partially, not dropped.
+      pre.push(pcm);let total=pre.reduce((n,part)=>n+part.length,0);
+      while(total>PRE_ROLL_SAMPLES&&pre.length){
+        const over=total-PRE_ROLL_SAMPLES,first=pre[0];
+        if(first.length<=over){pre.shift();total-=first.length;}
+        else {pre[0]=first.subarray(over);total-=over;}
+      }
+      return;
+    }
     if(!samples){for(const part of pre){chunks.push(part);samples+=part.length;}pre=[];}
     chunks.push(pcm);samples+=pcm.length;
     if(voice){voiced+=pcm.length;silence=0;}else silence+=pcm.length;

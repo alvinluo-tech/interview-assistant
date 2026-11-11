@@ -317,6 +317,7 @@ function ChatThread({id,initial,initialModel,listCollapsed,onExpandList,permissi
     cancelAnswer:()=>{voiceRequest.current?.abort();voiceRequest.current=null;},
     state:phase=>{if(phase==='idle'&&inputOwner.current==='call')inputOwner.current=null;setCallPhase(phase);},
     error:message=>{showToast({type:'error',title:t('语音通话已停止'),description:message});refreshAfterVoice();},
+    notice:message=>{showToast({type:'info',title:t('语音识别中断，已自动重连'),description:message});},
   }),[speaker,id,refreshAfterVoice,speechInputMode,recordTool,askApproval]);
   call.current=voiceCall;
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);

@@ -85,3 +85,33 @@ test('a shorter pause ends the turn within the realtime window',async()=>{
   const h=speechHarness();h.api.start();await flush();h.input(400,30);h.input(800,0);await flush();
   assert.equal(h.api.getPhase(),'transcribing');h.api.stop();
 });
+test('the opening word keeps half a second of audio before it',async()=>{
+  let pcm,length=0;
+  const api=createVoiceCall({open:async input=>{pcm=input;return {close:async()=>{}};},
+    transcribe:async audio=>{length=audio.length;return '好';},send:()=>{},speak:()=>{},stopSpeech:()=>{},cancelAnswer:()=>{},state:()=>{},error:()=>{}});
+  api.start();await flush();
+  pcm(new Int16Array(16000),0);
+  pcm(new Int16Array(6400),30);
+  pcm(new Int16Array(16000),0);
+  await flush();
+  assert.ok(['transcribing','thinking'].includes(api.getPhase()));
+  assert.equal(length,16000*2,'600ms pre-roll + 400ms speech + 1s trailing silence');
+  api.stop();
+});
+test('a dropped recogniser reconnects once instead of ending the call',async()=>{
+  let attempts=0,opened=0;const notices=[],errors=[];
+  const api=createVoiceCall({open:async()=>{opened+=1;return {close:async()=>{}};},
+    openRealtime:async()=>{attempts+=1;if(attempts===1)throw new Error('识别连接中断');return {push:()=>{},finish:async()=>'',close:async()=>{}};},
+    transcribe:async()=>'',send:()=>{},speak:()=>{},stopSpeech:()=>{},cancelAnswer:()=>{},state:()=>{},error:message=>errors.push(message),notice:message=>notices.push(message)});
+  api.start();await flush();
+  assert.equal(attempts,2);assert.equal(errors.length,0);assert.equal(notices.length,1);assert.match(notices[0],/连接中断/);
+  assert.equal(api.getPhase(),'listening');assert.equal(opened,1);api.stop();
+});
+test('a second failure ends the call with the error',async()=>{
+  const errors=[];let attempts=0;
+  const api=createVoiceCall({open:async()=>{throw new Error('麦克风不可用');},
+    openRealtime:async()=>{attempts+=1;throw new Error('识别连接中断');},
+    transcribe:async()=>'',send:()=>{},speak:()=>{},stopSpeech:()=>{},cancelAnswer:()=>{},state:()=>{},error:message=>errors.push(message),notice:()=>{}});
+  api.start();await flush();
+  assert.ok(attempts>=2);assert.equal(errors.length,1);assert.equal(api.getPhase(),'idle');
+});

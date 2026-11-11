@@ -1168,6 +1168,7 @@ export const ptBr: Record<string, string> = {
   "语音提问音量": "Volume da pergunta por voz",
   "语音通话": "Chamada de voz",
   "语音通话已停止": "Chamada de voz encerrada",
+  "语音识别中断，已自动重连": "O reconhecimento de voz caiu: reconectado",
   "语音文件下载失败（HTTP {status}）。": "Falha ao baixar o arquivo de voz (HTTP {status}).",
   "语音已中断，定稿文字已保留。": "A voz foi interrompida; o texto finalizado foi mantido.",
   "语音音频超过 32 MB，请缩短问题。": "O áudio passou de 32 MB; encurte a pergunta.",
