@@ -213,7 +213,7 @@ export function MainWindow() {
                   {section === 'mock' && <MockPage onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'chat' && <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">{t('正在打开对话…')}</div>}><FreeChatPage /></Suspense>}
                   {section === 'question-bank' && <QuestionBankPage onNavigate={() => setSection('interview')} />}
-                  {section === 'resource' && <ResourcePage />}
+                  {section === 'resource' && <ResourcePage onNavigate={setSection} />}
                   {section === 'records' && <RecordsPage />}
                   {section === 'settings' && <SettingsPage />}
                 </>

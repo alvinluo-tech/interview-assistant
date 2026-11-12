@@ -3,9 +3,8 @@
  * 含新建岗位弹窗、资料编辑器（自由资料 + 预设问答 + AI 生成）。
  */
 import { useRef, useState } from 'react';
-import { Briefcase, Eye, FileText, Layers, Plus, Trash2, Upload } from 'lucide-react';
+import { Check, FileText, Layers, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   Dialog,
@@ -33,10 +32,10 @@ import {
 } from '@/lib/backend';
 import {generatePreparation} from '@/lib/preparation';
 import { DocumentImportDialog } from '../DocumentImportDialog';
-import { DOCUMENT_ACCEPT } from '@/lib/documentIngest';
+import { useSetting } from '@/lib/store';
 import { t } from '@/lib/i18n';
 
-export function ResourcePage() {
+export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview') => void } = {}) {
   const [resumes] = useData<Resume[]>('resumes', []);
   const [goals] = useData<Goal[]>('goals', []);
   const [materials] = useData<Material[]>('materials', []);
@@ -47,171 +46,208 @@ export function ResourcePage() {
     null,
   );
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [, setUploading] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [previewResume, setPreviewResume] = useState<Resume | null>(null);
   const [importKind, setImportKind] = useState<'resume' | 'material'>('resume');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'resume' | 'goal' | 'material'>('all');
+  const [search, setSearch] = useState('');
+  const [selectedKey, setSelectedKey] = useState('');
+  const [importChoice, setImportChoice] = useState(false);
+  const [, setPendingResumeId] = useSetting<string>('interview.pendingResumeId', '');
+  const [, setPendingGoalId] = useSetting<string>('interview.pendingGoalId', '');
+  const [pendingMaterialIds, setPendingMaterialIds] = useSetting<string[]>('interview.pendingMaterialIds', []);
+
+  const items = [
+    ...resumes.map((r) => ({
+      key: `resume:${r.id}`,
+      kind: 'resume' as const,
+      title: r.title,
+      meta: t('上传于 {date}', { date: new Date(r.createdAt).toLocaleDateString('zh-CN') }),
+      at: r.createdAt,
+      resume: r,
+    })),
+    ...goals.map((g) => ({
+      key: `goal:${g.id}`,
+      kind: 'goal' as const,
+      title: g.name,
+      meta: g.companyName ? t('公司：{company}', { company: g.companyName }) : t('未填写公司'),
+      at: g.createdAt,
+      goal: g,
+    })),
+    ...materials.map((m) => ({
+      key: `material:${m.id}`,
+      kind: 'material' as const,
+      title: m.name,
+      meta: m.entries.length > 0 ? t('{count} 条预设问答', { count: m.entries.length }) : t('自由资料 {count} 字', { count: m.content.length }),
+      at: m.updatedAt,
+      material: m,
+    })),
+  ]
+    .filter((item) => typeFilter === 'all' || item.kind === typeFilter)
+    .filter((item) => item.title.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => b.at - a.at);
+  const detail = items.find((item) => item.key === selectedKey) ?? items[0] ?? null;
+  const kindLabel = (kind: 'resume' | 'goal' | 'material') =>
+    kind === 'resume' ? t('简历') : kind === 'goal' ? t('岗位') : t('面试资料');
+  const filters = [
+    { key: 'all' as const, label: t('全部') },
+    { key: 'resume' as const, label: t('简历') },
+    { key: 'goal' as const, label: t('岗位') },
+    { key: 'material' as const, label: t('面试资料') },
+  ];
+  const useHere = (item: NonNullable<typeof detail>) => {
+    if ('resume' in item) setPendingResumeId(item.resume.id);
+    else if ('goal' in item) setPendingGoalId(item.goal.id);
+    else if (!pendingMaterialIds.includes(item.material.id)) setPendingMaterialIds([...pendingMaterialIds, item.material.id]);
+    showToast({ type: 'success', title: t('已用于这一场面试') });
+    onNavigate?.('interview');
+  };
 
   return (
-    <div className="flex flex-col gap-8">
-      <section>
-        <SectionHeading
-          title={t('简历')}
-          desc={t('上传 PDF / 图片 / 文本；AI 会照着你的经历组织回答。')}
-          right={
-            <Button size="sm" variant="outline" disabled={uploading} onClick={() => { setImportKind('resume'); fileRef.current?.click(); }}>
-              <Upload size={13} />
-              {uploading ? t('上传中…') : t('上传简历')}
-            </Button>
-          }
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept={DOCUMENT_ACCEPT}
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) { setImportFile(f); setUploading(true); }
-            e.target.value = '';
-          }}
-        />
-        {resumes.length === 0 ? (
-          <EmptyRow text={t('还没有简历，先上传一份 PDF')} />
-        ) : (
-          <RowGroup>
-            {resumes.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <RowIcon><FileText size={15} /></RowIcon>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 text-[13px] font-medium leading-5">
-                      <button className="truncate text-left hover:text-primary" title={t('查看或编辑简历正文')} onClick={() => setPreviewResume(r)}>{r.title}</button>
-                      {r.isSample && <Badge variant="secondary">{t('示例')}</Badge>}
-                    </div>
-                    <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">
-                      {t('上传于 {date}', { date: new Date(r.createdAt).toLocaleDateString('zh-CN') })}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button size="sm" variant="ghost" aria-label={t('预览简历')} title={t('预览简历')} onClick={() => setPreviewResume(r)}>
-                    <Eye size={13} />
-                  </Button>
-                  <Button size="sm" variant="ghost" aria-label={t('删除简历')} title={t('删除简历')} onClick={() => setDeleting({ kind: 'resume', id: r.id, name: r.title })}>
-                    <Trash2 size={13} />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </RowGroup>
-        )}
-      </section>
+    <div className="flex min-h-0 flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-line bg-surface-sunken p-0.5">
+          {filters.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setTypeFilter(item.key)}
+              aria-pressed={typeFilter === item.key}
+              className={`rounded-md px-3 py-1 text-[12px] transition-colors ${typeFilter === item.key ? 'bg-surface-raised font-medium shadow-card' : 'text-ink-muted hover:text-ink'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-md bg-[var(--mx-selection-bg)] px-2 py-1 text-[11px] text-[var(--mx-selection-text)]">{t('本机存储')}</span>
+          <Button size="sm" onClick={() => setImportChoice(true)}>
+            <Upload size={13} />
+            {t('导入资料')}
+          </Button>
+        </div>
+      </div>
 
-      <section>
-        <SectionHeading
-          title={t('岗位')}
-          desc={t('岗位决定 AI 往哪个方向答；可以填 JD。')}
-          right={
-            <Button size="sm" variant="outline" onClick={() => setGoalDialog({ open: true })}>
-              <Plus size={13} />
-              {t('新建岗位')}
-            </Button>
-          }
-        />
-        {goals.length === 0 ? (
-          <EmptyRow text={t('还没有岗位，新建一个再开始面试')} />
-        ) : (
-          <RowGroup>
-            {goals.map((g) => (
-              <div key={g.id} className="flex items-start justify-between gap-4 px-4 py-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <RowIcon><Briefcase size={15} /></RowIcon>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium leading-5">
-                      {g.name}
-                      {g.companyName && <span className="ml-1.5 text-[11px] font-normal text-ink-muted">· {g.companyName}</span>}
-                    </div>
-                    <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">
-                      {t('公司：{company} · 创建于 {date}', { company: g.companyName || t('未填写'), date: new Date(g.createdAt).toLocaleDateString('zh-CN') })}
-                    </div>
-                    {g.description && (
-                      <p className="mt-1 line-clamp-1 text-[11px] leading-[18px] text-ink-muted" title={g.description}>{g.description}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => setGoalDialog({ open: true, goal: g })}>
-                    {t('编辑')}
-                  </Button>
-                  <Button size="sm" variant="ghost" aria-label={t('删除岗位')} title={t('删除岗位')} onClick={() => setDeleting({ kind: 'goal', id: g.id, name: g.name })}>
-                    <Trash2 size={13} />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </RowGroup>
-        )}
-      </section>
+      <div className="grid h-[calc(100vh-268px)] min-h-[360px] grid-cols-[230px_minmax(0,1fr)] items-stretch gap-6">
+        <div className="flex h-full min-h-0 flex-col gap-1 overflow-y-auto pr-1">
+          <label className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-raised px-3">
+            <Search size={14} className="shrink-0 text-ink-muted" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t('搜索资料')}
+              aria-label={t('搜索资料')}
+              className="h-10 w-full min-w-0 bg-transparent text-[12px] outline-none"
+            />
+          </label>
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setSelectedKey(item.key)}
+              aria-pressed={detail?.key === item.key}
+              className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${detail?.key === item.key ? 'border-line bg-surface-raised shadow-card' : 'border-transparent hover:bg-[var(--mx-action-secondary-hover)]'}`}
+            >
+              <div className="truncate text-[13px] font-medium leading-5" title={item.title}>{item.title}</div>
+              <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">{kindLabel(item.kind)}<br />{item.meta}</div>
+            </button>
+          ))}
+          {items.length === 0 && <p className="px-1 text-[11px] text-ink-muted">{t('没有匹配的资料。')}</p>}
+        </div>
 
-      <section>
-        <SectionHeading
-          title={t('面试资料')}
-          desc={t('项目经历、标准问答、业务背景都可以放这里；面试时 AI 会优先参考。')}
-          right={
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={uploading} onClick={() => { setImportKind('material'); fileRef.current?.click(); }}><Upload size={13} />{t('导入文件')}</Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    const m = await saveMaterial({ name: t('未命名资料'), source: 'manual' });
-                    setEditorId(m.id);
-                  } catch (error) { showToast({ type: 'error', title: t('资料未保存'), description: String((error as Error).message || error) }); }
-                }}
-              >
-                <Plus size={13} />
-                {t('新建资料')}
-              </Button>
-            </div>
-          }
-        />
-        {materials.length === 0 ? (
-          <EmptyRow text={t('还没有面试资料。项目经历、标准问答、业务背景都可以放这里')} />
-        ) : (
-          <RowGroup>
-            {materials.map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <RowIcon><Layers size={15} /></RowIcon>
-                  <button type="button" className="min-w-0 text-left" onClick={() => setEditorId(m.id)}>
-                    <div className="flex items-center gap-1.5 text-[13px] font-medium leading-5">
-                      <span className="truncate">{m.name}</span>
-                      <Badge variant="secondary">
-                        {m.source === 'official' ? t('官方') : m.source === 'ai' ? t('AI 生成') : m.source === 'file' ? t('文件导入') : t('自建')}
-                      </Badge>
-                    </div>
-                    <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">
-                      {m.entries.length > 0 ? t('{count} 条预设问答', { count: m.entries.length }) : t('自由资料 {count} 字', { count: m.content.length })}
-                      {' · '}{t('更新于 {date}', { date: new Date(m.updatedAt).toLocaleDateString('zh-CN') })}
-                    </div>
-                  </button>
+        <div className="h-full min-h-0 overflow-y-auto">
+          {detail ? (
+            <article className="rounded-xl border border-line bg-surface-raised p-6 shadow-card">
+              <div className="flex items-start justify-between gap-3 border-b border-line pb-4">
+                <div className="min-w-0">
+                  <span className="inline-flex rounded-md bg-[var(--mx-selection-bg)] px-2 py-1 text-[11px] text-[var(--mx-selection-text)]">{kindLabel(detail.kind)}</span>
+                  <h3 className="mt-3 text-[18px] font-semibold leading-[26px]">{detail.title}</h3>
                 </div>
                 <Button
                   size="sm"
-                  variant="ghost"
-                  aria-label={t('删除资料：{name}', { name: m.name })}
-                  title={t('删除资料：{name}', { name: m.name })}
-                  onClick={() => setDeleting({ kind: 'material', id: m.id, name: m.name })}
+                  variant="outline"
+                  onClick={() => {
+                    if ('resume' in detail) setPreviewResume(detail.resume);
+                    else if ('goal' in detail) setGoalDialog({ open: true, goal: detail.goal });
+                    else setEditorId(detail.material.id);
+                  }}
                 >
-                  <Trash2 size={13} />
+                  <Pencil size={13} />
+                  {t('编辑')}
                 </Button>
               </div>
-            ))}
-          </RowGroup>
-        )}
-      </section>
+
+              {'resume' in detail && (
+                <>
+                  <p className="mt-4 text-[12px] leading-[22px] text-ink-muted">{detail.meta}</p>
+                  <p className="mt-4 whitespace-pre-wrap text-[12px] leading-[22px] text-ink">
+                    {(detail.resume.summary || detail.resume.content || '').slice(0, 1200) || t('这份简历还没有正文。')}
+                  </p>
+                </>
+              )}
+              {'goal' in detail && (
+                <>
+                  <p className="mt-4 text-[12px] leading-[22px] text-ink-muted">
+                    {t('公司：{company} · 创建于 {date}', { company: detail.goal.companyName || t('未填写'), date: new Date(detail.goal.createdAt).toLocaleDateString('zh-CN') })}
+                  </p>
+                  <p className="mt-4 whitespace-pre-wrap text-[12px] leading-[22px] text-ink">
+                    {detail.goal.description || t('这个岗位还没有填写 JD。')}
+                  </p>
+                </>
+              )}
+              {'material' in detail && (
+                <>
+                  <p className="mt-4 text-[12px] leading-[22px] text-ink-muted">
+                    {detail.meta}{' · '}{t('更新于 {date}', { date: new Date(detail.material.updatedAt).toLocaleDateString('zh-CN') })}
+                  </p>
+                  <p className="mt-4 whitespace-pre-wrap text-[12px] leading-[22px] text-ink">
+                    {(detail.material.content || detail.material.entries.map((entry: { answer: string }) => entry.answer).join('\n\n') || '').slice(0, 1600) || t('这份资料还没有内容。')}
+                  </p>
+                </>
+              )}
+
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => useHere(detail)}>
+                  <Check size={13} />
+                  {t('用于这一场')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if ('resume' in detail) setDeleting({ kind: 'resume', id: detail.resume.id, name: detail.resume.title });
+                    else if ('goal' in detail) setDeleting({ kind: 'goal', id: detail.goal.id, name: detail.goal.name });
+                    else setDeleting({ kind: 'material', id: detail.material.id, name: detail.material.name });
+                  }}
+                >
+                  <Trash2 size={13} />
+                  {t('删除')}
+                </Button>
+              </div>
+            </article>
+          ) : (
+            <div className="rounded-lg border border-dashed border-line px-4 py-10 text-center text-[12px] text-ink-muted">
+              {t('还没有资料。导入简历或新建岗位，面试时就能直接选。')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Dialog open={importChoice} onClose={() => setImportChoice(false)} width={420}>
+        <DialogTitle>{t('导入资料')}</DialogTitle>
+        <DialogDesc>{t('选择这份文件的用途，导入后可以再改。')}</DialogDesc>
+        <div className="mt-4 flex flex-col gap-2">
+          <Button variant="outline" onClick={() => { setImportChoice(false); setImportKind('resume'); fileRef.current?.click(); }}>
+            <FileText size={13} />
+            {t('导入为简历')}
+          </Button>
+          <Button variant="outline" onClick={() => { setImportChoice(false); setImportKind('material'); fileRef.current?.click(); }}>
+            <Layers size={13} />
+            {t('导入为面试资料')}
+          </Button>
+        </div>
+      </Dialog>
 
       {(importFile || previewResume) && <DocumentImportDialog
         file={importFile || undefined}
@@ -255,34 +291,6 @@ export function ResourcePage() {
         }}
       />
     </div>
-  );
-}
-
-/** Plan A 分组：标题 + 说明 + 右侧操作，下方是一张带分隔线的卡片。 */
-function SectionHeading({ title, desc, right }: { title: string; desc: string; right?: React.ReactNode }) {
-  return (
-    <div className="mb-3 flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <h2 className="text-[13px] font-semibold leading-5">{title}</h2>
-        <p className="mt-1 text-[11px] leading-[18px] text-ink-muted">{desc}</p>
-      </div>
-      {right && <div className="shrink-0">{right}</div>}
-    </div>
-  );
-}
-
-function RowGroup({ children }: { children: React.ReactNode }) {
-  return <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface-raised">{children}</div>;
-}
-
-/** 行图标与标题首行居中对齐，不能顶到两行文本的顶边。 */
-function RowIcon({ children }: { children: React.ReactNode }) {
-  return <span className="flex h-5 w-[15px] shrink-0 items-center justify-center text-ink-muted">{children}</span>;
-}
-
-function EmptyRow({ text }: { text: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-[12px] text-ink-muted">{text}</div>
   );
 }
 

@@ -63,8 +63,8 @@ function clockOf(at: number): string {
 export function RecordsPage() {
   const [tab, setTab] = useState<'interview' | 'mock' | 'exam'>('interview');
   return (
-    <div className="flex flex-col gap-4">
-      <div className="inline-flex w-fit rounded-lg border border-line bg-surface-sunken p-0.5">
+    <div className="flex h-[calc(100vh-232px)] min-h-[380px] flex-col gap-4">
+      <div className="inline-flex w-fit shrink-0 rounded-lg border border-line bg-surface-sunken p-0.5">
         {[
           { key: 'interview', label: t('面试记录') },
           { key: 'exam', label: t('笔试记录') },
@@ -83,7 +83,9 @@ export function RecordsPage() {
           </button>
         ))}
       </div>
-      {tab === 'exam' ? <ExamRecords /> : <InterviewRecords key={tab} kind={tab} />}
+      <div className="min-h-0 flex-1">
+        {tab === 'exam' ? <ExamRecords /> : <InterviewRecords key={tab} kind={tab} />}
+      </div>
     </div>
   );
 }
@@ -190,7 +192,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
   const detailMeta = detail ? mockMeta(detail) : undefined;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {(emptyCount > 0 || showEmpty) && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2 text-[11px] text-ink-muted">
           <span>{t('共 {count} 场，其中 {empty} 场没有问答记录。', { count: sessions.length, empty: emptyCount })}</span>
@@ -233,8 +235,8 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
       )}
 
       {visible.length > 0 && (
-        <div className="grid grid-cols-[248px_minmax(0,1fr)] items-start gap-6">
-          <div className="flex flex-col gap-4">
+        <div className="grid min-h-0 flex-1 grid-cols-[248px_minmax(0,1fr)] items-stretch gap-6">
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
             {grouped.map((group) => (
               <div key={group.key} className="flex flex-col gap-1.5">
                 <div className="px-1 text-[11px] font-medium text-ink-muted">{dayLabel(group.key)}</div>
@@ -277,7 +279,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
           </div>
 
           {detail && (
-            <div className="rounded-xl border border-line bg-surface-raised p-6 shadow-card">
+            <div className="min-h-0 overflow-y-auto rounded-xl border border-line bg-surface-raised p-6 shadow-card">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-[18px] font-semibold leading-[26px]">{cleanTitle(detail.title)}</h3>
@@ -446,7 +448,7 @@ function ExamRecords() {
   const detail = visible.find((r) => r.id === openId) ?? visible[0] ?? null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {(emptyCount > 0 || showEmpty) && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2 text-[11px] text-ink-muted">
           <span>{t('共 {count} 场，其中 {empty} 场没有问答记录。', { count: records.length, empty: emptyCount })}</span>
@@ -489,8 +491,8 @@ function ExamRecords() {
       )}
 
       {visible.length > 0 && (
-        <div className="grid grid-cols-[248px_minmax(0,1fr)] items-start gap-6">
-          <div className="flex flex-col gap-4">
+        <div className="grid min-h-0 flex-1 grid-cols-[248px_minmax(0,1fr)] items-stretch gap-6">
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
             {grouped.map((group) => (
               <div key={group.key} className="flex flex-col gap-1.5">
                 <div className="px-1 text-[11px] font-medium text-ink-muted">{dayLabel(group.key)}</div>
@@ -533,7 +535,7 @@ function ExamRecords() {
           </div>
 
           {detail && (
-            <div className="min-w-0 rounded-xl border border-line bg-surface-raised p-6 shadow-card">
+            <div className="min-h-0 min-w-0 overflow-y-auto rounded-xl border border-line bg-surface-raised p-6 shadow-card">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="text-[18px] font-semibold leading-[26px]">{cleanTitle(detail.title)}</h3>
