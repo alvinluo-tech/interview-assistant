@@ -3,17 +3,15 @@
  * 含新建岗位弹窗、资料编辑器（自由资料 + 预设问答 + AI 生成）。
  */
 import { useRef, useState } from 'react';
-import { Eye, FileText, Plus, Trash2, Upload } from 'lucide-react';
+import { Briefcase, Eye, FileText, Layers, Plus, Trash2, Upload } from 'lucide-react';
 import {
   Badge,
   Button,
-  Card,
   ConfirmDialog,
   Dialog,
   DialogDesc,
   DialogTitle,
   Input,
-  SectionHeader,
   Select,
   Textarea,
   showToast,
@@ -55,10 +53,9 @@ export function ResourcePage() {
   const [importKind, setImportKind] = useState<'resume' | 'material'>('resume');
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* 简历 */}
-      <Card className="p-5">
-        <SectionHeader
+    <div className="flex flex-col gap-8">
+      <section>
+        <SectionHeading
           title={t('简历')}
           desc={t('上传 PDF / 图片 / 文本；AI 会照着你的经历组织回答。')}
           right={
@@ -80,22 +77,24 @@ export function ResourcePage() {
           }}
         />
         {resumes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('还没有简历，先上传一份 PDF')}</p>
+          <EmptyRow text={t('还没有简历，先上传一份 PDF')} />
         ) : (
-          <div className="divide-y">
+          <RowGroup>
             {resumes.map((r) => (
-              <div key={r.id} className="flex items-center justify-between py-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <FileText size={13} className="text-muted-foreground" />
-                    <button className="truncate text-left hover:underline" title={t('查看或编辑简历正文')} onClick={() => setPreviewResume(r)}>{r.title}</button>
-                    {r.isSample && <Badge variant="secondary">{t('示例')}</Badge>}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {t('上传于 {date}', { date: new Date(r.createdAt).toLocaleDateString('zh-CN') })}
+              <div key={r.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <RowIcon><FileText size={15} /></RowIcon>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-[13px] font-medium leading-5">
+                      <button className="truncate text-left hover:text-primary" title={t('查看或编辑简历正文')} onClick={() => setPreviewResume(r)}>{r.title}</button>
+                      {r.isSample && <Badge variant="secondary">{t('示例')}</Badge>}
+                    </div>
+                    <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">
+                      {t('上传于 {date}', { date: new Date(r.createdAt).toLocaleDateString('zh-CN') })}
+                    </div>
                   </div>
                 </div>
-                <div className="flex shrink-0 gap-1">
+                <div className="flex shrink-0 items-center gap-1">
                   <Button size="sm" variant="ghost" aria-label={t('预览简历')} title={t('预览简历')} onClick={() => setPreviewResume(r)}>
                     <Eye size={13} />
                   </Button>
@@ -105,13 +104,12 @@ export function ResourcePage() {
                 </div>
               </div>
             ))}
-          </div>
+          </RowGroup>
         )}
-      </Card>
+      </section>
 
-      {/* 岗位 */}
-      <Card className="p-5">
-        <SectionHeader
+      <section>
+        <SectionHeading
           title={t('岗位')}
           desc={t('岗位决定 AI 往哪个方向答；可以填 JD。')}
           right={
@@ -122,24 +120,27 @@ export function ResourcePage() {
           }
         />
         {goals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('还没有岗位，新建一个再开始面试')}</p>
+          <EmptyRow text={t('还没有岗位，新建一个再开始面试')} />
         ) : (
-          <div className="divide-y">
+          <RowGroup>
             {goals.map((g) => (
-              <div key={g.id} className="flex items-start justify-between py-2">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">
-                    {g.name}
-                    {g.companyName && <span className="ml-1.5 text-xs text-muted-foreground">· {g.companyName}</span>}
+              <div key={g.id} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <RowIcon><Briefcase size={15} /></RowIcon>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium leading-5">
+                      {g.name}
+                      {g.companyName && <span className="ml-1.5 text-[11px] font-normal text-ink-muted">· {g.companyName}</span>}
+                    </div>
+                    <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">
+                      {t('公司：{company} · 创建于 {date}', { company: g.companyName || t('未填写'), date: new Date(g.createdAt).toLocaleDateString('zh-CN') })}
+                    </div>
+                    {g.description && (
+                      <p className="mt-1 line-clamp-1 text-[11px] leading-[18px] text-ink-muted" title={g.description}>{g.description}</p>
+                    )}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {t('公司：{company} · 创建于 {date}', { company: g.companyName || t('未填写'), date: new Date(g.createdAt).toLocaleDateString('zh-CN') })}
-                  </div>
-                  {g.description && (
-                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground" title={g.description}>{g.description}</p>
-                  )}
                 </div>
-                <div className="flex shrink-0 gap-1">
+                <div className="flex shrink-0 items-center gap-1">
                   <Button size="sm" variant="ghost" onClick={() => setGoalDialog({ open: true, goal: g })}>
                     {t('编辑')}
                   </Button>
@@ -149,54 +150,54 @@ export function ResourcePage() {
                 </div>
               </div>
             ))}
-          </div>
+          </RowGroup>
         )}
-      </Card>
+      </section>
 
-      {/* 面试资料 */}
-      <Card className="p-5">
-        <SectionHeader
+      <section>
+        <SectionHeading
           title={t('面试资料')}
           desc={t('项目经历、标准问答、业务背景都可以放这里；面试时 AI 会优先参考。')}
           right={
             <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={uploading} onClick={() => { setImportKind('material'); fileRef.current?.click(); }}><Upload size={13} />{t('导入文件')}</Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                try {
-                const m = await saveMaterial({ name: t('未命名资料'), source: 'manual' });
-                setEditorId(m.id);
-                } catch(error) {showToast({type:'error',title:t('资料未保存'),description:String((error as Error).message||error)});}
-              }}
-            >
-              <Plus size={13} />
-              {t('新建资料')}
-            </Button>
+              <Button size="sm" variant="outline" disabled={uploading} onClick={() => { setImportKind('material'); fileRef.current?.click(); }}><Upload size={13} />{t('导入文件')}</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const m = await saveMaterial({ name: t('未命名资料'), source: 'manual' });
+                    setEditorId(m.id);
+                  } catch (error) { showToast({ type: 'error', title: t('资料未保存'), description: String((error as Error).message || error) }); }
+                }}
+              >
+                <Plus size={13} />
+                {t('新建资料')}
+              </Button>
             </div>
           }
         />
         {materials.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t('还没有面试资料。项目经历、标准问答、业务背景都可以放这里')}
-          </p>
+          <EmptyRow text={t('还没有面试资料。项目经历、标准问答、业务背景都可以放这里')} />
         ) : (
-          <div className="divide-y">
+          <RowGroup>
             {materials.map((m) => (
-              <div key={m.id} className="flex items-center justify-between py-2">
-                <button type="button" className="min-w-0 text-left" onClick={() => setEditorId(m.id)}>
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <span className="truncate">{m.name}</span>
-                    <Badge variant="secondary">
-                      {m.source === 'official' ? t('官方') : m.source === 'ai' ? t('AI 生成') : m.source === 'file' ? t('文件导入') : t('自建')}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {m.entries.length > 0 ? t('{count} 条预设问答', { count: m.entries.length }) : t('自由资料 {count} 字', { count: m.content.length })}
-                    {' · '}{t('更新于 {date}', { date: new Date(m.updatedAt).toLocaleDateString('zh-CN') })}
-                  </div>
-                </button>
+              <div key={m.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <RowIcon><Layers size={15} /></RowIcon>
+                  <button type="button" className="min-w-0 text-left" onClick={() => setEditorId(m.id)}>
+                    <div className="flex items-center gap-1.5 text-[13px] font-medium leading-5">
+                      <span className="truncate">{m.name}</span>
+                      <Badge variant="secondary">
+                        {m.source === 'official' ? t('官方') : m.source === 'ai' ? t('AI 生成') : m.source === 'file' ? t('文件导入') : t('自建')}
+                      </Badge>
+                    </div>
+                    <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">
+                      {m.entries.length > 0 ? t('{count} 条预设问答', { count: m.entries.length }) : t('自由资料 {count} 字', { count: m.content.length })}
+                      {' · '}{t('更新于 {date}', { date: new Date(m.updatedAt).toLocaleDateString('zh-CN') })}
+                    </div>
+                  </button>
+                </div>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -208,9 +209,9 @@ export function ResourcePage() {
                 </Button>
               </div>
             ))}
-          </div>
+          </RowGroup>
         )}
-      </Card>
+      </section>
 
       {(importFile || previewResume) && <DocumentImportDialog
         file={importFile || undefined}
@@ -254,6 +255,34 @@ export function ResourcePage() {
         }}
       />
     </div>
+  );
+}
+
+/** Plan A 分组：标题 + 说明 + 右侧操作，下方是一张带分隔线的卡片。 */
+function SectionHeading({ title, desc, right }: { title: string; desc: string; right?: React.ReactNode }) {
+  return (
+    <div className="mb-3 flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h2 className="text-[13px] font-semibold leading-5">{title}</h2>
+        <p className="mt-1 text-[11px] leading-[18px] text-ink-muted">{desc}</p>
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
+    </div>
+  );
+}
+
+function RowGroup({ children }: { children: React.ReactNode }) {
+  return <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface-raised">{children}</div>;
+}
+
+/** 行图标与标题首行居中对齐，不能顶到两行文本的顶边。 */
+function RowIcon({ children }: { children: React.ReactNode }) {
+  return <span className="flex h-5 w-[15px] shrink-0 items-center justify-center text-ink-muted">{children}</span>;
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-[12px] text-ink-muted">{text}</div>
   );
 }
 

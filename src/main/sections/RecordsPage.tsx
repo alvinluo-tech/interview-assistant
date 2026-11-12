@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useModalFocus } from '@/ui/useModalFocus';
-import { ChevronDown, ChevronRight, Download, FileSearch, Pencil, Trash2, X } from 'lucide-react';
+import { Download, FileSearch, Pencil, Trash2, X } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -443,10 +443,12 @@ function ExamRecords() {
     );
   }
 
+  const detail = visible.find((r) => r.id === openId) ?? visible[0] ?? null;
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       {(emptyCount > 0 || showEmpty) && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2 text-[11px] text-ink-muted">
           <span>{t('共 {count} 场，其中 {empty} 场没有问答记录。', { count: records.length, empty: emptyCount })}</span>
           <button type="button" className="text-primary hover:underline" onClick={() => setShowEmpty(!showEmpty)}>
             {showEmpty ? t('隐藏空记录') : t('显示空记录')}
@@ -454,7 +456,7 @@ function ExamRecords() {
           {emptyCount > 0 && (
             <button
               type="button"
-              className="text-destructive hover:underline"
+              className="text-[var(--mx-status-error-text)] hover:underline"
               onClick={() => setRecords(prev => prev.filter(record => record.questions.length > 0))}
             >
               {t('清理 {count} 场空记录', { count: emptyCount })}
@@ -462,110 +464,141 @@ function ExamRecords() {
           )}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-        {selecting ? (
-          <>
-            <span>{t('已选择 {count} 项', { count: selected.length })}</span>
-            <button type="button" className="text-primary hover:underline" onClick={() => setSelected(visible.map(r => r.id))}>{t('全选')}</button>
-            <button type="button" className="text-primary hover:underline" onClick={() => setSelected([])}>{t('清空选择')}</button>
-            <button type="button" className="text-destructive hover:underline disabled:opacity-40" disabled={selected.length === 0} onClick={() => setDeletingMany(true)}>{t('删除所选')}</button>
-            <button type="button" className="hover:underline" onClick={leaveSelect}>{t('取消选择')}</button>
-          </>
-        ) : (
-          <>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 text-[11px] text-ink-muted">
+          {selecting ? (
+            <>
+              <span>{t('已选择 {count} 项', { count: selected.length })}</span>
+              <button type="button" className="text-primary hover:underline" onClick={() => setSelected(visible.map(r => r.id))}>{t('全选')}</button>
+              <button type="button" className="text-primary hover:underline" onClick={() => setSelected([])}>{t('清空选择')}</button>
+              <button type="button" className="text-[var(--mx-status-error-text)] hover:underline disabled:opacity-40" disabled={selected.length === 0} onClick={() => setDeletingMany(true)}>{t('删除所选')}</button>
+              <button type="button" className="hover:underline" onClick={leaveSelect}>{t('取消选择')}</button>
+            </>
+          ) : (
             <span>{t('共 {count} 条记录', { count: visible.length })}</span>
-            <button type="button" className="text-primary hover:underline" onClick={() => setSelecting(true)}>{t('批量选择')}</button>
-          </>
+          )}
+        </div>
+        {!selecting && (
+          <Button size="sm" variant="outline" onClick={() => setSelecting(true)}>{t('批量管理')}</Button>
         )}
       </div>
+
       {visible.length === 0 && (
-        <Card className="p-8 text-center text-sm text-muted-foreground">{t('没有可显示的记录。')}</Card>
+        <div className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-[12px] text-ink-muted">{t('没有可显示的记录。')}</div>
       )}
-      {grouped.map((group) => (
-        <div key={group.key} className="flex flex-col gap-2">
-          <div className="mt-1 px-1 text-[11px] font-medium text-muted-foreground">{dayLabel(group.key)}</div>
-          {group.rows.map((r) => {
-        const open = openId === r.id;
-        return (
-          <Card key={r.id} className="overflow-hidden">
-            <div className="flex items-center gap-2 p-3">
-              {selecting && (
-                <input
-                  type="checkbox"
-                  className="size-4 shrink-0 accent-[hsl(var(--primary))]"
-                  aria-label={t('选择「{name}」', { name: cleanTitle(r.title) })}
-                  checked={selected.includes(r.id)}
-                  onChange={() => toggleSelect(r.id)}
-                />
-              )}
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={() => (selecting ? toggleSelect(r.id) : setOpenId(open ? null : r.id))}
-              >
-                {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+
+      {visible.length > 0 && (
+        <div className="grid grid-cols-[248px_minmax(0,1fr)] items-start gap-6">
+          <div className="flex flex-col gap-4">
+            {grouped.map((group) => (
+              <div key={group.key} className="flex flex-col gap-1.5">
+                <div className="px-1 text-[11px] font-medium text-ink-muted">{dayLabel(group.key)}</div>
+                {group.rows.map((r) => {
+                  const active = detail?.id === r.id;
+                  return (
+                    <div key={r.id} className="relative">
+                      {selecting && (
+                        <input
+                          type="checkbox"
+                          className="absolute left-2 top-3 z-10 size-4 accent-[hsl(var(--primary))]"
+                          aria-label={t('选择「{name}」', { name: cleanTitle(r.title) })}
+                          checked={selected.includes(r.id)}
+                          onChange={() => toggleSelect(r.id)}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => (selecting ? toggleSelect(r.id) : setOpenId(r.id))}
+                        className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                          active && !selecting
+                            ? 'border-line bg-surface-raised shadow-card'
+                            : 'border-transparent hover:bg-[var(--mx-action-secondary-hover)]'
+                        } ${selecting ? 'pl-8' : ''}`}
+                      >
+                        <div className="flex items-center gap-1.5 text-[13px] font-medium">
+                          <span className="truncate" title={r.title}>{cleanTitle(r.title)}</span>
+                          {r.status === 'ACTIVE' && <Badge variant="default">{t('进行中')}</Badge>}
+                        </div>
+                        <div className="mt-0.5 text-[11px] tabular-nums text-ink-muted">
+                          {clockOf(r.createdAt)} · {t('{count} 题', { count: r.questions.length })}
+                          {r.mode ? ` · ${r.mode}` : ''}
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {detail && (
+            <div className="min-w-0 rounded-xl border border-line bg-surface-raised p-6 shadow-card">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    <span className="truncate" title={r.title}>{cleanTitle(r.title)}</span>
-                    {r.status === 'ACTIVE' && <Badge variant="default">{t('进行中')}</Badge>}
-                  </div>
-                  <div className="text-[11px] tabular-nums text-muted-foreground">
-                    {clockOf(r.createdAt)} · {t('{count} 题', { count: r.questions.length })}
-                    {r.mode ? ` · ${r.mode}` : ''}
+                  <h3 className="text-[18px] font-semibold leading-[26px]">{cleanTitle(detail.title)}</h3>
+                  <div className="mt-1 text-[11px] tabular-nums text-ink-muted">
+                    {clockOf(detail.createdAt)} · {t('{count} 题', { count: detail.questions.length })}
+                    {detail.mode ? ` · ${detail.mode}` : ''}
                   </div>
                 </div>
-              </button>
-              {!selecting && <select
-                className="h-7 rounded border bg-background px-1 text-[11px]"
-                value={r.outcome ?? ''}
-                onChange={(e) =>
-                  setRecords((prev) =>
-                    prev.map((x) =>
-                      x.id === r.id ? { ...x, outcome: (e.target.value || null) as ExamSessionRecord['outcome'] } : x,
-                    ),
-                  )
-                }
-              >
-                <option value="">{t('结果未标')}</option>
-                <option value="PASSED">{t('过了')}</option>
-                <option value="FAILED">{t('没过')}</option>
-                <option value="WAITING">{t('还在等')}</option>
-              </select>}
-              {!selecting && (
-                <Button size="sm" variant="ghost" onClick={() => setDeleting(r)} aria-label={t('删除')} title={t('删除')}>
-                  <Trash2 size={13} />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor={`outcome-${detail.id}`}>{t('结果')}</label>
+                  <select
+                    id={`outcome-${detail.id}`}
+                    className="h-8 rounded-md border border-line bg-surface-base px-2 text-[12px]"
+                    value={detail.outcome ?? ''}
+                    onChange={(e) =>
+                      setRecords((prev) =>
+                        prev.map((x) =>
+                          x.id === detail.id ? { ...x, outcome: (e.target.value || null) as ExamSessionRecord['outcome'] } : x,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">{t('结果未标')}</option>
+                    <option value="PASSED">{t('过了')}</option>
+                    <option value="FAILED">{t('没过')}</option>
+                    <option value="WAITING">{t('还在等')}</option>
+                  </select>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleting(detail)} aria-label={t('删除')} title={t('删除')}>
+                    <Trash2 size={13} />
+                  </Button>
+                </div>
+              </div>
+
+              {detail.questions.length === 0 ? (
+                <p className="mt-4 text-[12px] text-ink-muted">{t('这场笔试没有题目记录。')}</p>
+              ) : (
+                <div className="mt-4 flex flex-col gap-4">
+                  {detail.questions.map((q, i) => (
+                    <div key={q.id}>
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-ink-muted">
+                        <span>{q.parentTurnId ? t('追问') : t('第 {n} 题', { n: i + 1 })} · {new Date(q.createdAt).toLocaleTimeString('zh-CN')}</span>
+                        {!!q.screenshotRefs?.length && (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => setImages(q.screenshotRefs!)}>
+                            {t('查看原图 · {count} 张', { count: q.screenshotRefs.length })}
+                          </Button>
+                        )}
+                      </div>
+                      <div className="rounded-lg border border-line bg-surface-sunken px-4 py-3">
+                        <div className="mb-3 border-b border-line pb-3">
+                          <p className="mb-1 text-[11px] font-medium text-ink-muted">{t('原题')}</p>
+                          {q.questionText && !/^第\s*\d+\s*题$/.test(q.questionText) ? <Md text={q.questionText} /> : <p className="text-[13px] text-ink-muted">{t('旧记录未保存题干。')}</p>}
+                        </div>
+                        <p className="mb-1 text-[11px] font-medium text-ink-muted">{t('答案')}</p>
+                        {q.answer ? <Md text={q.answer} /> : <p className="text-[13px] text-ink-muted">{t('这道题没有答案记录。')}</p>}
+                        {q.imageSaveError && <p role="alert" className="mt-2 text-[11px] text-[var(--mx-status-warning-text)]">{t('截图未能保存：{message}', { message: q.imageSaveError })}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-            {open && (
-              <div className="border-t bg-muted/30 p-3">
-                {r.questions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t('这场笔试没有题目记录。')}</p>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {r.questions.map((q, i) => (
-                      <div key={q.id}>
-                        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
-                          {q.parentTurnId ? t('追问') : t('第 {n} 题', { n: i + 1 })} · {new Date(q.createdAt).toLocaleTimeString('zh-CN')}
-                          {!!q.screenshotRefs?.length && <Button size="sm" variant="ghost" className="ml-2" onClick={() => setImages(q.screenshotRefs!)}>{t('查看原图 · {count} 张', { count: q.screenshotRefs.length })}</Button>}
-                        </div>
-                        <div className="records-md whitespace-pre-wrap rounded-md border bg-background px-2.5 py-2">
-                          <div className="mb-2 border-b pb-2"><p className="mb-1 text-xs text-muted-foreground">{t('原题')}</p>{q.questionText && !/^第\s*\d+\s*题$/.test(q.questionText) ? <Md text={q.questionText} /> : t('旧记录未保存题干。')}</div>
-                          <p className="mb-1 text-xs text-muted-foreground">{t('答案')}</p>
-                          {q.answer ? <Md text={q.answer} /> : t('这道题没有答案记录。')}
-                          {q.imageSaveError && <p role="alert" className="mt-2 text-xs text-amber-700 dark:text-amber-400">{t('截图未能保存：{message}', { message: q.imageSaveError })}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </Card>
-        );
-      })}
+          )}
         </div>
-      ))}
+      )}
+
       <ExamImageViewer references={images} onClose={() => setImages(null)} />
       <ConfirmDialog
         open={deletingMany}
