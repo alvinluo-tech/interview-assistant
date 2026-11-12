@@ -1250,6 +1250,8 @@ export const en: Record<string, string> = {
   "像正式面试一样练习。": 'Practise like the real thing.',
   "根据你的经历提问，让每一次回答更有把握。": 'Questions built from your experience, so every answer lands better.',
   "这一场，准备好了。": 'This one is ready.',
+  "练习更有针对性。": 'Make practice sharper.',
+  "结合岗位和项目经历，先准备最值得讲清楚的问题。": 'Use the role and your projects to prepare the questions worth explaining well.',
   "语音通话": "Voice call",
   "语音通话已停止": "Voice call stopped",
   "语音识别中断，已自动重连": "Speech recognition dropped — reconnected",

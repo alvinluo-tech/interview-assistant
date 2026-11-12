@@ -6,10 +6,7 @@ import { useAiReady } from '@/lib/aiSettings';
 import { useState } from 'react';
 import { BookOpen, Loader2, Sparkles, Star, StarOff, Upload } from 'lucide-react';
 import {
-  Badge,
   Button,
-  Card,
-  SectionHeader,
   Select,
   showToast,
 } from '@/ui/primitives';
@@ -35,21 +32,16 @@ const CATEGORY_LABEL: Record<string, string> = {
   reverse: '反问面试官',
 };
 
-const PROBABILITY_LABEL: Record<BankQuestion['probability'], { text: string; variant: 'destructive' | 'amber' | 'secondary' }> = {
-  high: { text: '优先准备', variant: 'destructive' },
-  medium: { text: '建议准备', variant: 'amber' },
-  low: { text: '拓展准备', variant: 'secondary' },
-};
-
 const EXPERIENCE_OPTIONS = ['应届生', '1-3 年经验', '3-5 年经验', '5-10 年经验', '10 年以上'];
 
-export function QuestionBankPage() {
+export function QuestionBankPage({ onNavigate }: { onNavigate?: (section: 'interview') => void } = {}) {
   const goals = useData<Goal[]>('goals', [])[0];
   const resumes = useData<Resume[]>('resumes', [])[0];
   const materials = useData<Material[]>('materials', [])[0];
   // 选择要跨页面保留：bankId 由这三项组成，重置会让已生成的题库看起来消失。
   const [storedGoalId, setGoalId] = useSetting<string>('questionBank.pendingGoalId', '');
   const goalId = goals.some((g) => g.id === storedGoalId) ? storedGoalId : (goals[0]?.id ?? '');
+  const goal = goals.find((g) => g.id === goalId);
   const [storedResumeId, setResumeId] = useSetting<string>('questionBank.pendingResumeId', '');
   const resumeId = resumes.some((r) => r.id === storedResumeId) ? storedResumeId : (resumes.find((r) => !r.isSample)?.id ?? resumes[0]?.id ?? '');
   const [experience, setExperience] = useSetting<string>('questionBank.experience', EXPERIENCE_OPTIONS[0]);
@@ -61,6 +53,7 @@ export function QuestionBankPage() {
   const [progress, setProgress] = useState('');
   // 用「序号 + 题干」定位展开项：重新生成题库后下标会指向别的题。
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [scopeOpen, setScopeOpen] = useState(false);
   // 「存进面试资料」的目标资料：默认第一份，可在页面顶部改，避免固定写进 materials[0]。
   const [targetMaterialId, setTargetMaterialId] = useState('');
   const favorites = new Set(savedBank?.favorites ?? []);
@@ -101,135 +94,142 @@ export function QuestionBankPage() {
     showToast({ type: 'success', title: t('已存进面试资料，面试时助手会用上这道题的答案') });
   };
 
+  const selected = questions.find((q, i) => `${i}:${q.question}` === openKey) ?? questions[0];
+  const selectedKey = selected ? `${questions.indexOf(selected)}:${selected.question}` : null;
+
   return (
-    <div className="flex flex-col gap-4">
-      <Card className="p-5">
-        <SectionHeader
-          title={t('按你的简历，准备好怎么答')}
-          desc={t('结合岗位与选定资料生成准备题、参考思路和可用经历，优先级用于安排练习。')}
-        />
-        <div className="grid grid-cols-3 gap-2">
-          <label className="text-xs font-medium text-muted-foreground">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-line bg-surface-raised px-3 py-1 text-[12px]">
+            {goal ? (goal.companyName ? `${goal.companyName} · ${goal.name}` : goal.name) : t('不限岗位')}
+          </span>
+          <span className="rounded-full border border-line bg-surface-raised px-3 py-1 text-[12px]">
+            {resumes.find((r) => r.id === resumeId)?.title ?? t('不带简历')}
+          </span>
+          <button
+            type="button"
+            onClick={() => setScopeOpen((v) => !v)}
+            aria-expanded={scopeOpen}
+            className="rounded-full px-2 py-1 text-[12px] text-primary hover:underline"
+          >
+            {t('调整范围')}
+          </button>
+        </div>
+        <Button size="sm" onClick={() => void generate()} disabled={generating || !aiReady} title={aiReady ? undefined : t('需要先在「设置 → AI 服务」配置接口。')}>
+          {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+          {generating ? t('正在准备…') : t('生成准备题')}
+        </Button>
+      </div>
+
+      {scopeOpen && (
+        <div className="grid grid-cols-4 gap-3 rounded-xl border border-line bg-surface-raised p-4">
+          <label className="text-[11px] text-ink-muted">
             {t('这场面试')}
-            <Select className="mt-1" value={goalId} onChange={(e) => setGoalId(e.target.value)}>
+            <Select className="mt-1 h-9 text-[13px]" value={goalId} onChange={(e) => setGoalId(e.target.value)}>
               {goals.length === 0 && <option value="">{t('不限岗位')}</option>}
               {goals.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.companyName ? `${g.companyName} · ${g.name}` : g.name}
-                </option>
+                <option key={g.id} value={g.id}>{g.companyName ? `${g.companyName} · ${g.name}` : g.name}</option>
               ))}
             </Select>
           </label>
-          <label className="text-xs font-medium text-muted-foreground">
+          <label className="text-[11px] text-ink-muted">
             {t('简历')}
-            <Select className="mt-1" value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
+            <Select className="mt-1 h-9 text-[13px]" value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
               <option value="">{t('不带简历')}</option>
-              {resumes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.title}
-                </option>
-              ))}
+              {resumes.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
             </Select>
           </label>
-          <label className="text-xs font-medium text-muted-foreground">
+          <label className="text-[11px] text-ink-muted">
             {t('经验')}
-            <Select className="mt-1" value={experience} onChange={(e) => setExperience(e.target.value)}>
-              {EXPERIENCE_OPTIONS.map((x) => (
-                <option key={x} value={x}>
-                  {t(x)}
-                </option>
-              ))}
+            <Select className="mt-1 h-9 text-[13px]" value={experience} onChange={(e) => setExperience(e.target.value)}>
+              {EXPERIENCE_OPTIONS.map((x) => <option key={x} value={x}>{t(x)}</option>)}
+            </Select>
+          </label>
+          <label className="text-[11px] text-ink-muted">
+            {t('存进面试资料')}
+            <Select className="mt-1 h-9 text-[13px]" value={targetMaterialId} onChange={(e) => setTargetMaterialId(e.target.value)}>
+              <option value="">{t('面试题库收藏')}</option>
+              {materials.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </Select>
           </label>
         </div>
-        <div className="mt-3 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {aiReady ? t('生成约 10 道题，需要几十秒。') : t('需要先在「设置 → AI 服务」配置接口。')}
-          </span>
-          <Button size="sm" onClick={() => void generate()} disabled={generating || !aiReady}>
-            {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            {generating ? t('正在准备…') : t('生成我的面试准备')}
-          </Button>
-        </div>
-        <label className="mt-3 block max-w-xs text-xs font-medium text-muted-foreground">
-          {t('存进面试资料')}
-          <Select className="mt-1" value={targetMaterialId} onChange={(e) => setTargetMaterialId(e.target.value)}>
-            <option value="">{t('面试题库收藏')}</option>
-            {materials.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </Select>
-        </label>
-        {generating && progress && (
-          <div className="mt-3 flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-            <Loader2 size={12} className="animate-spin" />
-            {progress}
-          </div>
-        )}
-      </Card>
+      )}
 
-      {questions.length > 0 && (
-        <Card className="p-5">
-          <SectionHeader title={t('{count} 题', { count: questions.length })} desc={t('点开一题看参考思路；可以收藏或存进面试资料。')} />
-          <div className="flex flex-col gap-2">
-            {questions.map((q, i) => {
-              const itemKey = `${i}:${q.question}`;
-              const open = openKey === itemKey;
-              const fav = favorites.has(q.question);
-              return (
-                <div key={itemKey} className="rounded-md border">
-                  <button
-                    type="button"
-                    className="flex w-full items-start gap-2 p-2.5 text-left"
-                    onClick={() => setOpenKey(open ? null : itemKey)}
-                  >
-                    <span className="mt-0.5 text-xs text-muted-foreground">{i + 1}.</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">{q.question}</div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <Badge variant="secondary">{t(CATEGORY_LABEL[q.category] ?? q.category)}</Badge>
-                        <Badge variant={PROBABILITY_LABEL[q.probability]?.variant ?? 'secondary'}>
-                          {t(PROBABILITY_LABEL[q.probability]?.text ?? q.probability)}
-                        </Badge>
-                      </div>
-                    </div>
-                  </button>
-                  {open && (
-                    <div className="border-t bg-muted/30 p-2.5">
-                      <div className="records-md whitespace-pre-wrap text-[13px]">{q.answer}</div>
-                      <div className="mt-2 flex gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const next = new Set(favorites);
-                            if (fav) next.delete(q.question);
-                            else next.add(q.question);
-                            void saveBank({favorites:[...next]}).then(() => showToast({ type: 'success', title: fav ? t('已取消收藏') : t('已收藏') }))
-                              .catch(error => showToast({type:'error',title:t('收藏保存失败'),description:String(error)}));
-                          }}
-                        >
-                          {fav ? <StarOff size={12} /> : <Star size={12} />}
-                          {fav ? t('已收藏') : t('收藏')}
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => void saveToMaterial(q)}>
-                          <Upload size={12} />
-                          {t('存进面试资料')}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+      {generating && progress && (
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-line px-3 py-2 text-[12px] text-ink-muted">
+          <Loader2 size={12} className="animate-spin" />
+          {progress}
+        </div>
       )}
 
       {questions.length === 0 && !generating && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-line px-4 py-6 text-[12px] text-ink-muted">
           <BookOpen size={16} className="shrink-0" />
-          <span>{t('还没有生成题目。选好简历和岗位，点「生成我的面试准备」。')}</span>
+          <span>{t('还没有生成题目。选好简历和岗位，点「生成准备题」。')}</span>
+        </div>
+      )}
+
+      {questions.length > 0 && (
+        <div className="grid grid-cols-[248px_minmax(0,1fr)] items-start gap-6">
+          <div className="flex flex-col gap-1.5">
+            {questions.map((q, i) => {
+              const itemKey = `${i}:${q.question}`;
+              const active = itemKey === selectedKey;
+              return (
+                <button
+                  key={itemKey}
+                  type="button"
+                  onClick={() => setOpenKey(itemKey)}
+                  className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                    active ? 'border-line bg-surface-raised shadow-card' : 'border-transparent hover:bg-[var(--mx-action-secondary-hover)]'
+                  }`}
+                >
+                  <div className="line-clamp-2 text-[13px] font-medium leading-[20px]">{q.question}</div>
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
+                    {t(CATEGORY_LABEL[q.category] ?? q.category)}
+                    {favorites.has(q.question) && <Star size={11} className="text-primary" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {selected && (
+            <div className="rounded-xl border border-line bg-surface-raised p-6 shadow-card">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-medium tracking-[0.08em] text-primary">{t(CATEGORY_LABEL[selected.category] ?? selected.category)}</div>
+                  <h3 className="mt-2 text-[18px] font-semibold leading-[26px]">{selected.question}</h3>
+                </div>
+                <button
+                  type="button"
+                  aria-label={favorites.has(selected.question) ? t('取消收藏') : t('收藏')}
+                  onClick={() => {
+                    const next = new Set(favorites);
+                    const fav = favorites.has(selected.question);
+                    if (fav) next.delete(selected.question);
+                    else next.add(selected.question);
+                    void saveBank({favorites:[...next]}).then(() => showToast({ type: 'success', title: fav ? t('已取消收藏') : t('已收藏') }))
+                      .catch(error => showToast({type:'error',title:t('收藏保存失败'),description:String(error)}));
+                  }}
+                  className={`flex size-8 items-center justify-center rounded-md border border-line ${favorites.has(selected.question) ? 'text-primary' : 'text-ink-muted hover:bg-[var(--mx-action-secondary-hover)]'}`}
+                >
+                  {favorites.has(selected.question) ? <StarOff size={14} /> : <Star size={14} />}
+                </button>
+              </div>
+              <div className="mt-4 whitespace-pre-wrap text-[13px] leading-[22px] text-ink">{selected.answer}</div>
+              <div className="mt-5 flex gap-2 border-t border-line pt-4">
+                <Button size="sm" variant="outline" onClick={() => void saveToMaterial(selected)}>
+                  <Upload size={12} />
+                  {t('存进面试资料')}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => onNavigate?.('interview')}>
+                  {t('结合项目练习')}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

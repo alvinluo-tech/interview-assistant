@@ -1250,6 +1250,8 @@ export const ptBr: Record<string, string> = {
   "像正式面试一样练习。": 'Pratique como numa entrevista real.',
   "根据你的经历提问，让每一次回答更有把握。": 'Perguntas baseadas na sua experiência para responder melhor.',
   "这一场，准备好了。": 'Esta sessão está pronta.',
+  "练习更有针对性。": 'Pratique com mais foco.',
+  "结合岗位和项目经历，先准备最值得讲清楚的问题。": 'Prepare primeiro as perguntas que realmente valem uma boa explicação.',
   "语音通话": "Chamada de voz",
   "语音通话已停止": "Chamada de voz encerrada",
   "语音识别中断，已自动重连": "O reconhecimento de voz caiu: reconectado",

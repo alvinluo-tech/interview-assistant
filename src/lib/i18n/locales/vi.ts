@@ -1250,6 +1250,8 @@ export const vi: Record<string, string> = {
   "像正式面试一样练习。": 'Luyện như phỏng vấn thật.',
   "根据你的经历提问，让每一次回答更有把握。": 'Câu hỏi từ kinh nghiệm của bạn để trả lời tốt hơn.',
   "这一场，准备好了。": 'Buổi này đã sẵn sàng.',
+  "练习更有针对性。": 'Luyện tập có trọng tâm.',
+  "结合岗位和项目经历，先准备最值得讲清楚的问题。": 'Dựa trên vị trí và dự án, chuẩn bị trước những câu đáng nói rõ.',
   "语音通话": "Cuộc gọi thoại",
   "语音通话已停止": "Cuộc gọi thoại đã dừng",
   "语音识别中断，已自动重连": "Nhận dạng giọng nói bị ngắt: đã kết nối lại",

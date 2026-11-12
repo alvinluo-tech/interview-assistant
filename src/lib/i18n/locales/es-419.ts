@@ -1250,6 +1250,8 @@ export const es419: Record<string, string> = {
   "像正式面试一样练习。": 'Practica como en una entrevista real.',
   "根据你的经历提问，让每一次回答更有把握。": 'Preguntas basadas en tu experiencia para responder con más seguridad.',
   "这一场，准备好了。": 'Esta sesión está lista.',
+  "练习更有针对性。": 'Practica con más puntería.',
+  "结合岗位和项目经历，先准备最值得讲清楚的问题。": 'Prepara primero las preguntas que de verdad merece la pena explicar bien.',
   "语音通话": "Llamada de voz",
   "语音通话已停止": "Llamada de voz detenida",
   "语音识别中断，已自动重连": "Se perdió el reconocimiento de voz: reconectado",

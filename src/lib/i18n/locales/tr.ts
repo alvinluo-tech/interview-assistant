@@ -1250,6 +1250,8 @@ export const tr: Record<string, string> = {
   "像正式面试一样练习。": 'Gerçek görüşme gibi çalışın.',
   "根据你的经历提问，让每一次回答更有把握。": 'Deneyiminize göre sorular sorar, yanıtlarınızı güçlendirir.',
   "这一场，准备好了。": 'Bu oturum hazır.',
+  "练习更有针对性。": 'Daha isabetli çalışın.',
+  "结合岗位和项目经历，先准备最值得讲清楚的问题。": 'Rol ve projelerinize göre önce gerçekten anlatmaya değer soruları hazırlayın.',
   "语音通话": "Sesli arama",
   "语音通话已停止": "Sesli arama durduruldu",
   "语音识别中断，已自动重连": "Konuşma tanıma kesildi: yeniden bağlandı",

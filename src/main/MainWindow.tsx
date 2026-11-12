@@ -82,7 +82,7 @@ const PAGE_TITLES: Record<Section, { h1: string; sub: string }> = {
   },
   chat: {h1:'自由对话',sub:'文字和语音对话。'},
   settings: { h1: '设置', sub: '语言与外观、AI 服务、快捷键和隐蔽相关都在这里。' },
-  'question-bank': { h1: '面试题库', sub: '马上要面的这场，会考什么、你该怎么答。' },
+  'question-bank': { h1: '练习更有针对性。', sub: '结合岗位和项目经历，先准备最值得讲清楚的问题。' },
   resource: {
     h1: '资料管理',
     sub: '简历、岗位和面试资料在这里统一维护。面试开始前只需要选，不用临时编辑。',
@@ -212,7 +212,7 @@ export function MainWindow() {
                   {section === 'exam' && <ExamWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'mock' && <MockPage onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'chat' && <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">{t('正在打开对话…')}</div>}><FreeChatPage /></Suspense>}
-                  {section === 'question-bank' && <QuestionBankPage />}
+                  {section === 'question-bank' && <QuestionBankPage onNavigate={() => setSection('interview')} />}
                   {section === 'resource' && <ResourcePage />}
                   {section === 'records' && <RecordsPage />}
                   {section === 'settings' && <SettingsPage />}
