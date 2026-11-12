@@ -403,7 +403,7 @@ function MockRoom() {
 
   if (!sessionId || !session || !config) {
     return (
-      <div className="flex h-screen items-center justify-center bg-neutral-950 text-neutral-300">
+      <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">
         <p className="text-sm">{t('这场模拟面试没打开成功，回到工作台重新开始一场。')}</p>
       </div>
     );
@@ -418,10 +418,10 @@ function MockRoom() {
     const meta = mockMeta(session);
     const shownReport = report ?? meta?.report ?? null;
     return (
-      <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
+      <div className="flex h-screen flex-col bg-background text-foreground">
         <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-8">
           <h1 className="text-lg font-semibold">{t('模拟面试复盘')}</h1>
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm text-muted-foreground">
             {t('{name}{company} · 用时 {duration} · {count} 轮问答', {
               name: config.goalName ?? '',
               company: config.company ? ` · ${config.company}` : '',
@@ -429,9 +429,9 @@ function MockRoom() {
               count: session.messages.filter((m) => m.role === 'ASSISTANT').length,
             })}
           </p>
-          {generatingReport && <p className="text-sm text-neutral-400">{t('正在生成复盘报告…（生成后会保存到历史记录）')}</p>}
+          {generatingReport && <p className="text-sm text-muted-foreground">{t('正在生成复盘报告…（生成后会保存到历史记录）')}</p>}
           {shownReport && (
-            <pre className="whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-[13px] leading-relaxed">
+            <pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface-raised p-4 text-[13px] leading-[22px] leading-relaxed">
               {shownReport}
             </pre>
           )}
@@ -448,7 +448,7 @@ function MockRoom() {
             />
           )}
           {!shownReport && !generatingReport && (
-            <pre className="whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-[13px] leading-relaxed">
+            <pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface-raised p-4 text-[13px] leading-[22px] leading-relaxed">
               {session.messages
                 .map((m) => `${m.role === 'INTERVIEWER' ? 'Q' : 'A'}：${m.text}`)
                 .join('\n\n')}
@@ -476,7 +476,7 @@ function MockRoom() {
           <button className="mock-end" onClick={() => setConfirmEnd(true)}>{t('结束面试')}</button>
         </div>
       </header>
-      {languageOpen&&<div className="mx-6 rounded-xl border border-neutral-700 bg-neutral-900 p-4"><SpeechProfilePanel mock value={profile} disabled={thinking||recording||transcribing} onChange={value=>void changeProfile(value)}/><p className="mt-2 text-xs text-neutral-400">{t('新语言从下一问生效；当前问题可用新声音重播。云端不支持的音色会明确提示，可切回标准发音。')}</p></div>}
+      {languageOpen&&<div className="mx-6 rounded-xl border border-line bg-surface-raised p-4"><SpeechProfilePanel mock value={profile} disabled={thinking||recording||transcribing} onChange={value=>void changeProfile(value)}/><p className="mt-2 text-xs text-ink-muted">{t('新语言从下一问生效；当前问题可用新声音重播。云端不支持的音色会明确提示，可切回标准发音。')}</p></div>}
       <div className={`mock-room-workspace ${transcriptOpen ? '' : 'without-transcript'}`}>
         <section className="mock-stage" aria-label={t('面试现场')}>
           <div className="mock-participants">
@@ -490,16 +490,16 @@ function MockRoom() {
             </div>
           </div>
           <div className="mock-question" role="region" aria-label={t('当前面试问题')} tabIndex={0} aria-live="polite"><span className="mock-question-label">{thinking ? t('面试官正在思考') : t('当前问题')}</span><p>{currentQuestion?.text || (thinking ? t('面试官正在准备开场问题…') : t('准备好后开始对话。'))}</p>
-            {questionTranslation&&<p className="mt-2 text-sm text-neutral-400" aria-label={t('辅助译文')}>{questionTranslation}</p>}
+            {questionTranslation&&<p className="mt-2 text-sm text-muted-foreground" aria-label={t('辅助译文')}>{questionTranslation}</p>}
             {currentQuestion && <button disabled={recording || transcribing || thinking} title={speechPhase !== 'idle' ? t('停止本次朗读，自动播报开关保持不变') : t('重新朗读当前问题；已生成的云端音频优先从本场缓存播放')} aria-label={speechPhase !== 'idle' ? t('停止朗读') : t('朗读当前问题')} onClick={() => {if (speechPhase !== 'idle') player.stop();else if (!ttsOn) setTtsOn(true);else void player.speak(currentQuestion.text);}}>{speechPhase === 'preparing' ? <Loader2 size={16} className="animate-spin" /> : speechPhase === 'speaking' ? <Square size={16} /> : <Volume2 size={16} />}</button>}
           </div>
-          {questionError&&<div role="alert" className="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200"><p>{questionError}</p><Button size="sm" variant="outline" className="mt-2" disabled={thinking} onClick={()=>{retryBlocked.current=false;retryAttempts.current=0;if(retryTimer.current)window.clearTimeout(retryTimer.current);setQuestionError('');setRetryTick(n=>n+1);}}>{t('重试出题')}</Button></div>}
+          {questionError&&<div role="alert" className="rounded-lg border border-[var(--mx-status-warning-border)] bg-[var(--mx-status-warning-bg)] p-3 text-xs text-[var(--mx-status-warning-text)]"><p>{questionError}</p><Button size="sm" variant="outline" className="mt-2" disabled={thinking} onClick={()=>{retryBlocked.current=false;retryAttempts.current=0;if(retryTimer.current)window.clearTimeout(retryTimer.current);setQuestionError('');setRetryTick(n=>n+1);}}>{t('重试出题')}</Button></div>}
           {assistEnabled && currentQuestion && hints[currentQuestion.id] && <div className="mock-hint"><Sparkles size={14} /><p>{hints[currentQuestion.id]}</p></div>}
           <button className={`mock-assist-toggle ${assistEnabled ? 'enabled' : ''}`} aria-pressed={assistEnabled} onClick={() => setAssistOverride(!assistEnabled)}><Sparkles size={14} /> {t(assistEnabled ? 'AI 辅助 已开启' : 'AI 辅助 已关闭')}</button>
         </section>
         {transcriptOpen && (<aside className="mock-transcript" aria-label={t('对话记录')}><div className="mock-transcript-heading"><span>{t('对话记录')}</span><button aria-label={t('收起对话记录')} onClick={() => setTranscriptOpen(false)}><X size={15} /></button></div>
         {!aiReady && (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12.5px] text-amber-300">
+          <div className="rounded-lg border border-[var(--mx-status-warning-border)] bg-[var(--mx-status-warning-bg)] px-3 py-2 text-[12.5px] text-[var(--mx-status-warning-text)]">
             {t('还没有配置 AI 接口，面试官无法出题。回到主窗口「设置 → AI 服务」配置后重新打开这场面试。')}
           </div>
         )}
@@ -508,7 +508,7 @@ function MockRoom() {
             {m.role === 'INTERVIEWER' && <AvatarMark size={28} />}
             <div
               className={`max-w-[85%] rounded-lg px-3.5 py-2.5 text-[14px] leading-relaxed ${
-                m.role === 'ASSISTANT' ? 'rounded-tr-sm bg-primary/20' : 'rounded-tl-sm bg-neutral-800'
+                m.role === 'ASSISTANT' ? 'rounded-tr-sm bg-selection text-selection-fg' : 'rounded-tl-sm bg-surface-sunken'
               }`}
             >
               {m.text}
@@ -516,7 +516,7 @@ function MockRoom() {
           </div>
         ))}
         {assistEnabled && currentQuestion && hints[currentQuestion.id] && (
-          <div className="ml-9 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-[12.5px] leading-relaxed text-emerald-200">
+          <div className="ml-9 rounded-lg border border-[var(--mx-status-success-border)] bg-[var(--mx-status-success-bg)] px-3 py-2 text-[12.5px] leading-relaxed text-[var(--mx-status-success-text)]">
             <div className="mb-0.5 text-[11px] font-medium opacity-70">{t('提示')}</div>
             <pre className="whitespace-pre-wrap font-sans">{hints[currentQuestion.id]}</pre>
           </div>
@@ -524,7 +524,7 @@ function MockRoom() {
         {thinking && (
           <div className="flex items-start gap-2.5 opacity-60">
             <AvatarMark size={28} />
-            <div className="rounded-lg rounded-tl-sm bg-neutral-800 px-3.5 py-2.5 text-[13px]">{t('面试官正在考虑下一个问题…')}</div>
+            <div className="rounded-lg rounded-tl-sm bg-surface-sunken px-3.5 py-2.5 text-[13px]">{t('面试官正在考虑下一个问题…')}</div>
           </div>
         )}
       </aside>)}
@@ -532,7 +532,7 @@ function MockRoom() {
       <footer className="mock-response">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-2">
           <Textarea
-            className="border-neutral-700 bg-neutral-900 text-neutral-100"
+            className="border-line-control bg-surface-raised text-foreground"
             rows={3}
             placeholder={t('回答当前问题：直接打字，或按空格开始/结束说话')}
             value={draft}
@@ -542,7 +542,7 @@ function MockRoom() {
             }}
             disabled={thinking}
           />
-          {(voiceStatus || voicePreview) && <div role="status" aria-live="polite" className="rounded border border-neutral-700 p-2 text-xs text-neutral-300"><p className="text-neutral-500">{voiceStatus}</p>{voicePreview&&<p className="mt-1 whitespace-pre-wrap">{voicePreview}</p>}</div>}
+          {(voiceStatus || voicePreview) && <div role="status" aria-live="polite" className="rounded-md border border-line bg-surface-base p-2 text-xs text-ink-muted"><p className="text-ink-muted">{voiceStatus}</p>{voicePreview&&<p className="mt-1 whitespace-pre-wrap">{voicePreview}</p>}</div>}
           <div className="flex items-center gap-2">
             <Button
               variant={recording ? 'default' : 'outline'}
@@ -558,13 +558,13 @@ function MockRoom() {
                 {[0.35, 0.7, 1, 0.7, 0.35].map((f, i) => (
                   <span
                     key={i}
-                    className="w-1 rounded-sm bg-emerald-400 transition-all duration-100"
+                    className="w-1 rounded-sm bg-[var(--mx-action-primary)] transition-all duration-100"
                     style={{ height: `${Math.max(12, micLevel * 100 * f)}%` }}
                   />
                 ))}
               </span>
             )}
-            <div className="flex-1 text-[11px] text-neutral-500">{t('Ctrl/⌘ + Enter 提交，面试官会接着追问或换题')}</div>
+            <div className="flex-1 text-[11px] text-ink-muted">{t('Ctrl/⌘ + Enter 提交，面试官会接着追问或换题')}</div>
             <Button size="sm" onClick={() => void submit()} disabled={!draft.trim() || thinking || recording || transcribing}>
               <Send size={12} />
               {t('提交回答')}
