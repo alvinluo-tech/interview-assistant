@@ -297,14 +297,20 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
           if (importKind === 'material' && importFile) {
             await saveMaterial({ name: document.name.replace(/\.[^.]+$/, ''), source: 'file', content: document.text });
           } else if (importKind === 'goal' && importFile) {
+            // 岗位文件的第一行通常是岗位名，比文件名更像标题；读不到就退回文件名。
+            const heading = document.text
+              .split('\n')
+              .map((line) => line.trim())
+              .find((line) => line.length > 0 && line.length <= 40 && !/^公司/.test(line));
             const goal = await saveGoal({
-              name: document.name.replace(/\.[^.]+$/, ''),
+              name: heading ?? document.name.replace(/\.[^.]+$/, ''),
               companyName: companyFromJd(document.text),
               description: document.text,
             });
             setSelectedKey(`goal:${goal.id}`);
             setTypeFilter('goal');
             showToast({ type: 'success', title: t('岗位已导入'), description: t('名称与公司可以在右侧编辑修改。') });
+            return;
           } else {
             const { text, ...metadata } = document;
             await saveResume({ id: previewResume?.id, title: previewResume?.title || document.name.replace(/\.[^.]+$/, ''),
