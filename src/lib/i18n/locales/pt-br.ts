@@ -1299,6 +1299,7 @@ export const ptBr: Record<string, string> = {
   "只需要岗位名称；公司可以之后再补。": "Só o nome da vaga já basta; a empresa pode ser adicionada depois.",
   "例如 高级后端工程师": "ex.: Engenheiro de backend sênior",
   "创建中…": "Criando…",
+  "阅读优先": "Leitura primeiro",
   "语音通话": "Chamada de voz",
   "语音通话已停止": "Chamada de voz encerrada",
   "语音识别中断，已自动重连": "O reconhecimento de voz caiu: reconectado",

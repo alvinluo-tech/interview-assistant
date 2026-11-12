@@ -248,6 +248,7 @@ function GeneralTab() {
 
 const BUILTIN_PRESETS = [
   { id: 'builtin-default', name: '默认样式' },
+  { id: 'builtin-reading', name: '阅读优先' },
   { id: 'builtin-dual-camera', name: '几乎全透明（双机位）' },
 ];
 
@@ -292,12 +293,27 @@ function OverlayStyleTab() {
           textBold: false,
           fontScale: 1,
           scrollSpeed: 1,
-          examBgOpacity: 0.85,
+          examBgOpacity: 0.94,
           examTextOpacity: 1,
           examBorderOpacity: 0,
-          interviewBgOpacity: 0.85,
+          interviewBgOpacity: 0.94,
           interviewTextOpacity: 1,
           interviewBorderOpacity: 0,
+        }),
+      );
+    } else if (presetId === 'builtin-reading') {
+      setStyle(
+        normalizeStyleHelper({
+          ...style,
+          examBgOpacity: 0.94,
+          examTextOpacity: 1,
+          examBorderOpacity: 0,
+          interviewBgOpacity: 0.94,
+          interviewTextOpacity: 1,
+          interviewBorderOpacity: 0,
+          textHalo: true,
+          textBold: false,
+          fontScale: 1,
         }),
       );
     } else if (presetId === 'builtin-dual-camera') {

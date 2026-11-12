@@ -1299,6 +1299,7 @@ export const en: Record<string, string> = {
   "只需要岗位名称；公司可以之后再补。": "A role name is enough; you can add the company later.",
   "例如 高级后端工程师": "e.g. Senior Backend Engineer",
   "创建中…": "Creating…",
+  "阅读优先": "Reading first",
   "语音通话": "Voice call",
   "语音通话已停止": "Voice call stopped",
   "语音识别中断，已自动重连": "Speech recognition dropped — reconnected",

@@ -247,7 +247,7 @@ function InterviewShell({
 
   return (
     <div
-      className={`relative flex h-full flex-col gap-1.5 overflow-hidden rounded-xl p-2 ${isDark ? 'overlay-dark' : ''}`}
+      className={`relative flex h-full flex-col gap-1.5 overflow-hidden rounded-[16px] p-2 ${isDark ? 'overlay-dark' : ''}`}
       data-overlay-theme={skin.theme}
       style={{
         color: skin.textColor,
@@ -257,7 +257,10 @@ function InterviewShell({
       }}
     >
       {/* 头部 */}
-      <div className="flex h-6 items-center gap-1.5">
+      <div
+        className="flex h-[46px] shrink-0 items-center gap-1.5 border-b px-1"
+        style={{ background: 'var(--ov-tool-bg)', borderBottomColor: 'var(--ov-tool-line)' }}
+      >
         <DragHandle hoverMs={900} />
         <span className={`ov-dot size-1.5 rounded-full ${started ? '' : 'opacity-40'}`} />
         <span className="ov-text-2 truncate text-[11px] font-semibold">{statusInfo.text}</span>

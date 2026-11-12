@@ -299,6 +299,10 @@ html.ov-palette-fade body.overlay #root * {
   overflow-wrap: anywhere;
   overflow-x: clip;
 }
+/* 浮窗正文按 46ch 限量：宽窗口里一行别太长 */
+[data-overlay-theme] .overlay-md {
+  max-width: calc(46ch * var(--ov-font-scale, 1));
+}
 .overlay-md p,
 .overlay-md li {
   margin: 2px 0;

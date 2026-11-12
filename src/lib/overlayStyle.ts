@@ -13,14 +13,14 @@ export function normalizeStyle(style: Partial<OverlayStyle>): OverlayStyle {
   const s = style;
   return {
     theme: s.theme === 'dark' ? 'dark' : 'light',
-    examBgOpacity: clamp(Number(s.examBgOpacity ?? 0.85), 0, 1, 0.85),
+    examBgOpacity: clamp(Number(s.examBgOpacity ?? 0.94), 0, 1, 0.94),
     examBorderOpacity: clamp(Number(s.examBorderOpacity ?? 0), 0, 1, 0),
     examHeight: clamp(Number(s.examHeight ?? 520), 150, 2560, 520),
     examTextOpacity: clamp(Number(s.examTextOpacity ?? 1), 0, 1, 1),
     examWidth: clamp(Number(s.examWidth ?? 420), 200, 2560, 420),
     fontScale: clamp(Number(s.fontScale ?? 1), 0.3, 4, 1),
     hotkeyOpacityStep: clamp(Number(s.hotkeyOpacityStep ?? 0.1), 0.01, 1, 0.1),
-    interviewBgOpacity: clamp(Number(s.interviewBgOpacity ?? 0.85), 0, 1, 0.85),
+    interviewBgOpacity: clamp(Number(s.interviewBgOpacity ?? 0.94), 0, 1, 0.94),
     interviewBorderOpacity: clamp(Number(s.interviewBorderOpacity ?? 0), 0, 1, 0),
     interviewHeight: clamp(Number(s.interviewHeight ?? 620), 150, 2560, 620),
     interviewTextOpacity: clamp(Number(s.interviewTextOpacity ?? 1), 0, 1, 1),
@@ -154,6 +154,8 @@ export function computeSkin(style: OverlayStyle, mode: OverlayMode): Skin {
     '--ov-chip-active-bg': `rgba(${cssRgb(surface)}, ${(chipActiveT * ey).toFixed(3)})`,
     '--ov-chip-active-border': `rgba(${cssRgb(ink)}, ${(0.36 * ey).toFixed(3)})`,
     '--ov-bar': `rgba(${cssRgb(ink)}, ${(0.45 * textOpacity).toFixed(3)})`,
+    '--ov-tool-bg': `rgba(${cssRgb(surface)}, ${(0.98 * ey).toFixed(3)})`,
+    '--ov-tool-line': `rgba(${cssRgb(ink)}, ${((isDark ? 0.16 : 0.1) * ey).toFixed(3)})`,
     '--ov-pill-bg': `rgba(${cssRgb(surface)}, ${(0.92 * ey).toFixed(3)})`,
     '--ov-dot': `rgba(${cssRgb(ink)}, ${(0.72 * textOpacity).toFixed(3)})`,
     '--ov-md-quote': `rgba(${cssRgb(ink)}, ${(0.3 * ey).toFixed(3)})`,
@@ -198,4 +200,4 @@ export interface PaletteUndo {
 /** 双机位外观 */
 export const PARKED_LOOK = { bgOpacity: 0.03, textOpacity: 1, borderOpacity: 0.12 };
 /** 默认 look */
-export const DEFAULT_LOOK = { bgOpacity: 0.85, textOpacity: 1, borderOpacity: 0 };
+export const DEFAULT_LOOK = { bgOpacity: 0.94, textOpacity: 1, borderOpacity: 0 };

@@ -1299,6 +1299,7 @@ export const vi: Record<string, string> = {
   "只需要岗位名称；公司可以之后再补。": "Chỉ cần tên vị trí; có thể bổ sung công ty sau.",
   "例如 高级后端工程师": "ví dụ: Kỹ sư backend cấp cao",
   "创建中…": "Đang tạo…",
+  "阅读优先": "Ưu tiên đọc",
   "语音通话": "Cuộc gọi thoại",
   "语音通话已停止": "Cuộc gọi thoại đã dừng",
   "语音识别中断，已自动重连": "Nhận dạng giọng nói bị ngắt: đã kết nối lại",

@@ -292,7 +292,7 @@ function ExamShell({
 
   return (
     <div
-      className={`relative flex h-full flex-col overflow-hidden rounded-xl border text-[13px] ${isDark ? 'overlay-dark' : ''}`}
+      className={`relative flex h-full flex-col overflow-hidden rounded-[16px] border text-[13px] ${isDark ? 'overlay-dark' : ''}`}
       data-overlay-theme={skin.theme}
       style={{
         color: skin.textColor,
@@ -304,8 +304,8 @@ function ExamShell({
     >
       {/* 顶栏 */}
       <div
-        className="flex items-center gap-1.5 border-b px-3 py-1.5"
-        style={{ background: skin.surfaceBg, borderBottomColor: skin.borderColor }}
+        className="flex h-[46px] shrink-0 items-center gap-1.5 border-b px-3"
+        style={{ background: 'var(--ov-tool-bg)', borderBottomColor: 'var(--ov-tool-line)' }}
       >
         <DragHandle hoverMs={1000} />
         <span className="ov-text-2 truncate text-[11px] font-medium">{BRAND}</span>
@@ -500,7 +500,7 @@ function ExamShell({
       {/* 底栏 */}
       <div
         className="mt-1 max-h-[50vh] shrink-0 overflow-y-auto border-t px-2 py-1.5"
-        style={{ background: skin.surfaceBg, borderTopColor: skin.borderColor }}
+        style={{ background: 'var(--ov-tool-bg)', borderTopColor: 'var(--ov-tool-line)' }}
       >
         <div className="flex flex-wrap gap-1.5">
           <DwellButton

@@ -1299,6 +1299,7 @@ export const tr: Record<string, string> = {
   "只需要岗位名称；公司可以之后再补。": "Pozisyon adı yeterli; şirketi sonra ekleyebilirsiniz.",
   "例如 高级后端工程师": "ör. Kıdemli Backend Mühendisi",
   "创建中…": "Oluşturuluyor…",
+  "阅读优先": "Önce okuma",
   "语音通话": "Sesli arama",
   "语音通话已停止": "Sesli arama durduruldu",
   "语音识别中断，已自动重连": "Konuşma tanıma kesildi: yeniden bağlandı",

@@ -1299,6 +1299,7 @@ export const es419: Record<string, string> = {
   "只需要岗位名称；公司可以之后再补。": "Basta con el nombre del puesto; la empresa se puede añadir después.",
   "例如 高级后端工程师": "p. ej. Ingeniero backend sénior",
   "创建中…": "Creando…",
+  "阅读优先": "Lectura primero",
   "语音通话": "Llamada de voz",
   "语音通话已停止": "Llamada de voz detenida",
   "语音识别中断，已自动重连": "Se perdió el reconocimiento de voz: reconectado",

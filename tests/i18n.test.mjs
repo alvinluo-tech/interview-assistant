@@ -220,7 +220,7 @@ const POLICY = {
       { match: /title: '|desc: '/, reason: '面试方式/特性卡常量表，渲染点 t()' },
     ],
     'src/main/sections/SettingsPage.tsx': [
-      { match: /label:\s*'|desc: '|name: '默认样式|name: '几乎全透明/, reason: 'tab/主题/预设/热键方案常量表，渲染点 t()' },
+      { match: /label:\s*'|desc: '|name: '默认样式|name: '阅读优先|name: '几乎全透明/, reason: 'tab/主题/预设/热键方案常量表，渲染点 t()' },
       { match: /(label|title|desc)="[^"]*[\u4e00-\u9fff][^"]*"/, reason: 'SliderRow/SizeRow 的 key 实参，组件内 {t(label)} 渲染' },
     ],
     'src/main/sections/StorageSettings.tsx': [
