@@ -27,19 +27,23 @@ type Variant = 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive' | '
 type Size = 'sm' | 'md' | 'lg' | 'icon';
 
 const variantClass: Record<Variant, string> = {
-  default: 'bg-primary text-primary-foreground hover:opacity-90',
-  secondary: 'bg-secondary text-secondary-foreground hover:opacity-80',
-  outline: 'border border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
-  ghost: 'hover:bg-accent hover:text-accent-foreground',
-  destructive: 'bg-destructive text-destructive-foreground hover:opacity-90',
+  default:
+    'bg-primary text-primary-foreground hover:bg-[var(--mx-action-primary-hover)] active:bg-[var(--mx-action-primary-pressed)]',
+  secondary:
+    'bg-secondary text-secondary-foreground hover:bg-[var(--mx-action-secondary-hover)] active:bg-[var(--mx-action-secondary-hover)]',
+  outline:
+    'border border-line-control bg-surface-raised hover:bg-[var(--mx-action-secondary-hover)] aria-expanded:bg-[var(--mx-action-secondary-hover)]',
+  ghost: 'hover:bg-[var(--mx-action-secondary-hover)] active:bg-[var(--mx-action-secondary-hover)]',
+  destructive:
+    'bg-destructive text-destructive-foreground hover:bg-[var(--mx-status-error-text)] hover:brightness-95 active:brightness-90',
   link: 'text-primary underline-offset-4 hover:underline',
 };
 
 const sizeClass: Record<Size, string> = {
   sm: 'h-8 px-3 text-xs',
-  md: 'h-9 px-4 text-sm',
-  lg: 'h-10 px-6 text-sm',
-  icon: 'h-9 w-9',
+  md: 'h-[42px] px-4 text-sm',
+  lg: 'h-11 px-6 text-sm',
+  icon: 'h-[42px] w-[42px]',
 };
 
 export function Button({
@@ -50,7 +54,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50 ${variantClass[variant]} ${sizeClass[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-[background-color,border-color,color,box-shadow] duration-[120ms] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${variantClass[variant]} ${sizeClass[size]} ${className}`}
       {...props}
     />
   );
@@ -61,7 +65,7 @@ export function Button({
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
+      className={`flex h-[42px] w-full rounded-md border border-line-control bg-surface-raised px-3 py-1 text-sm transition-[border-color,box-shadow] duration-[120ms] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${className}`}
       {...props}
     />
   );
@@ -70,7 +74,7 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
 export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={`flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
+      className={`flex min-h-[84px] w-full rounded-md border border-line-control bg-surface-raised px-3 py-2 text-sm leading-[22px] transition-[border-color,box-shadow] duration-[120ms] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${className}`}
       {...props}
     />
   );
@@ -79,7 +83,7 @@ export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HT
 export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={`flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
+      className={`flex h-[42px] w-full rounded-md border border-line-control bg-surface-raised px-3 py-1 text-sm transition-[border-color,box-shadow] duration-[120ms] focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${className}`}
       {...props}
     >
       {children}
@@ -108,13 +112,13 @@ export function Switch({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent shadow-xs transition-colors before:absolute before:-inset-x-1.5 before:-inset-y-2 before:content-[''] disabled:opacity-50 ${
-        checked ? 'bg-primary' : 'bg-input'
+      className={`relative inline-flex h-[22px] w-10 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-[120ms] before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-[''] disabled:opacity-50 ${
+        checked ? 'bg-primary' : 'bg-[var(--mx-border-control)]'
       }`}
     >
       <span
-        className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-          checked ? 'translate-x-4' : 'translate-x-0'
+        className={`block h-[18px] w-[18px] rounded-full bg-white shadow-xs transition-transform duration-[120ms] ${
+          checked ? 'translate-x-[18px]' : 'translate-x-0'
         }`}
       />
     </button>
@@ -147,7 +151,7 @@ export function Slider({
     <div className={`relative flex h-6 w-full items-center ${className}`}>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 h-1.5 rounded-full"
+        className="pointer-events-none absolute inset-x-0 h-1 rounded-full"
         style={{
           background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${progress}%, hsl(var(--muted)) ${progress}%, hsl(var(--muted)) 100%)`,
         }}
@@ -161,7 +165,7 @@ export function Slider({
         aria-label={ariaLabel}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="relative h-6 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow"
+        className="relative h-6 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow"
       />
     </div>
   );
@@ -192,13 +196,13 @@ export function Dialog({
   if (!open) return null;
   const dismiss = () => {if(dismissable && isTopModal(root.current))onClose();};
   return createPortal(
-    <div ref={root} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+    <div ref={root} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'var(--mx-scrim)'}}>
       <div
         className="absolute inset-0"
         onClick={dismiss}
       />
       <div
-        className={`relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-card p-5 text-card-foreground shadow-xl ${className}`}
+        className={`relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-surface-overlay p-6 text-card-foreground shadow-popover ${className}`}
       >
         <DialogCtx value={{ close: onClose, titleId, root }}>
           {dismissable && (
@@ -220,7 +224,7 @@ export function Dialog({
 
 export function DialogTitle({ children }: { children: ReactNode }) {
   const {titleId} = useContext(DialogCtx);
-  return <h2 id={titleId} className="mb-1 pr-6 text-base font-semibold">{children}</h2>;
+  return <h2 id={titleId} className="mb-1 pr-6 text-[17px] font-semibold leading-6">{children}</h2>;
 }
 export function DialogDesc({ children }: { children: ReactNode }) {
   return <p className="mb-4 text-sm text-muted-foreground">{children}</p>;
@@ -269,12 +273,14 @@ export function ToastViewport() {
       {items.map((item) => (
         <div
           key={item.id}
-          className={`pointer-events-auto w-full rounded-md border px-4 py-2.5 text-sm shadow-lg ${
+          className={`pointer-events-auto w-full rounded-md border px-4 py-3 text-sm shadow-popover ${
             item.type === 'error'
-              ? 'border-destructive/30 bg-destructive text-destructive-foreground'
+              ? 'border-[var(--mx-status-error-border)] bg-[var(--mx-status-error-bg)] text-[var(--mx-status-error-text)]'
               : item.type === 'success'
-                ? 'border-primary/30 bg-primary text-primary-foreground'
-                : 'bg-card text-card-foreground'
+                ? 'border-[var(--mx-status-success-border)] bg-[var(--mx-status-success-bg)] text-[var(--mx-status-success-text)]'
+                : item.type === 'warning'
+                  ? 'border-[var(--mx-status-warning-border)] bg-[var(--mx-status-warning-bg)] text-[var(--mx-status-warning-text)]'
+                  : 'border-line bg-surface-overlay text-card-foreground'
           }`}
         >
           <div className="font-medium">{item.title}</div>
@@ -297,7 +303,7 @@ export function Badge({
   className?: string;
 }) {
   const cls = {
-    default: 'bg-primary/10 text-primary border-primary/20',
+    default: 'bg-selection text-selection-fg border-transparent',
     secondary: 'bg-secondary text-secondary-foreground border-transparent',
     outline: 'border-input text-foreground',
     destructive: 'bg-destructive/10 text-destructive border-destructive/20',
@@ -312,7 +318,7 @@ export function Badge({
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-lg border bg-card text-card-foreground shadow-xs ${className}`}>{children}</div>
+    <div className={`rounded-lg border border-line bg-surface-raised text-card-foreground shadow-card ${className}`}>{children}</div>
   );
 }
 
@@ -320,8 +326,8 @@ export function SectionHeader({ title, desc, right }: { title: string; desc?: st
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
       <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {desc && <p className="mt-0.5 text-xs text-muted-foreground">{desc}</p>}
+        <h3 className="text-sm font-semibold leading-5">{title}</h3>
+        {desc && <p className="mt-1 text-xs leading-[18px] text-muted-foreground">{desc}</p>}
       </div>
       {right}
     </div>
