@@ -184,12 +184,14 @@ export function Dialog({
   children,
   className = '',
   dismissable = true,
+  width,
 }: {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
   className?: string;
   dismissable?: boolean;
+  width?: number;
 }) {
   const root = useRef<HTMLDivElement>(null), parent = useContext(DialogCtx), titleId = useId();
   useModalFocus(root,open,dismissable?onClose:undefined,undefined,parent.root);
@@ -203,6 +205,7 @@ export function Dialog({
       />
       <div
         className={`relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-surface-overlay p-6 text-card-foreground shadow-popover ${className}`}
+        style={width ? { maxWidth: width } : undefined}
       >
         <DialogCtx value={{ close: onClose, titleId, root }}>
           {dismissable && (

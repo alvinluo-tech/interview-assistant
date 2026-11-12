@@ -10,10 +10,12 @@ import { useState } from 'react';
 import { Mic, Check, FileText, FolderOpen, Globe2, Headphones, Loader2, MessageSquare, Play, Sparkles, Square, Target, Timer, Video, Volume2 } from 'lucide-react';
 import {
   Button,
+  Dialog,
+  DialogDesc,
+  DialogTitle,
   Select,
   Slider,
   Switch,
-  Textarea,
   showToast,
 } from '@/ui/primitives';
 import { useData, type Goal, type Resume, type Material, type InterviewSession } from '@/lib/backend';
@@ -23,9 +25,9 @@ import { ANSWER_STYLES, type AnswerStyle } from '@/lib/ai';
 import { MicrophoneCheck } from './MicrophoneCheck';
 import { requestInterviewStop } from '@/lib/interviewLifecycle';
 import { OutputExclusions } from './OutputExclusions';
-import {SpeechProfilePanel} from './SpeechProfilePanel';
 import {useSpeechProfile} from '@/lib/speechPreferences';
-import { DisclosureLine, SettingLine } from './SettingLine';
+import { SettingLine, SettingNavigationRow } from './SettingLine';
+import { LanguageDialog, MaterialsDialog, PreferencesDialog, languageSummary } from './InterviewDialogs';
 import {SPEECH_LANGUAGES} from '@/lib/speechProfile';
 import {PhoneSpeakerSetup} from './PhoneSpeakerSetup';
 
@@ -65,8 +67,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
   const activeSession = activeSessionId != null;
   const materialChosen = materials.filter((m) => materialIds.includes(m.id));
   const langName = (id: string) => SPEECH_LANGUAGES.find((item) => item.id === id)?.name ?? id;
-  const translation = speechProfile.translationLanguage;
-  const speechProfileLabel = `${translation === 'none' ? t('辅助翻译') + t('关闭') : t('辅助翻译') + langName(translation)}`;
+  const speechProfileLabel = languageSummary(speechProfile, langName);
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [speechOpen, setSpeechOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
@@ -137,7 +138,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
 
         <section>
           <h2 className="mb-3 text-[13px] font-semibold">{t('这一场的背景')}</h2>
-          <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+          <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface-raised">
             <SettingLine icon={Target} title={t('目标岗位')}>
               <div className="w-[188px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]"><Select value={goalId ?? ''} onChange={(e) => setGoalId(e.target.value || null)}>
                 {goals.length === 0 && <option value="">{t('先去资料管理新建')}</option>}
@@ -159,7 +160,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
                 ))}
               </Select></div>
             </SettingLine>
-            <DisclosureLine
+            <SettingNavigationRow
               icon={FolderOpen}
               title={t('关联资料')}
               desc={
@@ -167,43 +168,16 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
                   ? t('还没有选择资料')
                   : t('{count} 份 · {names}', { count: materialChosen.length, names: materialChosen.map((m) => m.name).join('、') })
               }
-              open={materialsOpen}
-              onToggle={() => setMaterialsOpen((v) => !v)}
+              onOpen={() => setMaterialsOpen(true)}
+              testId="open-materials"
             />
-            {materialsOpen && (
-              <div className="px-4 pb-4 pt-1">
-                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-line bg-surface-base p-2">
-                  {materials.length === 0 && (
-                    <span className="text-xs text-ink-muted">{t('还没有面试资料，先在「资料管理」里上传或新建一份')}</span>
-                  )}
-                  {materials.map((m) => {
-                    const on = materialIds.includes(m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setMaterialIds(on ? materialIds.filter((x) => x !== m.id) : [...materialIds, m.id].slice(0, 20))}
-                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                          on ? 'border-primary/40 bg-selection text-selection-fg' : 'border-line text-ink-muted hover:bg-[var(--mx-action-secondary-hover)]'
-                        }`}
-                      >
-                        {m.name}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button type="button" className="mt-2 text-xs text-primary hover:underline" onClick={() => onNavigate('resource')}>
-                  {t('管理资料')}
-                </button>
-              </div>
-            )}
           </div>
           <p className="mt-2 text-xs text-ink-muted">{t('只使用本场选定的资料组织回答。')}</p>
         </section>
 
         <section>
           <h2 className="mb-3 text-[13px] font-semibold">{t('声音与回答')}</h2>
-          <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+          <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface-raised">
             <SettingLine icon={Headphones} title={t('声音来源')} desc={t('按面试方式选择输入')} align="center">
               <div className="flex rounded-lg bg-surface-sunken p-0.5">
                 {[
@@ -225,20 +199,13 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
             </SettingLine>
 
             {audioSource === 'SPEAKER' ? (
-              <>
-                <DisclosureLine
-                  icon={Volume2}
-                  title={t('系统声音')}
-                  desc={t('自动采集电脑里播放的声音，可排除其他播放设备')}
-                  open={outputOpen}
-                  onToggle={() => setOutputOpen((v) => !v)}
-                />
-                {outputOpen && (
-                  <div className="px-4 pb-4 pt-1">
-                    <OutputExclusions active={activeSession} />
-                  </div>
-                )}
-              </>
+              <SettingNavigationRow
+                icon={Volume2}
+                title={t('系统声音')}
+                desc={t('自动采集电脑里播放的声音，可排除其他播放设备')}
+                onOpen={() => setOutputOpen(true)}
+                testId="open-devices"
+              />
             ) : (
               <div className="px-4 py-3">
                 <MicrophoneCheck enabled={!starting && !activeSession} />
@@ -268,18 +235,13 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
               <DualCameraSwitch scope="interview" />
             </SettingLine>
 
-            <DisclosureLine
+            <SettingNavigationRow
               icon={Globe2}
               title={t('语言与翻译')}
               desc={speechProfileLabel}
-              open={speechOpen}
-              onToggle={() => setSpeechOpen((v) => !v)}
+              onOpen={() => setSpeechOpen(true)}
+              testId="open-language"
             />
-            {speechOpen && (
-              <div className="px-4 pb-4 pt-1">
-                <SpeechProfilePanel value={speechProfile} disabled={activeSession} onChange={value=>void saveSpeechProfile(value).catch(error=>showToast({type:'error',title:t('语言设置保存失败'),description:String(error)}))}/>
-              </div>
-            )}
 
             <SettingLine icon={Timer} title={t('等面试官说完的时间')} desc={t('静音 {ms}ms 后出回答。说话慢就调大。', { ms: silenceGateMs })} align="center">
               <div className="w-40">
@@ -292,29 +254,13 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
               </div>
             </SettingLine>
 
-            <DisclosureLine
+            <SettingNavigationRow
               icon={MessageSquare}
               title={t('回答风格')}
               desc={t(ANSWER_STYLES.find((s) => s.key === answerStyle)?.label ?? '自然')}
-              open={styleOpen}
-              onToggle={() => setStyleOpen((v) => !v)}
+              onOpen={() => setStyleOpen(true)}
+              testId="open-preferences"
             />
-            {styleOpen && (
-              <div className="space-y-3 px-4 pb-4 pt-1">
-                <Select className="w-48" value={answerStyle} onChange={(e) => void setPrefsState({ ...prefsState, answerStyle: e.target.value })}>
-                  {ANSWER_STYLES.map((s) => (
-                    <option key={s.key} value={s.key}>{t(s.label)}</option>
-                  ))}
-                </Select>
-                <Textarea
-                  rows={2}
-                  maxLength={2000}
-                  placeholder={t('例如：回答尽量控制在 1 分钟内，多提订单系统项目')}
-                  value={String(prefsState.customAnswerStyle ?? '')}
-                  onChange={(e) => setPrefsState({ ...prefsState, customAnswerStyle: e.target.value })}
-                />
-              </div>
-            )}
           </div>
           {!aiReady && (
             <div className="mt-3 rounded-lg border border-[var(--mx-status-warning-border)] bg-[var(--mx-status-warning-bg)] px-3 py-2 text-xs text-[var(--mx-status-warning-text)]">
@@ -325,7 +271,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
       </div>
 
       <aside className="sticky top-4 flex flex-col gap-4">
-        <div className="rounded-xl border border-line bg-surface-raised p-5 shadow-card">
+        <div className="rounded-lg border border-line bg-surface-raised p-5 shadow-card">
           <div className="mb-4 flex size-9 items-center justify-center rounded-lg bg-selection text-primary">
             <Check size={16} />
           </div>
@@ -353,6 +299,42 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
         </div>
         <p className="px-1 text-[11px] leading-relaxed text-ink-muted">{t('语言与回答策略可随时在偏好中调整。')}</p>
       </aside>
+      <Dialog open={outputOpen} onClose={() => setOutputOpen(false)} width={600}>
+        <DialogTitle>{t('系统声音')}</DialogTitle>
+        <DialogDesc>{t('选择要排除的播放设备，避免把耳机里的声音再采集一次。')}</DialogDesc>
+        <OutputExclusions active={activeSession} />
+        <div className="mt-4 flex justify-end">
+          <Button variant="ghost" onClick={() => setOutputOpen(false)}>
+            {t('关闭')}
+          </Button>
+        </div>
+      </Dialog>
+      <MaterialsDialog
+        open={materialsOpen}
+        onClose={() => setMaterialsOpen(false)}
+        materials={materials}
+        value={materialIds}
+        onSave={setMaterialIds}
+        onManage={() => onNavigate('resource')}
+      />
+      <LanguageDialog
+        open={speechOpen}
+        onClose={() => setSpeechOpen(false)}
+        value={speechProfile}
+        disabled={activeSession}
+        onSave={(next) => void saveSpeechProfile(next).catch((error) => showToast({ type: 'error', title: t('语言设置保存失败'), description: String(error) }))}
+      />
+      <PreferencesDialog
+        open={styleOpen}
+        onClose={() => setStyleOpen(false)}
+        style={answerStyle}
+        custom={String(prefsState.customAnswerStyle ?? '')}
+        silence={silenceGateMs}
+        onSave={(next) => {
+          void setPrefsState({ ...prefsState, answerStyle: next.answerStyle, customAnswerStyle: next.customAnswerStyle });
+          setSilenceGateMs(next.silenceGateMs);
+        }}
+      />
     </div>
   );
 }

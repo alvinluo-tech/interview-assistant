@@ -28,7 +28,7 @@ function workbench(source) {
   const componentNames=new Proxy({}, {get:(_target,name)=>name==='showToast'?()=>{}:String(name)});
   const jsx=(type,props)=>({type,props});
   const modules={
-    './SpeechProfilePanel':{},'./PhoneSpeakerSetup':{},'@/lib/speechPreferences':{useSpeechProfile:()=>[{},async()=>{}]},'@/lib/speechProfile':{SPEECH_LANGUAGES:[]},
+    './SpeechProfilePanel':{},'./PhoneSpeakerSetup':{},'./SettingLine':{SettingLine:componentNames,DisclosureLine:componentNames,SettingNavigationRow:componentNames},'./InterviewDialogs':{MaterialsDialog:componentNames,LanguageDialog:componentNames,PreferencesDialog:componentNames,languageSummary:()=>''},'@/lib/i18n':i18nModule(),'@/lib/ai':{ANSWER_STYLES:[]},'@/ui/primitives':componentNames,'@/lib/speechPreferences':{useSpeechProfile:()=>[{},async()=>{}]},'@/lib/speechProfile':{SPEECH_LANGUAGES:[]},
     'react':{useEffect(){},useState:initial=>[typeof initial==='function'?initial():initial,()=>{}]},
     'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':componentNames,'@/ui/primitives':componentNames,
     '@/lib/aiSettings':{useAiReady:()=>true,useAiSettings:()=>({routes:{},providers:[]})},
@@ -37,7 +37,7 @@ function workbench(source) {
     '@/lib/ai':{ANSWER_STYLES:[]},
     '@/lib/store':{useSetting:(_key,fallback)=>[fallback,()=>{}],setSetting:async()=>{}},
     '@/lib/backend':{useData:(key,fallback)=>[key==='interviewSessions'?[{id:'active',type:'INTERVIEW',status:'ACTIVE'}]:fallback,()=>{}],readData:(_key,fallback)=>fallback,completeSession:async()=>calls.push('complete')},
-    '@/lib/examEngine':{EXAM_MODE_ORDER:[],EXAM_MODES:{},customizationSummary:()=>'',startExamSession:async()=>calls.push('create')},
+    '@/lib/examEngine':{EXAM_MODE_ORDER:['quick'],EXAM_MODES:{quick:{key:'quick',label:'快速',shortLabel:'快速',maxScreenshotPages:4}},customizationSummary:()=>'',startExamSession:async()=>calls.push('create')},
     '@/lib/interviewLifecycle':{requestInterviewStop:async()=>calls.push('engine-stop')},
     '../MainWindow':{startOverlayFlow:async()=>calls.push('show'),recallWorkbench:async()=>calls.push('recall')},
     '@/lib/i18n':i18nModule(),

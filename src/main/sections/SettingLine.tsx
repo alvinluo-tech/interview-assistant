@@ -30,6 +30,43 @@ export function SettingLine({
   );
 }
 
+export function SettingNavigationRow({
+  icon: Icon,
+  title,
+  desc,
+  onOpen,
+  disabled = false,
+  testId,
+}: {
+  icon: IconType;
+  title: string;
+  desc: string;
+  onOpen: () => void;
+  disabled?: boolean;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      aria-disabled={disabled || undefined}
+      disabled={disabled}
+      data-testid={testId}
+      onClick={onOpen}
+      className="flex w-full items-center justify-between gap-6 px-4 py-3 text-left transition-colors hover:bg-[var(--mx-action-secondary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon size={15} className="mt-0.5 shrink-0 text-ink-muted" />
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium">{title}</div>
+          <div className="mt-0.5 truncate text-[11px] leading-[18px] text-ink-muted">{desc}</div>
+        </div>
+      </div>
+      <ChevronRight size={15} className="shrink-0 text-ink-muted" />
+    </button>
+  );
+}
+
 export function DisclosureLine({
   icon: Icon,
   title,
