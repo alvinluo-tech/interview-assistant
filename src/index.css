@@ -280,20 +280,20 @@ html.ov-palette-fade body.overlay #root * {
   text-shadow: var(--ov-halo);
 }
 .ov-body {
-  font-size: calc(13.5px * var(--ov-font-scale, 1));
-  line-height: 1.5;
+  font-size: calc(15px * var(--ov-font-scale, 1));
+  line-height: calc(24px * var(--ov-font-scale, 1));
 }
 .ov-body-sm {
-  font-size: calc(12px * var(--ov-font-scale, 1));
-  line-height: 1.45;
+  font-size: calc(13px * var(--ov-font-scale, 1));
+  line-height: calc(20px * var(--ov-font-scale, 1));
 }
 
 /* ============ 浮窗 markdown（overlay-md） ============ */
 .overlay-md {
   color: var(--ov-fg);
   text-shadow: var(--ov-halo);
-  font-size: calc(12.5px * var(--ov-font-scale, 1));
-  line-height: 1.45;
+  font-size: calc(15px * var(--ov-font-scale, 1));
+  line-height: calc(24px * var(--ov-font-scale, 1));
   font-weight: var(--ov-fw, inherit);
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -312,12 +312,12 @@ html.ov-palette-fade body.overlay #root * {
   font-weight: 700;
   margin: 6px 0 2px;
 }
-.overlay-md h1 { font-size: 14.5px; }
-.overlay-md h2 { font-size: 13.5px; }
-.overlay-md h3 { font-size: 13px; }
-.overlay-md h4 { font-size: 12.5px; }
-.overlay-md h5 { font-size: 12.5px; }
-.overlay-md h6 { font-size: 12.5px; }
+.overlay-md h1 { font-size: 18px; }
+.overlay-md h2 { font-size: 17px; }
+.overlay-md h3 { font-size: 16px; }
+.overlay-md h4 { font-size: 15px; }
+.overlay-md h5 { font-size: 15px; }
+.overlay-md h6 { font-size: 15px; }
 .overlay-md ul,
 .overlay-md ol {
   padding-left: 16px;
@@ -347,7 +347,7 @@ html.ov-palette-fade body.overlay #root * {
   /* 浮窗是穿透模式，无法横向滚动：列宽均分并让文字折行，避免右侧列被 overflow-x: clip 裁掉 */
   width: 100%;
   table-layout: fixed;
-  font-size: calc(11.5px * var(--ov-font-scale, 1));
+  font-size: calc(13px * var(--ov-font-scale, 1));
 }
 .overlay-md img {
   max-width: 100%;
@@ -364,7 +364,7 @@ html.ov-palette-fade body.overlay #root * {
   background: var(--ov-md-inline-bg);
   border-radius: 3px;
   padding: 0 4px;
-  font-size: calc(11px * var(--ov-font-scale, 1));
+  font-size: calc(13px * var(--ov-font-scale, 1));
 }
 /* 只给兜底的裸 pre 加上下间距；代码块内部的 .overlay-code-body 自带 margin: 0，
    而 .overlay-md pre 的选择器权重更高，不排除会把 4px 间距塞进代码块里。 */
