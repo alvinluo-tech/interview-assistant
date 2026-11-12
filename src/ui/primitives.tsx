@@ -61,7 +61,7 @@ export function Button({
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
+      className={`flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
       {...props}
     />
   );
@@ -70,7 +70,7 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
 export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={`flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
+      className={`flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
       {...props}
     />
   );
@@ -79,7 +79,7 @@ export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HT
 export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={`flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
+      className={`flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${className}`}
       {...props}
     >
       {children}
@@ -108,12 +108,12 @@ export function Switch({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent shadow-sm transition-colors before:absolute before:-inset-x-1.5 before:-inset-y-2 before:content-[''] disabled:opacity-50 ${
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent shadow-xs transition-colors before:absolute before:-inset-x-1.5 before:-inset-y-2 before:content-[''] disabled:opacity-50 ${
         checked ? 'bg-primary' : 'bg-input'
       }`}
     >
       <span
-        className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+        className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
           checked ? 'translate-x-4' : 'translate-x-0'
         }`}
       />
@@ -312,7 +312,7 @@ export function Badge({
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-lg border bg-card text-card-foreground shadow-sm ${className}`}>{children}</div>
+    <div className={`rounded-lg border bg-card text-card-foreground shadow-xs ${className}`}>{children}</div>
   );
 }
 

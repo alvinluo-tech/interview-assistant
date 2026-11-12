@@ -118,7 +118,7 @@ export function JobProgressCards() {
   return (
     <div className="mb-4 space-y-3">
       {pending && (
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-xs">
           <div className="flex items-start gap-2">
             <MessageCircleQuestion className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
@@ -164,7 +164,7 @@ export function JobProgressCards() {
       )}
 
       {checkinDue && (
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-xs">
           <div className="flex items-start gap-2">
             <CalendarCheck className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">

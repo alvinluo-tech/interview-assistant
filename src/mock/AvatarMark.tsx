@@ -4,7 +4,7 @@ import { t } from '@/lib/i18n';
 export function AvatarMark({ size = 32 }: { size?: number }) {
   return (
     <span
-      className="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500/30 to-sky-500/30 text-neutral-200 ring-1 ring-white/10"
+      className="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-emerald-500/30 to-sky-500/30 text-neutral-200 ring-1 ring-white/10"
       style={{ width: size, height: size }}
       aria-label={t('面试官')}
     >

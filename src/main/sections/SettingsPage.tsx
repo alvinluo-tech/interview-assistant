@@ -154,7 +154,7 @@ function GeneralTab() {
               aria-checked={theme === item.key}
               onClick={() => setTheme(item.key)}
               className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
-                theme === item.key ? 'bg-background font-medium text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                theme === item.key ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {t(item.label)}
