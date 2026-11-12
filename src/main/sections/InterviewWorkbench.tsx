@@ -6,13 +6,10 @@ import { t } from '@/lib/i18n';
  * 面试工作台：面试方式、简历/岗位/资料选择、回答风格、
  * 静音门限、自动回答等偏好，开始/结束会话。
  */
-import { useState } from 'react';
-import { Play, Square, Info, Loader2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Mic, Check, ChevronRight, FileText, FolderOpen, Globe2, Headphones, Loader2, MessageSquare, Play, Sparkles, Square, Target, Timer, Video, Volume2 } from 'lucide-react';
 import {
   Button,
-  Card,
-  SectionHeader,
-  SettingRow,
   Select,
   Slider,
   Switch,
@@ -28,6 +25,7 @@ import { requestInterviewStop } from '@/lib/interviewLifecycle';
 import { OutputExclusions } from './OutputExclusions';
 import {SpeechProfilePanel} from './SpeechProfilePanel';
 import {useSpeechProfile} from '@/lib/speechPreferences';
+import {SPEECH_LANGUAGES} from '@/lib/speechProfile';
 import {PhoneSpeakerSetup} from './PhoneSpeakerSetup';
 
 export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => void }) {
@@ -65,6 +63,13 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
   const activeSessionId = sessions.find((s) => s.type === 'INTERVIEW' && s.status === 'ACTIVE')?.id ?? null;
   const activeSession = activeSessionId != null;
   const materialChosen = materials.filter((m) => materialIds.includes(m.id));
+  const langName = (id: string) => SPEECH_LANGUAGES.find((item) => item.id === id)?.name ?? id;
+  const translation = speechProfile.translationLanguage;
+  const speechProfileLabel = `${translation === 'none' ? t('辅助翻译') + t('关闭') : t('辅助翻译') + langName(translation)}`;
+  const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [speechOpen, setSpeechOpen] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const [outputOpen, setOutputOpen] = useState(false);
 
   const start = async () => {
     if (starting) return;
@@ -111,219 +116,296 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card className="p-5"><SectionHeader title={t('面试语言')} desc={t('识别语言、参考答案和辅助翻译分别设置；中文自动识别包含服务所支持的方言。')}/><SpeechProfilePanel value={speechProfile} disabled={activeSession} onChange={value=>void saveSpeechProfile(value).catch(error=>showToast({type:'error',title:t('语言设置保存失败'),description:String(error)}))}/>{audioSource==='PHONE'&&<PhoneSpeakerSetup disabled={activeSession}/>}</Card>
-      {activeSession && (
-        <Card className="flex items-center justify-between border-primary/40 bg-selection p-4">
-          <div className="flex items-center gap-3">
-            <Loader2 size={18} className="animate-spin text-primary" />
-            <div>
-              <div className="text-sm font-medium">{t('面试进行中')}</div>
-              <div className="text-xs text-muted-foreground">
-                {t('浮窗正在聆听；结束会自动回到工作台。')}
+    <div className="grid grid-cols-[minmax(0,1fr)_240px] items-start gap-6">
+      <div className="flex min-w-0 flex-col gap-8">
+        {activeSession && (
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-line bg-selection px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Loader2 size={18} className="animate-spin text-primary" />
+              <div>
+                <div className="text-sm font-medium text-selection-fg">{t('面试进行中')}</div>
+                <div className="text-xs text-ink-muted">{t('浮窗正在聆听；结束会自动回到工作台。')}</div>
               </div>
             </div>
-          </div>
-          <Button variant="destructive" size="sm" onClick={() => void stop()}>
-            <Square size={13} />
-            {t('结束面试')}
-          </Button>
-        </Card>
-      )}
-
-      <Card className="p-5">
-        <SectionHeader
-          title={t('面试工作台')}
-          desc={t('选好简历和岗位，点「开始面试」：主窗口收起，透明浮窗出现在屏幕上，面试官一说话就出参考回答。')}
-          right={
-            <Button onClick={() => void start()} disabled={starting || activeSession || !sttReady || (autoAnswer && !chatReady)}>
-              <Play size={14} />
-              {starting ? t('启动中…') : t('开始面试')}
+            <Button variant="destructive" size="sm" onClick={() => void stop()}>
+              <Square size={13} />
+              {t('结束面试')}
             </Button>
-          }
-        />
-
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          {[
-            { key: 'SPEAKER', title: '线上面试', desc: '听电脑里播放的声音（腾讯会议 / 飞书等）' },
-            { key: 'PHONE', title: '电话面试', desc: '通过麦克风采集电话外放声音，实时获取参考回答' },
-          ].map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setAudioSource(c.key as 'SPEAKER' | 'PHONE')}
-              className={`rounded-lg border p-3 text-left transition-colors ${
-                audioSource === c.key ? 'border-primary/40 bg-selection' : 'hover:bg-[var(--mx-action-secondary-hover)]'
-              }`}
-            >
-              <div className="text-sm font-medium">{t(c.title)}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{t(c.desc)}</div>
-            </button>
-          ))}
-        </div>
-
-        {audioSource === 'SPEAKER' && <OutputExclusions active={activeSession} />}
-        {audioSource === 'PHONE' && <><MicrophoneCheck enabled={!starting && !activeSession} /><p className="mb-4 text-xs leading-relaxed text-muted-foreground">{t('请确保麦克风能听到电话另一端的声音。在上方完成自己的试音后可启用本地声音识别；未确认身份的转写可在浮窗标记为“这是我”或“面试官 · 作答”。与 AI 对练请使用独立的「模拟面试」入口。')}</p></>}
-        {sttProvider && <div className="mb-4 rounded-md border border-primary/40 bg-selection px-3 py-2 text-xs" data-testid="speech-mode-summary">
-          <div className="font-medium">{sttProvider.name} / {sttRoute?.modelId} · {aiSettings.speechInputMode === 'realtime' ? t('持续实时语音流') : liveSpeech ? t('分段实时字幕') : t('停顿后识别')}</div>
-          <div className="mt-1 text-muted-foreground">{aiSettings.speechInputMode === 'realtime' ? t('持续发送音频，实时显示部分字幕，句子定稿后流式回答。断线后会重连并提示中断。') : liveSpeech ? t('约每 2.5 秒更新字幕；停顿后校正整句并流式回答。预览会增加转写用量。') : t('等待说话停顿后转写，AI 回答逐步显示。')}</div>
-        </div>}
-
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-xs font-medium text-muted-foreground">
-            {t('简历')}
-            <Select className="mt-1" value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
-              {resumes.length === 0 && <option value="">{t('先去资料管理上传')}</option>}
-              {resumes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.title}
-                  {r.isSample ? t(' · 示例') : ''}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="text-xs font-medium text-muted-foreground">
-            {t('目标岗位')}
-            <Select
-              className="mt-1"
-              value={goalId ?? ''}
-              onChange={(e) => setGoalId(e.target.value || null)}
-            >
-              {goals.length === 0 && <option value="">{t('先去资料管理新建')}</option>}
-              {goals.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.companyName ? `${g.companyName} · ${g.name}` : g.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-        </div>
-
-        <div className="mt-3">
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t('面试资料（已选 {count}/20 份）', { count: materialChosen.length })}
-            </span>
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => onNavigate('resource')}
-            >
-              {t('管理资料')}
-            </button>
-          </div>
-          <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto rounded-md border p-2">
-            {materials.length === 0 && (
-              <span className="text-xs text-muted-foreground">
-                {t('还没有面试资料，先在「资料管理」里上传或新建一份')}
-              </span>
-            )}
-            {materials.map((m) => {
-              const on = materialIds.includes(m.id);
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() =>
-                    setMaterialIds(on ? materialIds.filter((x) => x !== m.id) : [...materialIds, m.id].slice(0, 20))
-                  }
-                  className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                    on ? 'border-primary/40 bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'
-                  }`}
-                >
-                  {m.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {!aiReady && (
-          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            {t('请到「设置 → AI 服务」分别为对话作答与语音转写选择模型；两项可使用不同连接。')}
           </div>
         )}
-      </Card>
 
-      <Card className="p-5">
-        <SectionHeader title={t('回答策略')} desc={t('控制 AI 回答的样子；开始面试后也可以在浮窗里热键操作。')} />
-        <SettingRow title={t('自动回答')} desc={t('面试官说完自动出参考回答；关闭后需按「立即回答」或快捷键。')}>
-          <Switch ariaLabel={t('自动回答')} checked={autoAnswer} onCheckedChange={setAutoAnswer} />
-        </SettingRow>
-        <SettingRow
-          title={t('双机位面试')}
-          desc={t('有第二个摄像头拍你和屏幕时打开。面试浮窗会换成几乎全透明、只留一圈淡边框，镜头里基本看不出来。')}
-        >
-          <DualCameraSwitch scope="interview" />
-        </SettingRow>
-        <SettingRow
-          title={t('等面试官说完的时间')}
-          desc={t('静音 {ms}ms 后出回答。面试官说话慢就调大；预设：灵敏 600 / 适中 900 / 稳妥 1600。', { ms: silenceGateMs })}
-        >
-          <div className="w-40">
-            <Slider min={300} max={6000} step={100} value={silenceGateMs} onChange={setSilenceGateMs} />
-            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-              <span
-                className="cursor-pointer hover:text-ink"
-                onClick={() => setSilenceGateMs(1000)}
-              >
-                {t('灵敏')}
-              </span>
-              <span
-                className="cursor-pointer hover:text-ink"
-                onClick={() => setSilenceGateMs(1600)}
-              >
-                {t('适中')}
-              </span>
-              <span
-                className="cursor-pointer hover:text-ink"
-                onClick={() => setSilenceGateMs(2200)}
-              >
-                {t('稳妥')}
-              </span>
-            </div>
+        <section>
+          <h2 className="mb-3 text-[13px] font-semibold">{t('这一场的背景')}</h2>
+          <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+            <SettingLine icon={Target} title={t('目标岗位')}>
+              <div className="w-[188px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]"><Select value={goalId ?? ''} onChange={(e) => setGoalId(e.target.value || null)}>
+                {goals.length === 0 && <option value="">{t('先去资料管理新建')}</option>}
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.companyName ? `${g.companyName} · ${g.name}` : g.name}
+                  </option>
+                ))}
+              </Select></div>
+            </SettingLine>
+            <SettingLine icon={FileText} title={t('使用简历')}>
+              <div className="w-[168px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]"><Select value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
+                {resumes.length === 0 && <option value="">{t('先去资料管理上传')}</option>}
+                {resumes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.title}
+                    {r.isSample ? t(' · 示例') : ''}
+                  </option>
+                ))}
+              </Select></div>
+            </SettingLine>
+            <DisclosureLine
+              icon={FolderOpen}
+              title={t('关联资料')}
+              desc={
+                materialChosen.length === 0
+                  ? t('还没有选择资料')
+                  : t('{count} 份 · {names}', { count: materialChosen.length, names: materialChosen.map((m) => m.name).join('、') })
+              }
+              open={materialsOpen}
+              onToggle={() => setMaterialsOpen((v) => !v)}
+            />
+            {materialsOpen && (
+              <div className="px-4 pb-4 pt-1">
+                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-line bg-surface-base p-2">
+                  {materials.length === 0 && (
+                    <span className="text-xs text-ink-muted">{t('还没有面试资料，先在「资料管理」里上传或新建一份')}</span>
+                  )}
+                  {materials.map((m) => {
+                    const on = materialIds.includes(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setMaterialIds(on ? materialIds.filter((x) => x !== m.id) : [...materialIds, m.id].slice(0, 20))}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          on ? 'border-primary/40 bg-selection text-selection-fg' : 'border-line text-ink-muted hover:bg-[var(--mx-action-secondary-hover)]'
+                        }`}
+                      >
+                        {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button type="button" className="mt-2 text-xs text-primary hover:underline" onClick={() => onNavigate('resource')}>
+                  {t('管理资料')}
+                </button>
+              </div>
+            )}
           </div>
-        </SettingRow>
-        <SettingRow title={t('回答风格')} desc={t('决定浮窗里参考回答的格式。')}>
-          <Select
-            className="w-36"
-            value={answerStyle}
-            onChange={(e) => void setPrefsState({ ...prefsState, answerStyle: e.target.value })}
-          >
-            {ANSWER_STYLES.map((s) => (
-              <option key={s.key} value={s.key}>
-                {t(s.label)}
-              </option>
-            ))}
-          </Select>
-        </SettingRow>
-        <div className="pb-2">
-          <div className="mb-1 text-xs font-medium text-muted-foreground">{t('额外回答要求')}</div>
-          <Textarea
-            rows={2}
-            maxLength={2000}
-            placeholder={t('例如：回答尽量控制在 1 分钟内，多提订单系统项目')}
-            value={String(prefsState.customAnswerStyle ?? '')}
-            onChange={(e) => setPrefsState({ ...prefsState, customAnswerStyle: e.target.value })}
-          />
-        </div>
-      </Card>
+          <p className="mt-2 text-xs text-ink-muted">{t('只使用本场选定的资料组织回答。')}</p>
+        </section>
 
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { title: '实时听译', desc: '面试官说完自动出参考回答' },
-          { title: '不抢焦点', desc: '浮窗不接受焦点，不打断你的操作' },
-          { title: '全局热键', desc: 'Ctrl 组合键随时控制浮窗' },
-        ].map((s) => (
-          <Card key={s.title} className="p-3">
-            <div className="flex items-center gap-1.5 text-sm font-medium">
-              <Info size={13} className="text-primary" />
-              {t(s.title)}
+        <section>
+          <h2 className="mb-3 text-[13px] font-semibold">{t('声音与回答')}</h2>
+          <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+            <SettingLine icon={Headphones} title={t('声音来源')} desc={t('按面试方式选择输入')} align="center">
+              <div className="flex rounded-lg bg-surface-sunken p-0.5">
+                {[
+                  { key: 'SPEAKER', label: t('线上会议') },
+                  { key: 'PHONE', label: t('电话外放') },
+                ].map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => setAudioSource(c.key as 'SPEAKER' | 'PHONE')}
+                    className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
+                      audioSource === c.key ? 'bg-surface-raised font-medium text-ink shadow-card' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </SettingLine>
+
+            {audioSource === 'SPEAKER' ? (
+              <>
+                <DisclosureLine
+                  icon={Volume2}
+                  title={t('系统声音')}
+                  desc={t('自动采集电脑里播放的声音，可排除其他播放设备')}
+                  open={outputOpen}
+                  onToggle={() => setOutputOpen((v) => !v)}
+                />
+                {outputOpen && (
+                  <div className="px-4 pb-4 pt-1">
+                    <OutputExclusions active={activeSession} />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="px-4 py-3">
+                <MicrophoneCheck enabled={!starting && !activeSession} />
+                <p className="mt-2 text-xs leading-relaxed text-ink-muted">{t('请确保麦克风能听到电话另一端的声音。在上方完成自己的试音后可启用本地声音识别；未确认身份的转写可在浮窗标记为“这是我”或“面试官 · 作答”。与 AI 对练请使用独立的「模拟面试」入口。')}</p>
+                <PhoneSpeakerSetup disabled={activeSession} />
+              </div>
+            )}
+
+            {sttProvider && (
+              <SettingLine
+                icon={Mic}
+                title={t('语音转写')}
+                desc={`${sttProvider.name} / ${sttRoute?.modelId}`}
+                align="center"
+              >
+                <span className="rounded-md bg-surface-sunken px-2 py-1 text-[11px] text-ink-muted" data-testid="speech-mode-summary">
+                  {aiSettings.speechInputMode === 'realtime' ? t('持续实时语音流') : liveSpeech ? t('分段实时字幕') : t('停顿后识别')}
+                </span>
+              </SettingLine>
+            )}
+
+            <SettingLine icon={Sparkles} title={t('自动回答')} desc={t('问题结束后给出参考思路')} align="center">
+              <Switch ariaLabel={t('自动回答')} checked={autoAnswer} onCheckedChange={setAutoAnswer} />
+            </SettingLine>
+
+            <SettingLine icon={Video} title={t('双机位面试')} desc={t('有第二个摄像头拍你和屏幕时打开，浮窗会几乎全透明。')} align="center">
+              <DualCameraSwitch scope="interview" />
+            </SettingLine>
+
+            <DisclosureLine
+              icon={Globe2}
+              title={t('语言与翻译')}
+              desc={speechProfileLabel}
+              open={speechOpen}
+              onToggle={() => setSpeechOpen((v) => !v)}
+            />
+            {speechOpen && (
+              <div className="px-4 pb-4 pt-1">
+                <SpeechProfilePanel value={speechProfile} disabled={activeSession} onChange={value=>void saveSpeechProfile(value).catch(error=>showToast({type:'error',title:t('语言设置保存失败'),description:String(error)}))}/>
+              </div>
+            )}
+
+            <SettingLine icon={Timer} title={t('等面试官说完的时间')} desc={t('静音 {ms}ms 后出回答。说话慢就调大。', { ms: silenceGateMs })} align="center">
+              <div className="w-40">
+                <Slider min={300} max={6000} step={100} value={silenceGateMs} onChange={setSilenceGateMs} />
+                <div className="mt-1 flex justify-between text-[10px] text-ink-muted">
+                  <button type="button" className="hover:text-ink" onClick={() => setSilenceGateMs(1000)}>{t('灵敏')}</button>
+                  <button type="button" className="hover:text-ink" onClick={() => setSilenceGateMs(1600)}>{t('适中')}</button>
+                  <button type="button" className="hover:text-ink" onClick={() => setSilenceGateMs(2200)}>{t('稳妥')}</button>
+                </div>
+              </div>
+            </SettingLine>
+
+            <DisclosureLine
+              icon={MessageSquare}
+              title={t('回答风格')}
+              desc={t(ANSWER_STYLES.find((s) => s.key === answerStyle)?.label ?? '自然')}
+              open={styleOpen}
+              onToggle={() => setStyleOpen((v) => !v)}
+            />
+            {styleOpen && (
+              <div className="space-y-3 px-4 pb-4 pt-1">
+                <Select className="w-48" value={answerStyle} onChange={(e) => void setPrefsState({ ...prefsState, answerStyle: e.target.value })}>
+                  {ANSWER_STYLES.map((s) => (
+                    <option key={s.key} value={s.key}>{t(s.label)}</option>
+                  ))}
+                </Select>
+                <Textarea
+                  rows={2}
+                  maxLength={2000}
+                  placeholder={t('例如：回答尽量控制在 1 分钟内，多提订单系统项目')}
+                  value={String(prefsState.customAnswerStyle ?? '')}
+                  onChange={(e) => setPrefsState({ ...prefsState, customAnswerStyle: e.target.value })}
+                />
+              </div>
+            )}
+          </div>
+          {!aiReady && (
+            <div className="mt-3 rounded-lg border border-[var(--mx-status-warning-border)] bg-[var(--mx-status-warning-bg)] px-3 py-2 text-xs text-[var(--mx-status-warning-text)]">
+              {t('请到「设置 → AI 服务」分别为对话作答与语音转写选择模型；两项可使用不同连接。')}
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">{t(s.desc)}</div>
-          </Card>
-        ))}
+          )}
+        </section>
       </div>
+
+      <aside className="sticky top-4 flex flex-col gap-4">
+        <div className="rounded-xl border border-line bg-surface-raised p-5 shadow-card">
+          <div className="mb-4 flex size-9 items-center justify-center rounded-lg bg-selection text-primary">
+            <Check size={16} />
+          </div>
+          <h3 className="text-[15px] font-semibold">{t('这一场，准备好了。')}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">{t('选项会记住，下次打开可以直接继续。')}</p>
+          <ul className="mt-4 space-y-2.5 text-xs">
+            <li className="flex items-center gap-2">
+              <Check size={13} className={aiReady ? 'text-[var(--mx-status-success-text)]' : 'text-ink-muted'} />
+              <span className={aiReady ? '' : 'text-ink-muted'}>{aiReady ? t('模型已配置') : t('还需要配置 AI 服务')}</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <Check size={13} className="text-[var(--mx-status-success-text)]" />
+              <span>{audioSource === 'SPEAKER' ? t('输入来源已选择') : t('麦克风输入已选择')}</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <Check size={13} className={resumeId && goalId ? 'text-[var(--mx-status-success-text)]' : 'text-ink-muted'} />
+              <span className={resumeId && goalId ? '' : 'text-ink-muted'}>{resumeId && goalId ? t('已关联简历与岗位') : t('还没选简历或岗位')}</span>
+            </li>
+          </ul>
+          <Button className="mt-5 w-full" onClick={() => void start()} disabled={starting || activeSession || !sttReady || (autoAnswer && !chatReady)}>
+            <Play size={14} />
+            {starting ? t('启动中…') : t('开始面试')}
+          </Button>
+          <p className="mt-2 text-center text-[11px] text-ink-muted">{t('Ctrl 全局动作沿用现有配置')}</p>
+        </div>
+        <p className="px-1 text-[11px] leading-relaxed text-ink-muted">{t('语言与回答策略可随时在偏好中调整。')}</p>
+      </aside>
     </div>
+  );
+}
+
+function SettingLine({
+  icon: Icon,
+  title,
+  desc,
+  align = 'start',
+  children,
+}: {
+  icon: typeof Target;
+  title: string;
+  desc?: string;
+  align?: 'start' | 'center';
+  children: ReactNode;
+}) {
+  return (
+    <div className={`flex justify-between gap-6 px-4 py-3 ${align === 'center' ? 'items-center' : 'items-start'}`}>
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon size={15} className="mt-0.5 shrink-0 text-ink-muted" />
+        <div className="min-w-0">
+          <div className="whitespace-nowrap text-[13px] font-medium">{title}</div>
+          {desc && <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">{desc}</div>}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+function DisclosureLine({
+  icon: Icon,
+  title,
+  desc,
+  open,
+  onToggle,
+}: {
+  icon: typeof Target;
+  title: string;
+  desc: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-center justify-between gap-6 px-4 py-3 text-left transition-colors hover:bg-[var(--mx-action-secondary-hover)]">
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon size={15} className="mt-0.5 shrink-0 text-ink-muted" />
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium">{title}</div>
+          <div className="mt-0.5 truncate text-[11px] leading-[18px] text-ink-muted">{desc}</div>
+        </div>
+      </div>
+      <ChevronRight size={15} className={`shrink-0 text-ink-muted transition-transform ${open ? 'rotate-90' : ''}`} />
+    </button>
   );
 }

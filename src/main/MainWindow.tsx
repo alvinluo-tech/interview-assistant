@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   BookOpen,
   Copy,
+  Ellipsis,
   FileText,
   History,
   Laptop,
@@ -39,6 +40,7 @@ import { SettingsPage } from './sections/SettingsPage';
 import { UsageNotice } from './UsageNotice';
 import { Onboarding } from './Onboarding';
 import { FeedbackDialog } from './FeedbackDialog';
+import { HelpDialog } from './HelpDialog';
 import { UpdateNotice } from './UpdateNotice';
 const FreeChatPage = lazy(() => import('./sections/FreeChatPage').then(module => ({default: module.FreeChatPage})));
 
@@ -67,8 +69,8 @@ const SMALL_NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
 
 const PAGE_TITLES: Record<Section, { h1: string; sub: string }> = {
   interview: {
-    h1: '面试助手',
-    sub: '实时听译面试官的话并给出参考回答；浮窗不抢焦点，结束后自动回到工作台。',
+    h1: '准备好，开始这一场。',
+    sub: '先确认背景和声音，其余沿用你的习惯。',
   },
   exam: {
     h1: '笔试助手',
@@ -108,6 +110,7 @@ export function MainWindow() {
   const usageAcked = useSetting('notice.usageAcknowledged.v2', false)[0];
   const onboardingSkipped = useSetting('onboarding.skipped', false)[0];
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // 启动副作用：注册 panic + 动作热键、浮窗异常事件
   useEffect(() => {
@@ -184,15 +187,17 @@ export function MainWindow() {
       {dataError&&<div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive">{t('本地数据读取失败，已阻止覆盖。请在「设置 → 关于」恢复手动备份。')}{dataError}</div>}
       <UsageNotice />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} onFeedback={() => { setHelpOpen(false); setFeedbackOpen(true); }} />
       <div className="flex min-h-0 flex-1">
         <Sidebar
           section={section}
           onNavigate={setSection}
           onFeedback={() => setFeedbackOpen(true)}
+          onHelp={() => setHelpOpen(true)}
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className={`scroll-thin flex-1 ${section === 'chat' ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'}`}>
-            <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : 'max-w-4xl px-8 py-7'}`}>
+            <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : 'max-w-[1080px] px-8 py-7'}`}>
               {showOnboarding ? (
                 <Onboarding onFinish={finishOnboarding} />
               ) : (
@@ -307,10 +312,12 @@ function Sidebar({
   section,
   onNavigate,
   onFeedback,
+  onHelp,
 }: {
   section: Section;
   onNavigate: (s: Section) => void;
   onFeedback: () => void;
+  onHelp: () => void;
 }) {
   const [collapsed, setCollapsed] = useSetting('app.sidebarCollapsed', false);
   if (collapsed) {
@@ -335,36 +342,37 @@ function Sidebar({
     );
   }
   return (
-    <aside className="flex min-h-0 w-[216px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface-sunken">
+    <aside className="flex min-h-0 w-[200px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface-sunken">
       <div className="flex items-center gap-2.5 px-4 pb-2 pt-4">
         <BrandMark />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">{BRAND}</div>
-          <div className="text-[11px] text-muted-foreground">{t('AI 面试助手')}</div>
+          <div className="text-[11px] text-muted-foreground">{t('让面试重新有序')}</div>
         </div>
-        <button type="button" onClick={() => setCollapsed(true)} title={t('收起侧栏')} aria-label={t('收起侧栏')} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink"><PanelLeftClose size={15} /></button>
       </div>
+      <button type="button" onClick={() => setCollapsed(true)} className="mx-3 mb-3 flex h-8 items-center gap-2 rounded-md px-2 text-left text-[12px] text-ink-muted transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink">
+        <PanelLeftClose size={15} />
+        {t('收起侧栏')}
+      </button>
 
-      <div className="flex flex-col gap-1 px-3 pt-2">
+      <div className="flex flex-col gap-0.5 px-3 pt-1">
         {BIG_NAV.map((n) => (
           <button
             key={n.key}
             type="button"
+            title={t(n.desc)}
             onClick={() => onNavigate(n.key)}
-            className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors ${
-              section === n.key ? 'bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'
+            className={`flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors ${
+              section === n.key ? 'bg-surface-raised font-medium text-selection-fg shadow-card' : 'text-ink hover:bg-[var(--mx-action-secondary-hover)]'
             }`}
           >
             <span className={section === n.key ? 'text-primary' : 'text-muted-foreground'}>{n.icon}</span>
-            <span>
-              <span className="block text-[13px] font-medium">{t(n.label)}</span>
-              <span className="block text-[11px] text-muted-foreground">{t(n.desc)}</span>
-            </span>
+            {t(n.label)}
           </button>
         ))}
       </div>
 
-      <div className="mx-4 my-3 border-t border-line" />
+      <p className="mb-1 mt-5 px-5 text-[11px] font-medium text-ink-muted">{t('资料与回答')}</p>
 
       <div className="flex flex-col gap-0.5 px-3">
         {SMALL_NAV.map((n) => (
@@ -373,7 +381,7 @@ function Sidebar({
             type="button"
             onClick={() => onNavigate(n.key)}
             className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors ${
-              section === n.key ? 'bg-selection text-selection-fg' : 'text-foreground hover:bg-[var(--mx-action-secondary-hover)]'
+              section === n.key ? 'bg-surface-raised text-selection-fg shadow-card' : 'text-foreground hover:bg-[var(--mx-action-secondary-hover)]'
             }`}
           >
             <span className={section === n.key ? 'text-primary' : 'text-muted-foreground'}>{n.icon}</span>
@@ -415,6 +423,18 @@ function Sidebar({
           <MessageSquareText size={15} className="text-muted-foreground" />
           {t('反馈')}
         </button>
+        <button
+          type="button"
+          onClick={onHelp}
+          className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)]"
+        >
+          <Ellipsis size={15} className="text-muted-foreground" />
+          {t('帮助与应用')}
+        </button>
+      </div>
+      <div className="mx-5 mb-4 mt-1 flex items-center gap-1.5 text-[11px] text-ink-muted">
+        <span className="size-1.5 rounded-full bg-[var(--mx-status-success-text)]" />
+        {t('资料保存在本机')}
       </div>
     </aside>
   );
