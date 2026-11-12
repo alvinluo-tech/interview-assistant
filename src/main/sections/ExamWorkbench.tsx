@@ -6,10 +6,11 @@ import { useAiReady } from '@/lib/aiSettings';
 import { useEffect, useState } from 'react';
 import { getPlatformCapabilities, isTauri, type PlatformCapabilities } from '@/lib/bridge';
 import { Check, FolderPlus, Laptop, Layers, Monitor, Play, SlidersHorizontal, Sparkles, Target, Video, Zap } from 'lucide-react';
-import { Badge, Button, Input, Select, showToast } from '@/ui/primitives';
-import { DisclosureLine, SettingLine, SettingNavigationRow } from './SettingLine';
+import { Badge, Button, Select, showToast } from '@/ui/primitives';
+import { SettingLine, SettingNavigationRow } from './SettingLine';
 import { ExamPreferencesDialog } from './ExamDialogs';
-import { useData, saveGoal, readData, updateExamSession, type Goal, type ExamSessionRecord } from '@/lib/backend';
+import { GoalCreateDialog } from './GoalCreateDialog';
+import { useData, readData, updateExamSession, type Goal, type ExamSessionRecord } from '@/lib/backend';
 import { useSetting, setSetting, type ExamCustomization } from '@/lib/store';
 import { t } from '@/lib/i18n';
 
@@ -38,8 +39,6 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [newGoal, setNewGoal] = useState('');
-  const [newCompany, setNewCompany] = useState('');
   const aiReady = useAiReady('vision');
   const [platform, setPlatform] = useState<PlatformCapabilities | null>(null);
   useEffect(() => {
@@ -74,14 +73,6 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
     } finally {
       setStarting(false);
     }
-  };
-
-  const addGoal = async () => {
-    if (!newGoal.trim()) return;
-    const g = await saveGoal({ name: newGoal.trim(), companyName: newCompany.trim() });
-    setGoalId(g.id);
-    setNewGoal('');
-    setNewCompany('');
   };
 
   return (
@@ -170,14 +161,13 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
                 </Select>
               </div>
             </SettingLine>
-            <DisclosureLine icon={FolderPlus} title={t('新建岗位')} desc={t('没有合适的岗位时，在这里直接建一个')} open={goalOpen} onToggle={() => setGoalOpen((v) => !v)} />
-            {goalOpen && (
-              <div className="flex flex-wrap items-end gap-2 px-4 pb-4 pt-2">
-                <Input className="h-9 w-[180px] text-[13px]" placeholder={t('岗位名称')} value={newGoal} onChange={(e) => setNewGoal(e.target.value)} />
-                <Input className="h-9 w-[180px] text-[13px]" placeholder={t('公司（选填）')} value={newCompany} onChange={(e) => setNewCompany(e.target.value)} />
-                <Button size="sm" variant="outline" onClick={() => void addGoal()} disabled={!newGoal.trim()}>{t('创建')}</Button>
-              </div>
-            )}
+            <SettingNavigationRow
+              icon={FolderPlus}
+              title={t('新建岗位')}
+              desc={t('没有合适的岗位时，在这里直接建一个')}
+              onOpen={() => setGoalOpen(true)}
+              testId="open-exam-goal"
+            />
           </div>
           <p className="mt-2 text-[11px] text-ink-muted">{t('岗位与资料只影响回答的上下文，不会上传到别处。')}</p>
         </section>
@@ -185,6 +175,12 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
         <CodeVerificationPanel />
         <DualScreenCard />
       </div>
+
+      <GoalCreateDialog
+        open={goalOpen}
+        onClose={() => setGoalOpen(false)}
+        onCreated={(goal) => setGoalId(goal.id)}
+      />
 
       <ExamPreferencesDialog
         open={prefsOpen}

@@ -10,6 +10,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  type Ref,
   useRef,
   useState,
   type ChangeEvent,
@@ -67,18 +68,20 @@ export function Button({
 
 // ---------------- Input / Textarea / Select ----------------
 
-export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className = '', ref, ...props }: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
   return (
     <input
+      ref={ref}
       className={`flex h-[42px] w-full rounded-md border border-line-control bg-surface-raised px-3 py-1 text-sm transition-[border-color,box-shadow] duration-[120ms] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${className}`}
       {...props}
     />
   );
 }
 
-export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Textarea({ className = '', ref, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { ref?: Ref<HTMLTextAreaElement> }) {
   return (
     <textarea
+      ref={ref}
       className={`flex min-h-[84px] w-full rounded-md border border-line-control bg-surface-raised px-3 py-2 text-sm leading-[22px] transition-[border-color,box-shadow] duration-[120ms] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${className}`}
       {...props}
     />
