@@ -182,6 +182,7 @@ const POLICY = {
     'src/lib/codeQuestion.ts',
     // 题面约束解析：中文关键词（时间限制/空间限制/数据范围）用于匹配题目原文，brief 走提示词。
     'src/lib/examConstraints.ts',
+  'src/lib/goalImport.ts',
     'src/lib/interviewEngine.ts',
     // —— 数据/专有名词（渲染点已 t()，此处为词表/持久化名）——
     'src/lib/aiConfig.ts',

@@ -3,7 +3,7 @@
  * 含新建岗位弹窗、资料编辑器（自由资料 + 预设问答 + AI 生成）。
  */
 import { useRef, useState } from 'react';
-import { Check, FileText, Layers, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Briefcase, Check, FileText, Layers, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -31,7 +31,9 @@ import {
   type Resume,
 } from '@/lib/backend';
 import {generatePreparation} from '@/lib/preparation';
+import { companyFromJd } from '@/lib/goalImport';
 import { DocumentImportDialog } from '../DocumentImportDialog';
+import { DOCUMENT_ACCEPT } from '@/lib/documentIngest';
 import { useSetting } from '@/lib/store';
 import { t } from '@/lib/i18n';
 
@@ -46,10 +48,10 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
     null,
   );
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const [, setUploading] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [previewResume, setPreviewResume] = useState<Resume | null>(null);
-  const [importKind, setImportKind] = useState<'resume' | 'material'>('resume');
+  const [importKind, setImportKind] = useState<'resume' | 'material' | 'goal'>('resume');
   const [typeFilter, setTypeFilter] = useState<'all' | 'resume' | 'goal' | 'material'>('all');
   const [search, setSearch] = useState('');
   const [selectedKey, setSelectedKey] = useState('');
@@ -122,9 +124,25 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-md bg-[var(--mx-selection-bg)] px-2 py-1 text-[11px] text-[var(--mx-selection-text)]">{t('本机存储')}</span>
-          <Button size="sm" onClick={() => setImportChoice(true)}>
+          <Button size="sm" variant="outline" onClick={() => setGoalDialog({ open: true })}>
+            <Plus size={13} />
+            {t('新建岗位')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={uploading}
+            onClick={() => {
+              // 在「岗位」筛选下，导入的对象很明确，直接选文件，省掉一次选择。
+              if (typeFilter === 'goal') {
+                setImportKind('goal');
+                fileRef.current?.click();
+                return;
+              }
+              setImportChoice(true);
+            }}
+          >
             <Upload size={13} />
-            {t('导入资料')}
+            {typeFilter === 'goal' ? t('导入岗位') : t('导入资料')}
           </Button>
         </div>
       </div>
@@ -246,18 +264,47 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
             <Layers size={13} />
             {t('导入为面试资料')}
           </Button>
+          <Button variant="outline" onClick={() => { setImportChoice(false); setImportKind('goal'); fileRef.current?.click(); }}>
+            <Briefcase size={13} />
+            {t('导入为岗位')}
+          </Button>
         </div>
       </Dialog>
 
+      <input
+        ref={fileRef}
+        type="file"
+        accept={DOCUMENT_ACCEPT}
+        className="hidden"
+        aria-label={t('选择要导入的文件')}
+        onChange={(event) => {
+          const picked = event.target.files?.[0];
+          if (picked) {
+            setImportFile(picked);
+            setUploading(true);
+          }
+          event.target.value = '';
+        }}
+      />
+
       {(importFile || previewResume) && <DocumentImportDialog
         file={importFile || undefined}
-        title={importKind === 'material' && importFile ? t('导入面试资料') : t('检查简历正文')}
+        title={importKind === 'material' && importFile ? t('导入面试资料') : importKind === 'goal' && importFile ? t('导入岗位') : t('检查简历正文')}
         initial={previewResume ? { name: previewResume.document?.name || previewResume.title, text: previewResume.content || previewResume.summary || '',
           pages: previewResume.document?.pages || 1, method: previewResume.document?.method || 'text', importedAt: previewResume.document?.importedAt || previewResume.createdAt } : undefined}
         onClose={() => { setImportFile(null); setPreviewResume(null); setUploading(false); }}
         onSave={async document => {
           if (importKind === 'material' && importFile) {
             await saveMaterial({ name: document.name.replace(/\.[^.]+$/, ''), source: 'file', content: document.text });
+          } else if (importKind === 'goal' && importFile) {
+            const goal = await saveGoal({
+              name: document.name.replace(/\.[^.]+$/, ''),
+              companyName: companyFromJd(document.text),
+              description: document.text,
+            });
+            setSelectedKey(`goal:${goal.id}`);
+            setTypeFilter('goal');
+            showToast({ type: 'success', title: t('岗位已导入'), description: t('名称与公司可以在右侧编辑修改。') });
           } else {
             const { text, ...metadata } = document;
             await saveResume({ id: previewResume?.id, title: previewResume?.title || document.name.replace(/\.[^.]+$/, ''),
