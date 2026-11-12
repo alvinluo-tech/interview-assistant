@@ -306,11 +306,10 @@ function InterviewShell({
       <div className="flex max-h-[50vh] shrink-0 flex-col gap-1.5 overflow-y-auto">
         {tab === 'chat' ? (
           <>
-            <div className="flex flex-wrap gap-1.5">
-              <DwellButton id="chat-language" variant="muted" hoverMs={HOVER_MS.action} onTrigger={switchLanguage}>{t('答案 · {lang}', { lang: speechProfile.answerLanguage==='en-US'?'English':speechProfile.answerLanguage==='follow'?t('跟随'):speechProfile.answerLanguage==='yue-HK'?t('粤语'):t('中文') })}</DwellButton>
+            <div className="flex items-stretch gap-1.5">
               <DwellButton
                 id="chat-toggle"
-                variant={started && engine.status !== 'paused' ? 'muted' : 'primary'}
+                variant={started && engine.status !== 'paused' ? 'muted' : 'primary'} className="min-w-0 flex-1"
                 hoverMs={HOVER_MS.action}
                 onTrigger={() => {
                   if (!started || engine.status === 'error') {
@@ -328,12 +327,9 @@ function InterviewShell({
               >
                 {engine.status === 'error' ? t('重试收音') : !started ? t('开始') : engine.status === 'paused' ? t('继续') : t('暂停')}
               </DwellButton>
-              <DwellButton id="chat-transcribe" variant="muted" hoverMs={HOVER_MS.action} onTrigger={() => flushUtterance()} disabled={engine.audio.recognitionMode === 'realtime'}>
-                {engine.audio.recognitionMode === 'realtime' ? t('自动断句') : t('立即转写')}
-              </DwellButton>
               <DwellButton
                 id="chat-answer"
-                variant="primary"
+                variant="primary" className="min-w-0 flex-[2]"
                 hoverMs={HOVER_MS.action}
                 hotkey={hotkeys.answer}
                 onTrigger={() => {
@@ -345,13 +341,20 @@ function InterviewShell({
               </DwellButton>
               <DwellButton
                 id="chat-screenshot"
-                variant="muted"
+                variant="muted" className="min-w-0 flex-1"
                 hoverMs={HOVER_MS.capture}
                 hotkey={hotkeys.capture}
                 disabled={!engine.sessionId || engine.status==='ended'}
                 onTrigger={() => void captureQuestion()}
               >
                 <span className="flex items-center gap-1"><Camera size={12}/>{t('截图提问')}</span>
+              </DwellButton>
+            </div>
+            <div className="mt-1 flex items-center gap-2 px-1 text-[10px]">
+              <span className="ov-text-3 flex items-center gap-1"><Mic size={10} className="shrink-0 opacity-50" />{engine.audio.source === 'SPEAKER' ? t('系统声音') : t('麦克风')}</span>
+              <DwellButton id="chat-language" variant="muted" hoverMs={HOVER_MS.action} inline onTrigger={switchLanguage}>{t('答案 · {lang}', { lang: speechProfile.answerLanguage==='en-US'?'English':speechProfile.answerLanguage==='follow'?t('跟随'):speechProfile.answerLanguage==='yue-HK'?t('粤语'):t('中文') })}</DwellButton>
+              <DwellButton id="chat-transcribe" variant="muted" hoverMs={HOVER_MS.action} inline onTrigger={() => flushUtterance()} disabled={engine.audio.recognitionMode === 'realtime'}>
+                {engine.audio.recognitionMode === 'realtime' ? t('自动断句') : t('立即转写')}
               </DwellButton>
             </div>
             <VoiceAskRow kind="chat" hotkey={hotkeys['voice-ask']} />
@@ -477,8 +480,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
   const ordered = newestFirst ? [...groups].reverse() : groups;
 
   return (
-    <>
-      <ScrollEdgePillProxy id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={listRef} onScroll={() => {
         const el = listRef.current;
         if (el) following.current = newestFirst ? el.scrollTop < 160 : el.scrollHeight - el.scrollTop - el.clientHeight < 160;
@@ -565,8 +567,9 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
         <label className="ov-text-2 text-[11px]">{t('更正识别内容')}<textarea autoFocus className="ov-input mt-1 min-h-16 w-full rounded border bg-transparent p-1 text-xs" value={editingQuestion.text} onChange={event=>setEditingQuestion({...editingQuestion,text:event.target.value})}/></label>
         <div className="mt-1 flex gap-3 text-[11px]"><button type="submit" disabled={!editingQuestion.text.trim()}>{t('更正并重新回答')}</button><button type="button" onClick={()=>setEditingQuestion(null)}>{t('取消')}</button></div>
       </form>}
-      <ScrollEdgePillProxy id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
-    </>
+      <ScrollEdgePillProxy compact className="right-1 top-1" id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
+      <ScrollEdgePillProxy compact className="bottom-1 right-1" id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
+    </div>
   );
 }
 
@@ -885,6 +888,8 @@ function ScrollEdgePillProxy(props: {
   direction: 'up' | 'down';
   label: string;
   hotkey?: string;
+  compact?: boolean;
+  className?: string;
 }) {
   return <ScrollEdgePill {...props} />;
 }

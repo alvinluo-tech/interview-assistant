@@ -40,7 +40,7 @@ import { setOverlaySize, setSessionActive, isTauri } from '@/lib/bridge';
 import { applyOverlayPalette } from '@/lib/overlayPalette';
 import type { CodeVerdict } from '@/lib/codeRunner';
 import { effectiveHotkeys, hotkeyBadge, type ActionKey, type HotkeyScheme } from '@/lib/hotkeys';
-import { isMac, BRAND } from '@/lib/env';
+import { isMac } from '@/lib/env';
 import { t } from '@/lib/i18n';
 import { getSetting } from '@/lib/store';
 import { Md } from './Md';
@@ -302,26 +302,43 @@ function ExamShell({
         ...skin.vars,
       }}
     >
-      {/* 顶栏 */}
+      {/* 顶栏：状态 + 档位 + 配色 */}
       <div
-        className="flex h-[46px] shrink-0 items-center gap-1.5 border-b px-3"
+        className="flex h-[46px] shrink-0 items-center gap-2 border-b px-2"
         style={{ background: 'var(--ov-tool-bg)', borderBottomColor: 'var(--ov-tool-line)' }}
       >
         <DragHandle hoverMs={1000} />
-        <span className="ov-text-2 truncate text-[11px] font-medium">{BRAND}</span>
-        <div className="flex-1" />
-        <div className="flex items-center gap-1.5">
-          <span className="ov-dot size-1.5 rounded-full" />
-          <span className="ov-text-3 max-w-[110px] truncate text-[10px]">{statusText(solver)}</span>
-          {solving && (
-            <span className="ov-text-3 text-[10px] tabular-nums">{solver.elapsedSec}s</span>
-          )}
-          <span className="ov-chip rounded px-1 py-px text-[10px]">{modeInfo.shortLabel}</span>
-        </div>
+        <span className="ov-dot size-1.5 shrink-0 rounded-full" />
+        <span className="ov-text min-w-0 flex-1 truncate text-[11px] font-medium">{statusText(solver)}</span>
+        {solving && (
+          <span className="ov-text-3 shrink-0 text-[10px] tabular-nums">{solver.elapsedSec}s</span>
+        )}
+        <DwellButton
+          id="mode"
+          variant="muted"
+          hoverMs={HOVER_MS.mode}
+          inline
+          className="shrink-0"
+          onTrigger={() => setSolverMode(nextOf(solver.mode))}
+        >
+          {t(modeInfo.shortLabel)}
+        </DwellButton>
         <PaletteButton />
       </div>
 
-      <ScrollEdgePillProxy id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
+      {/* 来源行：档位与页数、当前题号 */}
+      <div
+        className="flex h-9 shrink-0 items-center gap-2 border-b px-3 text-[10px]"
+        style={{ borderBottomColor: 'var(--ov-tool-line)' }}
+      >
+        <span className="ov-text-2 truncate">
+          {t(modeInfo.shortLabel)} · {t('最多 {n} 页', { n: modeInfo.maxScreenshotPages })}
+        </span>
+        <span className="flex-1" />
+        {solver.turns.length > 0 && (
+          <span className="ov-text-3 shrink-0">{t('第 {n} 题', { n: solver.turns.length })}</span>
+        )}
+      </div>
 
       {/* 消息区 */}
       <div className="relative min-h-0 flex-1">
@@ -381,10 +398,10 @@ function ExamShell({
             </div>
           )}
         </div>
+        <ScrollEdgePillProxy compact className="right-1 top-1" id="scroll-up" direction="up" label={t('悬停回看')} hotkey={hotkeys['scroll-up']} />
+        <ScrollEdgePillProxy compact className="bottom-1 right-1" id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
         {awayFromBottom && <ScrollToBottomButton onJump={() => jumpToBottom()} />}
       </div>
-
-      <ScrollEdgePillProxy id="scroll-down" direction="down" label={t('悬停看新')} hotkey={hotkeys['scroll-down']} />
 
       {/* 追问 chips */}
       {solver.turns.length > 0 && !multiPage && !solving && (
@@ -497,21 +514,12 @@ function ExamShell({
         </div>
       )}
 
-      {/* 底栏 */}
+      {/* 底栏：动作一行，元信息一行 */}
       <div
-        className="mt-1 max-h-[50vh] shrink-0 overflow-y-auto border-t px-2 py-1.5"
+        className="shrink-0 border-t px-2 pb-1 pt-1.5"
         style={{ background: 'var(--ov-tool-bg)', borderTopColor: 'var(--ov-tool-line)' }}
       >
-        <div className="flex flex-wrap gap-1.5">
-          <DwellButton
-            id="mode"
-            variant="muted"
-            hoverMs={HOVER_MS.mode}
-            subLabel={t('最多 {n} 页', { n: modeInfo.maxScreenshotPages })}
-            onTrigger={() => setSolverMode(nextOf(solver.mode))}
-          >
-            {t(modeInfo.shortLabel)}
-          </DwellButton>
+        <div className="flex items-stretch gap-1.5">
           {multiPage ? (
             <>
               <DwellButton
@@ -519,6 +527,7 @@ function ExamShell({
                 variant="primary"
                 hoverMs={HOVER_MS.sendPages}
                 hotkey={hotkeys.answer}
+                className="min-w-0 flex-[2]"
                 onTrigger={() => void doSolve()}
               >
                 {t('发送 {n} 页', { n: solver.pendingScreenshots.length })}
@@ -528,7 +537,7 @@ function ExamShell({
                 variant="muted"
                 hoverMs={HOVER_MS.addPage}
                 hotkey={hotkeys.capture}
-                subLabel={t('已 {done}/{max}', { done: solver.pendingScreenshots.length, max: modeInfo.maxScreenshotPages })}
+                className="min-w-0 flex-1"
                 onTrigger={() => void capturePage()}
               >
                 {t('加页')}
@@ -537,7 +546,7 @@ function ExamShell({
                 id="cancel-pages"
                 variant="muted"
                 hoverMs={HOVER_MS.cancelPages}
-                // 答题途中也要能中断：多页模式下原本只有「清空待发截图」，在飞的请求停不下来。
+                className="min-w-0 flex-1"
                 onTrigger={() => (solving ? void abortSolve() : clearPendingScreenshots())}
               >
                 {t(solving ? '打断回答' : '取消')}
@@ -551,6 +560,7 @@ function ExamShell({
                 hoverMs={HOVER_MS.answer}
                 hotkey={hotkeys.answer}
                 subLabel={solving ? t('处理中') : undefined}
+                className="min-w-0 flex-[2]"
                 onTrigger={() => void doSolve()}
               >
                 <span className="flex items-center gap-1">
@@ -564,7 +574,7 @@ function ExamShell({
                   variant="muted"
                   hoverMs={HOVER_MS.answer}
                   hotkey={hotkeys.capture}
-                  subLabel={t('先截第1页')}
+                  className="min-w-0 flex-1"
                   onTrigger={() => void capturePage()}
                 >
                   {t('加页')}
@@ -575,19 +585,21 @@ function ExamShell({
                 variant="muted"
                 hoverMs={HOVER_MS.reset}
                 hotkey={solving ? hotkeys.cancel : undefined}
-                subLabel={solving ? t('保留已生成的部分') : undefined}
+                className="min-w-0 flex-1"
                 onTrigger={() => void abortSolve()}
               >
                 {t(solving ? '打断' : '重置')}
               </DwellButton>
             </>
           )}
-          <DwellButton
-            id="exit"
-            variant="destructive"
-            hoverMs={HOVER_MS.exit}
-            onTrigger={() => void endExamSession(false)}
-          >
+        </div>
+        <div className="mt-1 flex items-center gap-2 px-1 text-[10px]">
+          <span className="ov-text-3 min-w-0 truncate">
+            {t(modeInfo.shortLabel)} · {t('最多 {n} 页', { n: modeInfo.maxScreenshotPages })}
+            {multiPage ? ` · ${t('已 {done}/{max}', { done: solver.pendingScreenshots.length, max: modeInfo.maxScreenshotPages })}` : ''}
+          </span>
+          <span className="flex-1" />
+          <DwellButton id="exit" variant="muted" hoverMs={HOVER_MS.exit} inline className="shrink-0" onTrigger={() => void endExamSession(false)}>
             {t('退出')}
           </DwellButton>
         </div>
@@ -685,6 +697,8 @@ function ScrollEdgePillProxy(props: {
   direction: 'up' | 'down';
   label: string;
   hotkey?: string;
+  compact?: boolean;
+  className?: string;
 }) {
   return <ScrollEdgePill {...props} />;
 }

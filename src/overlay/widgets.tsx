@@ -23,6 +23,7 @@ export function DwellButton({
   disabled,
   compact,
   inline,
+  className = '',
 }: {
   id: string;
   children: ReactNode;
@@ -35,6 +36,7 @@ export function DwellButton({
   compact?: boolean;
   /** 小号文字按钮：保持行内尺寸，但仍然注册悬停热区（穿透模式下可悬停触发） */
   inline?: boolean;
+  className?: string;
 }) {
   const { interactive, registerZone, simulate } = usePlatform();
   const showHints = useSetting('interview.showHotkeyHints', true)[0];
@@ -59,7 +61,7 @@ export function DwellButton({
       disabled={disabled}
       onClick={interactive && !simulate && !disabled ? onTrigger : undefined}
       data-dwell-ms={hoverMs}
-      className={`relative flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border leading-snug transition-opacity ${inline ? 'min-h-6 min-w-0 flex-none px-1.5 py-0.5' : 'min-h-9 min-w-[5rem] flex-auto px-2 py-1'} ${variantClass} ${compact ? 'text-xs' : ''} ${disabled ? 'opacity-50' : 'hover:opacity-90'}`}
+      className={`relative flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border leading-snug transition-opacity ${inline ? 'min-h-6 min-w-0 flex-none px-1.5 py-0.5' : 'min-h-9 min-w-[5rem] flex-auto px-2 py-1'} ${variantClass} ${compact ? 'text-xs' : ''} ${disabled ? 'opacity-50' : 'hover:opacity-90'} ${className}`}
     >
       <span className="flex w-full min-w-0 flex-col items-center justify-center gap-0.5">
         <span className={`max-w-full whitespace-normal break-words text-center [overflow-wrap:anywhere] ${inline ? 'text-[10.5px]' : 'text-[12.5px]'}`} data-overlay-action-label>{children}</span>
@@ -252,11 +254,16 @@ export function ScrollEdgePill({
   direction,
   label,
   hotkey,
+  compact = false,
+  className = '',
 }: {
   id: string;
   direction: 'up' | 'down';
   label: string;
   hotkey?: string;
+  /** 小圆钮：贴在阅读区边缘，只占 24px，不占正文高度 */
+  compact?: boolean;
+  className?: string;
 }) {
   const { bindHotkeyHold, registerZone, activeZoneId, interactive } = usePlatform();
   const showHints = useSetting('interview.showHotkeyHints', true)[0];
@@ -287,12 +294,25 @@ export function ScrollEdgePill({
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [scrolling, direction, speed]);
+  if (compact) {
+    return (
+      <div
+        ref={setRefEl as (el: HTMLDivElement | null) => void}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        aria-label={label}
+        className={`ov-pill absolute z-10 flex size-6 items-center justify-center rounded-full border text-[11px] leading-none opacity-80 transition-opacity hover:opacity-100 ${className}`}
+      >
+        <span aria-hidden="true">{direction === 'up' ? '↑' : '↓'}</span>
+      </div>
+    );
+  }
   return (
     <div
       ref={setRefEl as (el: HTMLDivElement | null) => void}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="ov-pill relative mx-2 flex h-6 items-center justify-center gap-1 rounded-full border text-[10px] font-medium"
+      className={`ov-pill relative mx-2 flex h-6 items-center justify-center gap-1 rounded-full border text-[10px] font-medium ${className}`}
     >
       <span className="ov-text-2 flex items-center gap-1">
         {hotkey && showHints ? (

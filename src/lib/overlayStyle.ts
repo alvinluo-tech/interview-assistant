@@ -153,6 +153,10 @@ export function computeSkin(style: OverlayStyle, mode: OverlayMode): Skin {
     '--ov-chip-border': `rgba(${cssRgb(ink)}, ${(0.18 * ey).toFixed(3)})`,
     '--ov-chip-active-bg': `rgba(${cssRgb(surface)}, ${(chipActiveT * ey).toFixed(3)})`,
     '--ov-chip-active-border': `rgba(${cssRgb(ink)}, ${(0.36 * ey).toFixed(3)})`,
+    // 主操作沿用 Plan A 的蓝：浅色实心蓝白字，深色用浅蓝深字，保证在任意底色上都可辨。
+    '--ov-accent': isDark ? '#8AB4F8' : '#075DD5',
+    '--ov-accent-hover': isDark ? '#A9C8FA' : '#0654C0',
+    '--ov-accent-fg': isDark ? '#0B1220' : '#FFFFFF',
     '--ov-bar': `rgba(${cssRgb(ink)}, ${(0.45 * textOpacity).toFixed(3)})`,
     '--ov-tool-bg': `rgba(${cssRgb(surface)}, ${(0.98 * ey).toFixed(3)})`,
     '--ov-tool-line': `rgba(${cssRgb(ink)}, ${((isDark ? 0.16 : 0.1) * ey).toFixed(3)})`,

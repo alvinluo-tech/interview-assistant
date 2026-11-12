@@ -262,10 +262,13 @@ html.ov-palette-fade body.overlay #root * {
   text-shadow: var(--ov-halo);
 }
 .ov-chip-active {
-  background: var(--ov-chip-active-bg);
-  border-color: var(--ov-chip-active-border);
-  color: var(--ov-fg);
-  text-shadow: var(--ov-halo);
+  background: var(--ov-accent, var(--ov-chip-active-bg));
+  border-color: var(--ov-accent, var(--ov-chip-active-border));
+  color: var(--ov-accent-fg, var(--ov-fg));
+  text-shadow: none;
+}
+.ov-chip-active:hover {
+  background: var(--ov-accent-hover, var(--ov-accent));
 }
 .ov-bar {
   background: var(--ov-bar);
