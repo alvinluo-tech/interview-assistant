@@ -65,7 +65,11 @@ const SMALL_NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
   { key: 'records', label: '历史记录', icon: <History size={15} /> },
 ];
 
-const PAGE_TITLES: Record<Exclude<Section, 'interview' | 'settings'>, { h1: string; sub: string }> = {
+const PAGE_TITLES: Record<Exclude<Section, 'settings'>, { h1: string; sub: string }> = {
+  interview: {
+    h1: '面试助手',
+    sub: '实时听译面试官的话并给出参考回答；浮窗不抢焦点，结束后自动回到工作台。',
+  },
   exam: {
     h1: '笔试助手',
     sub: '在真实笔试环境中作答，配合透明浮窗，悬停「解题」即可让 AI 识别题型并给出答案。',
@@ -192,7 +196,7 @@ export function MainWindow() {
                 <Onboarding onFinish={finishOnboarding} />
               ) : (
                 <>
-                  {section !== 'interview' && section !== 'settings' && section !== 'chat' && (
+                  {section !== 'settings' && section !== 'chat' && (
                     <header className="mb-6">
                       <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.01em]">{t(PAGE_TITLES[section].h1)}</h1>
                       <p className="mt-2 max-w-2xl text-sm leading-[22px] text-muted-foreground">{t(PAGE_TITLES[section].sub)}</p>
@@ -232,7 +236,7 @@ function TitleBar() {
     };
   }, []);
   const btn =
-    'flex h-9 w-[46px] items-center justify-center text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground';
+    'flex h-9 w-[46px] items-center justify-center text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink';
   return (
     <div data-tauri-drag-region className="flex h-9 shrink-0 items-center border-b border-line bg-surface-base pl-3">
       <img src="/tauri.svg" alt="" className="hidden" />
@@ -311,21 +315,21 @@ function Sidebar({
   if (collapsed) {
     return (
       <aside className="flex min-h-0 w-16 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-line bg-surface-sunken py-2.5">
-        <button type="button" onClick={() => setCollapsed(false)} title={t('展开侧栏')} aria-label={t('展开侧栏')} className="rounded-md p-2 text-muted-foreground transition-colors duration-[120ms] transition-colors hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground"><PanelLeftOpen size={16} /></button>
+        <button type="button" onClick={() => setCollapsed(false)} title={t('展开侧栏')} aria-label={t('展开侧栏')} className="rounded-md p-2 text-muted-foreground transition-colors duration-[120ms] transition-colors hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink"><PanelLeftOpen size={16} /></button>
         <BrandMark size={22} />
         <div className="mt-1 flex w-full flex-col items-center gap-0.5 px-1">
           {BIG_NAV.map((n) => (
-            <button key={n.key} type="button" onClick={() => onNavigate(n.key)} title={t(n.label)} aria-label={t(n.label)} className={`flex size-10 items-center justify-center rounded-md transition-colors duration-[120ms] ${section === n.key ? 'bg-selection text-selection-fg' : 'text-muted-foreground hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground'}`}>{n.icon}</button>
+            <button key={n.key} type="button" onClick={() => onNavigate(n.key)} title={t(n.label)} aria-label={t(n.label)} className={`flex size-10 items-center justify-center rounded-md transition-colors duration-[120ms] ${section === n.key ? 'bg-selection text-selection-fg' : 'text-muted-foreground hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink'}`}>{n.icon}</button>
           ))}
           <div className="my-1.5 w-6 border-t border-line" />
           {SMALL_NAV.map((n) => (
-            <button key={n.key} type="button" onClick={() => onNavigate(n.key)} title={t(n.label)} aria-label={t(n.label)} className={`flex size-10 items-center justify-center rounded-md transition-colors duration-[120ms] ${section === n.key ? 'bg-selection text-selection-fg' : 'text-muted-foreground hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground'}`}>{n.icon}</button>
+            <button key={n.key} type="button" onClick={() => onNavigate(n.key)} title={t(n.label)} aria-label={t(n.label)} className={`flex size-10 items-center justify-center rounded-md transition-colors duration-[120ms] ${section === n.key ? 'bg-selection text-selection-fg' : 'text-muted-foreground hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink'}`}>{n.icon}</button>
           ))}
         </div>
         <div className="flex-1" />
-        <button type="button" onClick={openProjectRepo} title={t('GitHub 仓库')} aria-label={t('GitHub 仓库')} className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground"><GitHubMark size={16} /></button>
-        <button type="button" onClick={() => onNavigate('settings')} title={t('设置')} aria-label={t('设置')} className={`flex size-10 items-center justify-center rounded-md transition-colors duration-[120ms] ${section === 'settings' ? 'bg-selection text-selection-fg' : 'text-muted-foreground hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground'}`}><SettingsIcon size={16} /></button>
-        <button type="button" onClick={onFeedback} title={t('反馈')} aria-label={t('反馈')} className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground"><MessageSquareText size={16} /></button>
+        <button type="button" onClick={openProjectRepo} title={t('GitHub 仓库')} aria-label={t('GitHub 仓库')} className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink"><GitHubMark size={16} /></button>
+        <button type="button" onClick={() => onNavigate('settings')} title={t('设置')} aria-label={t('设置')} className={`flex size-10 items-center justify-center rounded-md transition-colors duration-[120ms] ${section === 'settings' ? 'bg-selection text-selection-fg' : 'text-muted-foreground hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink'}`}><SettingsIcon size={16} /></button>
+        <button type="button" onClick={onFeedback} title={t('反馈')} aria-label={t('反馈')} className="flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink"><MessageSquareText size={16} /></button>
       </aside>
     );
   }
@@ -337,7 +341,7 @@ function Sidebar({
           <div className="text-sm font-semibold">{BRAND}</div>
           <div className="text-[11px] text-muted-foreground">{t('AI 面试助手')}</div>
         </div>
-        <button type="button" onClick={() => setCollapsed(true)} title={t('收起侧栏')} aria-label={t('收起侧栏')} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground"><PanelLeftClose size={15} /></button>
+        <button type="button" onClick={() => setCollapsed(true)} title={t('收起侧栏')} aria-label={t('收起侧栏')} className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink"><PanelLeftClose size={15} /></button>
       </div>
 
       <div className="flex flex-col gap-1 px-3 pt-2">
@@ -384,7 +388,7 @@ function Sidebar({
         type="button"
         onClick={openProjectRepo}
         title={t('查看源码、更新日志与问题反馈')}
-        className="group mx-3 mb-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-foreground"
+        className="group mx-3 mb-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink"
       >
         <GitHubMark size={15} />
         <span className="min-w-0 flex-1 truncate">{t('GitHub 仓库')}</span>

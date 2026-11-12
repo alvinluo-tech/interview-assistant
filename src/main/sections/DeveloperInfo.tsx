@@ -9,8 +9,8 @@ export function DeveloperInfo() {
     <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border bg-muted/40 font-mono text-sm tracking-tight text-muted-foreground" aria-hidden>AL</div>
     <div className="min-w-0 flex-1"><p className="text-[10px] tracking-[.16em] text-muted-foreground">{t('DEVELOPED BY')}</p><p className="mt-1 text-sm font-semibold tracking-tight">Alvin Luo</p><p className="mt-0.5 text-xs text-muted-foreground">{t('专注本地优先的 AI 工具与数字体验。')}</p></div>
     <div className="flex items-center gap-4 text-xs text-muted-foreground">
-      <button className="inline-flex items-center gap-1.5 hover:text-foreground" onClick={() => open('https://alvin-luo.me')}>{t('个人网站')}<ArrowUpRight size={13} /></button>
-      <button className="inline-flex items-center gap-1.5 hover:text-foreground" onClick={() => open('https://github.com/alvinluo-tech')}><Code2 size={13} />GitHub<ArrowUpRight size={13} /></button>
+      <button className="inline-flex items-center gap-1.5 hover:text-ink" onClick={() => open('https://alvin-luo.me')}>{t('个人网站')}<ArrowUpRight size={13} /></button>
+      <button className="inline-flex items-center gap-1.5 hover:text-ink" onClick={() => open('https://github.com/alvinluo-tech')}><Code2 size={13} />GitHub<ArrowUpRight size={13} /></button>
     </div>
   </div>;
 }

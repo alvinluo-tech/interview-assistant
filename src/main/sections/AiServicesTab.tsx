@@ -204,7 +204,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
         {AI_ROLES.map(role => {
           const route = draft.routes[role], connection = draft.providers.find(provider => provider.id === route?.providerId);
           const label = route ? t('{name} · {modelId}', { name: connection?.name || t('连接待修复'), modelId: route.modelId }) : role === 'tts' ? t('系统默认语音') : role === 'vision' ? t('跟随对话模型') : t('尚未配置');
-          return <button key={role} className="min-w-0 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary" onClick={() => document.getElementById(`ai-route-${role}`)?.focus()}>
+          return <button key={role} className="min-w-0 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-[var(--mx-action-secondary-hover)] focus-visible:outline-2 focus-visible:outline-primary" onClick={() => document.getElementById(`ai-route-${role}`)?.focus()}>
             <span className="text-[11px] text-muted-foreground">{t(ROLE_LABELS[role])}</span><span className="mt-2 block truncate text-xs font-medium" title={label}>{label}</span>
           </button>;
         })}
@@ -224,7 +224,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
             <div className="mb-3 flex items-center justify-between px-1 text-xs font-medium">{t('服务商连接')}<Badge variant="outline">{draft.providers.length}</Badge></div>
             <div className="flex flex-col gap-1" aria-label={t('服务商连接列表')}>
               {draft.providers.map(p => <button key={p.id} type="button" onClick={() => selectProvider(p.id)} disabled={busy === 'save'} aria-pressed={p.id === selectedId}
-                className={`min-w-0 rounded-md border p-2.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${p.id === selectedId ? 'border-primary/30 bg-primary/10' : 'border-transparent hover:bg-accent'}`}>
+                className={`min-w-0 rounded-md border p-2.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${p.id === selectedId ? 'border-primary/30 bg-primary/10' : 'border-transparent hover:bg-[var(--mx-action-secondary-hover)]'}`}>
                 <span className="flex items-center gap-2 text-xs font-medium"><Server size={13} className="shrink-0" /><span className="truncate">{p.name}</span></span>
                 <span className="mt-1 block truncate pl-[21px] text-[11px] text-muted-foreground">{t('{count} 个模型 · {auth}', { count: p.models.length, auth: p.authMode === 'none' ? t('免密') : 'API Key' })}</span>
               </button>)}
@@ -261,7 +261,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
                 {(busy === 'discover' || busy === 'test') && <Button size="sm" variant="ghost" onClick={() => { cancel(); setStatus({ kind: 'info', text: t('请求已取消，原模型列表保留。') }); }}>{t('取消请求')}</Button>}
                 {provider.lastFetchedAt && <span className="text-[11px] text-muted-foreground">{t('上次获取 {time}', { time: new Date(provider.lastFetchedAt).toLocaleString() })}</span>}
               </div>
-              {status && <p role={status.kind === 'error' ? 'alert' : 'status'} className={`mt-3 break-words rounded-md border p-3 text-xs leading-relaxed ${status.kind === 'error' ? 'border-destructive/30 bg-destructive/5 text-destructive' : status.kind === 'success' ? 'border-primary/20 bg-primary/5 text-primary' : 'bg-muted/30 text-muted-foreground'}`}>{status.text}</p>}
+              {status && <p role={status.kind === 'error' ? 'alert' : 'status'} className={`mt-3 break-words rounded-md border p-3 text-xs leading-relaxed ${status.kind === 'error' ? 'border-destructive/30 bg-destructive/5 text-destructive' : status.kind === 'success' ? 'border-primary/40 bg-selection text-primary' : 'bg-muted/30 text-muted-foreground'}`}>{status.text}</p>}
 
               <div className="mt-6 border-t pt-4">
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">{t('模型库')} <span className="ml-1 text-xs font-normal text-muted-foreground">{t('{count} 个', { count: provider.models.length })}</span></h3>

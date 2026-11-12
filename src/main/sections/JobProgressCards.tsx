@@ -152,8 +152,8 @@ export function JobProgressCards() {
                 onClick={() => void mark(b.mark)}
                 className={
                   b.ghost
-                    ? 'inline-flex h-8 items-center rounded-md px-2.5 text-xs hover:bg-accent disabled:opacity-50'
-                    : 'inline-flex h-8 items-center rounded-md border px-2.5 text-xs hover:bg-accent disabled:opacity-50'
+                    ? 'inline-flex h-8 items-center rounded-md px-2.5 text-xs hover:bg-[var(--mx-action-secondary-hover)] disabled:opacity-50'
+                    : 'inline-flex h-8 items-center rounded-md border px-2.5 text-xs hover:bg-[var(--mx-action-secondary-hover)] disabled:opacity-50'
                 }
               >
                 {t(b.label)}
@@ -212,7 +212,7 @@ export function JobProgressCards() {
               </button>
               <button
                 type="button"
-                className="inline-flex h-9 items-center rounded-md px-3 text-[13px] hover:bg-accent disabled:opacity-50"
+                className="inline-flex h-9 items-center rounded-md px-3 text-[13px] hover:bg-[var(--mx-action-secondary-hover)] disabled:opacity-50"
                 disabled={marking}
                 onClick={() => submitCheckin(true)}
               >

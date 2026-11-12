@@ -122,7 +122,7 @@ export function ExamWorkbench({ onNavigate }: { onNavigate: (s: string) => void 
                 type="button"
                 onClick={() => setMode(key)}
                 className={`rounded-lg border p-3 text-left transition-colors ${
-                  mode === key ? 'border-primary/50 bg-primary/10' : 'hover:bg-accent'
+                  mode === key ? 'border-primary/40 bg-selection' : 'hover:bg-[var(--mx-action-secondary-hover)]'
                 }`}
               >
                 <div className="flex items-center gap-1.5 text-sm font-medium">

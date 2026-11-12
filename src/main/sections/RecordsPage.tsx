@@ -75,7 +75,7 @@ export function RecordsPage() {
             type="button"
             onClick={() => setTab(item.key as 'interview' | 'mock' | 'exam')}
             className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-              tab === item.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent'
+              tab === item.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-[var(--mx-action-secondary-hover)]'
             }`}
           >
             {item.label}
@@ -323,7 +323,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
                 {meta?.report && (
                   <div className="mt-3 border-t pt-3">
                     <div className="mb-1 text-[11px] font-medium text-muted-foreground">{t('复盘报告')}</div>
-                    <div className="records-md whitespace-pre-wrap rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2">
+                    <div className="records-md whitespace-pre-wrap rounded-md border border-primary/40 bg-selection px-2.5 py-2">
                       <Md text={meta.report} />
                     </div>
                   </div>

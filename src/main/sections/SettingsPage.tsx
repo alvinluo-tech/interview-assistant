@@ -84,7 +84,7 @@ export function SettingsPage() {
             className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
               tab === item.key
                 ? 'border-primary font-medium text-primary'
-                : 'border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground'
+                : 'border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-ink'
             }`}
           >
             {t(item.label)}
@@ -154,7 +154,7 @@ function GeneralTab() {
               aria-checked={theme === item.key}
               onClick={() => setTheme(item.key)}
               className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
-                theme === item.key ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                theme === item.key ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-ink'
               }`}
             >
               {t(item.label)}
@@ -189,7 +189,7 @@ function GeneralTab() {
               type="button"
               onClick={() => setChatTextSize(key)}
               className={`rounded-md border px-4 py-2 text-[13px] transition-colors ${
-                chatTextSize === key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
+                chatTextSize === key ? 'border-primary/40 bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'
               }`}
             >
               {t(key === 'sm' ? '小' : key === 'md' ? '标准' : '大')}
@@ -375,7 +375,7 @@ function OverlayStyleTab() {
               type="button"
               onClick={() => patch({ theme: item.key as 'light' | 'dark', paletteBg: '', paletteFg: '' })}
               className={`rounded-md border p-2.5 text-left transition-colors ${
-                style.theme === item.key ? 'border-primary/50 bg-primary/10' : 'hover:bg-accent'
+                style.theme === item.key ? 'border-primary/40 bg-selection' : 'hover:bg-[var(--mx-action-secondary-hover)]'
               }`}
             >
               <span className="text-[13px] font-medium">{t(item.label)}</span>
@@ -731,7 +731,7 @@ function HotkeysTab() {
               type="button"
               onClick={() => applyScheme(s.key)}
               className={`rounded-md border p-3 text-left transition-colors ${
-                scheme === s.key ? 'border-primary/50 bg-primary/10' : 'hover:bg-accent'
+                scheme === s.key ? 'border-primary/40 bg-selection' : 'hover:bg-[var(--mx-action-secondary-hover)]'
               }`}
             >
               <div className="flex items-center justify-between">

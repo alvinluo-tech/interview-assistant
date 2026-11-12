@@ -114,7 +114,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
     <div className="flex flex-col gap-4">
       <Card className="p-5"><SectionHeader title={t('面试语言')} desc={t('识别语言、参考答案和辅助翻译分别设置；中文自动识别包含服务所支持的方言。')}/><SpeechProfilePanel value={speechProfile} disabled={activeSession} onChange={value=>void saveSpeechProfile(value).catch(error=>showToast({type:'error',title:t('语言设置保存失败'),description:String(error)}))}/>{audioSource==='PHONE'&&<PhoneSpeakerSetup disabled={activeSession}/>}</Card>
       {activeSession && (
-        <Card className="flex items-center justify-between border-primary/30 bg-primary/5 p-4">
+        <Card className="flex items-center justify-between border-primary/40 bg-selection p-4">
           <div className="flex items-center gap-3">
             <Loader2 size={18} className="animate-spin text-primary" />
             <div>
@@ -153,7 +153,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
               type="button"
               onClick={() => setAudioSource(c.key as 'SPEAKER' | 'PHONE')}
               className={`rounded-lg border p-3 text-left transition-colors ${
-                audioSource === c.key ? 'border-primary/50 bg-primary/10' : 'hover:bg-accent'
+                audioSource === c.key ? 'border-primary/40 bg-selection' : 'hover:bg-[var(--mx-action-secondary-hover)]'
               }`}
             >
               <div className="text-sm font-medium">{t(c.title)}</div>
@@ -164,7 +164,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
 
         {audioSource === 'SPEAKER' && <OutputExclusions active={activeSession} />}
         {audioSource === 'PHONE' && <><MicrophoneCheck enabled={!starting && !activeSession} /><p className="mb-4 text-xs leading-relaxed text-muted-foreground">{t('请确保麦克风能听到电话另一端的声音。在上方完成自己的试音后可启用本地声音识别；未确认身份的转写可在浮窗标记为“这是我”或“面试官 · 作答”。与 AI 对练请使用独立的「模拟面试」入口。')}</p></>}
-        {sttProvider && <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs" data-testid="speech-mode-summary">
+        {sttProvider && <div className="mb-4 rounded-md border border-primary/40 bg-selection px-3 py-2 text-xs" data-testid="speech-mode-summary">
           <div className="font-medium">{sttProvider.name} / {sttRoute?.modelId} · {aiSettings.speechInputMode === 'realtime' ? t('持续实时语音流') : liveSpeech ? t('分段实时字幕') : t('停顿后识别')}</div>
           <div className="mt-1 text-muted-foreground">{aiSettings.speechInputMode === 'realtime' ? t('持续发送音频，实时显示部分字幕，句子定稿后流式回答。断线后会重连并提示中断。') : liveSpeech ? t('约每 2.5 秒更新字幕；停顿后校正整句并流式回答。预览会增加转写用量。') : t('等待说话停顿后转写，AI 回答逐步显示。')}</div>
         </div>}
@@ -228,7 +228,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
                     setMaterialIds(on ? materialIds.filter((x) => x !== m.id) : [...materialIds, m.id].slice(0, 20))
                   }
                   className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                    on ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
+                    on ? 'border-primary/40 bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'
                   }`}
                 >
                   {m.name}
@@ -264,19 +264,19 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
             <Slider min={300} max={6000} step={100} value={silenceGateMs} onChange={setSilenceGateMs} />
             <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
               <span
-                className="cursor-pointer hover:text-foreground"
+                className="cursor-pointer hover:text-ink"
                 onClick={() => setSilenceGateMs(1000)}
               >
                 {t('灵敏')}
               </span>
               <span
-                className="cursor-pointer hover:text-foreground"
+                className="cursor-pointer hover:text-ink"
                 onClick={() => setSilenceGateMs(1600)}
               >
                 {t('适中')}
               </span>
               <span
-                className="cursor-pointer hover:text-foreground"
+                className="cursor-pointer hover:text-ink"
                 onClick={() => setSilenceGateMs(2200)}
               >
                 {t('稳妥')}

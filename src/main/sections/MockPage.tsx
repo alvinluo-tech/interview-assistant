@@ -257,7 +257,7 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
                   key={m.id}
                   type="button"
                   onClick={() => setMaterialIds(on ? materialIds.filter((x) => x !== m.id) : [...materialIds, m.id].slice(0, 20))}
-                  className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${on ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'}`}
+                  className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${on ? 'border-primary/40 bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'}`}
                 >
                   {m.name}
                 </button>
@@ -277,7 +277,7 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
                   onClick={() => setDifficulty(d.key)}
                   title={t(d.label)}
                   className={`flex items-center justify-center gap-1 truncate rounded-full border px-2 py-1 text-center text-xs transition-colors ${
-                    difficulty === d.key ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
+                    difficulty === d.key ? 'border-primary/40 bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'
                   }`}
                 >
                   {difficulty === d.key && <Check size={11} className="shrink-0" />}
@@ -295,7 +295,7 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
                   type="button"
                   onClick={() => setTurnBudget(r)}
                   className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                    turnBudget === r ? 'border-primary/50 bg-primary/10 text-primary' : 'hover:bg-accent'
+                    turnBudget === r ? 'border-primary/40 bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'
                   }`}
                 >
                   {r}
