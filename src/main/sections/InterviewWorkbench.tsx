@@ -6,8 +6,8 @@ import { t } from '@/lib/i18n';
  * 面试工作台：面试方式、简历/岗位/资料选择、回答风格、
  * 静音门限、自动回答等偏好，开始/结束会话。
  */
-import { useState, type ReactNode } from 'react';
-import { Mic, Check, ChevronRight, FileText, FolderOpen, Globe2, Headphones, Loader2, MessageSquare, Play, Sparkles, Square, Target, Timer, Video, Volume2 } from 'lucide-react';
+import { useState } from 'react';
+import { Mic, Check, FileText, FolderOpen, Globe2, Headphones, Loader2, MessageSquare, Play, Sparkles, Square, Target, Timer, Video, Volume2 } from 'lucide-react';
 import {
   Button,
   Select,
@@ -25,6 +25,7 @@ import { requestInterviewStop } from '@/lib/interviewLifecycle';
 import { OutputExclusions } from './OutputExclusions';
 import {SpeechProfilePanel} from './SpeechProfilePanel';
 import {useSpeechProfile} from '@/lib/speechPreferences';
+import { DisclosureLine, SettingLine } from './SettingLine';
 import {SPEECH_LANGUAGES} from '@/lib/speechProfile';
 import {PhoneSpeakerSetup} from './PhoneSpeakerSetup';
 
@@ -353,59 +354,5 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
         <p className="px-1 text-[11px] leading-relaxed text-ink-muted">{t('语言与回答策略可随时在偏好中调整。')}</p>
       </aside>
     </div>
-  );
-}
-
-function SettingLine({
-  icon: Icon,
-  title,
-  desc,
-  align = 'start',
-  children,
-}: {
-  icon: typeof Target;
-  title: string;
-  desc?: string;
-  align?: 'start' | 'center';
-  children: ReactNode;
-}) {
-  return (
-    <div className={`flex justify-between gap-6 px-4 py-3 ${align === 'center' ? 'items-center' : 'items-start'}`}>
-      <div className="flex min-w-0 items-start gap-3">
-        <Icon size={15} className="mt-0.5 shrink-0 text-ink-muted" />
-        <div className="min-w-0">
-          <div className="whitespace-nowrap text-[13px] font-medium">{title}</div>
-          {desc && <div className="mt-0.5 text-[11px] leading-[18px] text-ink-muted">{desc}</div>}
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
-    </div>
-  );
-}
-
-function DisclosureLine({
-  icon: Icon,
-  title,
-  desc,
-  open,
-  onToggle,
-}: {
-  icon: typeof Target;
-  title: string;
-  desc: string;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-center justify-between gap-6 px-4 py-3 text-left transition-colors hover:bg-[var(--mx-action-secondary-hover)]">
-      <div className="flex min-w-0 items-start gap-3">
-        <Icon size={15} className="mt-0.5 shrink-0 text-ink-muted" />
-        <div className="min-w-0">
-          <div className="text-[13px] font-medium">{title}</div>
-          <div className="mt-0.5 truncate text-[11px] leading-[18px] text-ink-muted">{desc}</div>
-        </div>
-      </div>
-      <ChevronRight size={15} className={`shrink-0 text-ink-muted transition-transform ${open ? 'rotate-90' : ''}`} />
-    </button>
   );
 }

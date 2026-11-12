@@ -56,17 +56,32 @@ const THEMES: { key: DesktopTheme; label: string; desc: string }[] = [
 
 type Tab = 'overlay-style' | 'general' | 'hotkeys' | 'stealth' | 'ai' | 'prompts' | 'memory' | 'storage' | 'changelog' | 'about';
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'overlay-style', label: '浮窗样式' },
-  { key: 'general', label: '通用' },
-  { key: 'hotkeys', label: '快捷键' },
-  { key: 'stealth', label: '隐蔽' },
-  { key: 'ai', label: 'AI 服务' },
-  { key: 'prompts',label:'AI 指令' },
-  { key: 'memory', label: '长期记忆' },
-  { key: 'changelog', label: '更新日志' },
-  { key: 'storage', label: '存储' },
-  { key: 'about', label: '关于' },
+const TAB_GROUPS: { label: string; items: { key: Tab; label: string }[] }[] = [
+  {
+    label: '外观与交互',
+    items: [
+      { key: 'general', label: '通用' },
+      { key: 'overlay-style', label: '浮窗样式' },
+      { key: 'hotkeys', label: '快捷键' },
+      { key: 'stealth', label: '隐蔽' },
+    ],
+  },
+  {
+    label: 'AI 与数据',
+    items: [
+      { key: 'ai', label: 'AI 服务' },
+      { key: 'prompts', label: 'AI 指令' },
+      { key: 'memory', label: '长期记忆' },
+      { key: 'storage', label: '存储' },
+    ],
+  },
+  {
+    label: '应用',
+    items: [
+      { key: 'changelog', label: '更新日志' },
+      { key: 'about', label: '关于' },
+    ],
+  },
 ];
 
 export function SettingsPage() {
@@ -74,24 +89,36 @@ export function SettingsPage() {
   const [aiDirty, setAiDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<Tab | null>(null);
   return (
-    <div className="flex flex-col gap-5">
-      <nav aria-label={t('设置')} className="scroll-thin sticky top-0 z-10 -mx-1 flex gap-0.5 overflow-x-auto border-b bg-background/95 px-1 backdrop-blur">
-        {TABS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => { if ((tab === 'ai' || tab==='prompts') && aiDirty && item.key !== tab) setPendingTab(item.key); else setTab(item.key); }}
-            className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
-              tab === item.key
-                ? 'border-primary font-medium text-primary'
-                : 'border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-ink'
-            }`}
-          >
-            {t(item.label)}
-          </button>
+    <div className="flex items-start gap-8">
+      <nav aria-label={t('设置')} className="scroll-thin sticky top-0 w-[184px] shrink-0 space-y-5 py-1">
+        {TAB_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="mb-1.5 px-2.5 text-[11px] font-medium tracking-[0.06em] text-ink-muted">{t(group.label)}</p>
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = tab === item.key;
+                return (
+                  <li key={item.key}>
+                    <button
+                      type="button"
+                      aria-current={active ? 'page' : undefined}
+                      onClick={() => { if ((tab === 'ai' || tab==='prompts') && aiDirty && item.key !== tab) setPendingTab(item.key); else setTab(item.key); }}
+                      className={`flex h-9 w-full items-center rounded-md px-2.5 text-[13px] transition-colors ${
+                        active
+                          ? 'bg-selection font-medium text-selection-fg'
+                          : 'text-ink-muted hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink'
+                      }`}
+                    >
+                      {t(item.label)}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         ))}
       </nav>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         {tab === 'overlay-style' && <OverlayStyleTab />}
         {tab === 'general' && <GeneralTab />}
         {tab === 'hotkeys' && <HotkeysTab />}
@@ -123,97 +150,94 @@ function GeneralTab() {
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-5">
-        <SectionHeader title={t('通用')} desc={t('语言与外观，应用到所有窗口。')} />
-
-        <div className="mb-2 text-xs font-medium text-muted-foreground">{t('界面语言')}</div>
-        <p className="mb-2 text-xs text-muted-foreground">{t('切换语言会刷新窗口让翻译生效。')}</p>
-        <Select
-          aria-label={t('界面语言')}
-          className="max-w-xs"
-          value={locale ?? 'system'}
-          onChange={(event) => {
-            const next = event.target.value === 'system' ? null : (event.target.value as Locale);
-            setLocale(next);
-            void switchLocale(next);
-          }}
-        >
-          <option value="system">{t('跟随系统')} · {LOCALE_NAMES[systemLocale()]}</option>
-          {LOCALES.map((l) => (
-            <option key={l} value={l}>{LOCALE_NAMES[l]} · {l}</option>
-          ))}
-        </Select>
-
-        <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">{t('外观主题')}</div>
-        <p className="mb-2 text-xs text-muted-foreground">{t('只影响主窗口；浮窗的明暗在「浮窗样式」里单独选。')}</p>
-        <div role="radiogroup" aria-label={t('外观主题')} className="inline-flex rounded-lg border bg-muted/40 p-0.5">
-          {THEMES.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="radio"
-              aria-checked={theme === item.key}
-              onClick={() => setTheme(item.key)}
-              className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
-                theme === item.key ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-ink'
-              }`}
+        <SectionHeader title={t('语言与外观')} desc={t('应用到所有窗口；切换语言会刷新窗口让翻译生效。')} />
+        <div className="divide-y divide-line">
+          <SettingRow title={t('界面语言')} desc={t('选择「跟随系统」后按操作系统语言显示。')}>
+            <Select
+              aria-label={t('界面语言')}
+              className="w-52"
+              value={locale ?? 'system'}
+              onChange={(event) => {
+                const next = event.target.value === 'system' ? null : (event.target.value as Locale);
+                setLocale(next);
+                void switchLocale(next);
+              }}
             >
-              {t(item.label)}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">{t(THEMES.find((item) => item.key === theme)?.desc ?? '')}</p>
+              <option value="system">{t('跟随系统')} · {LOCALE_NAMES[systemLocale()]}</option>
+              {LOCALES.map((l) => (
+                <option key={l} value={l}>{LOCALE_NAMES[l]} · {l}</option>
+              ))}
+            </Select>
+          </SettingRow>
 
-        <div className="mt-6 mb-1 flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">{t('界面大小')}</span>
-          <span className="text-xs tabular-nums text-muted-foreground">{Math.round(uiScale * 100)}%</span>
-        </div>
-        <p className="mb-2 text-xs text-muted-foreground">
-          {t('整个主窗口的字和按钮一起放大或缩小，小屏幕上看着吃力就调大。')}
-        </p>
-        <Slider min={0.3} max={4} step={0.05} value={uiScale} onChange={setUiScale} />
-        <button
-          type="button"
-          className="mt-2 text-xs text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
-          disabled={uiScale === 1}
-          onClick={() => setUiScale(1)}
-        >
-          {t('恢复默认 100%')}
-        </button>
+          <SettingRow title={t('外观主题')} desc={t('只影响主窗口；浮窗的明暗在「浮窗样式」里单独选。')}>
+            <div role="radiogroup" aria-label={t('外观主题')} className="inline-flex rounded-md border border-line bg-surface-sunken p-0.5">
+              {THEMES.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === item.key}
+                  onClick={() => setTheme(item.key)}
+                  className={`rounded-sm px-3 py-1.5 text-xs transition-colors duration-[120ms] ${
+                    theme === item.key ? 'bg-surface-raised font-medium text-ink shadow-xs' : 'text-muted-foreground hover:text-ink'
+                  }`}
+                >
+                  {t(item.label)}
+                </button>
+              ))}
+            </div>
+          </SettingRow>
 
-        <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">{t('对话字号')}</div>
-        <p className="mb-2 text-xs text-muted-foreground">{t('只影响自由对话的正文，觉得小就调大一档。')}</p>
-        <div className="flex gap-2">
-          {(['sm', 'md', 'lg'] as const).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setChatTextSize(key)}
-              className={`rounded-md border px-4 py-2 text-[13px] transition-colors ${
-                chatTextSize === key ? 'border-primary/40 bg-selection text-selection-fg' : 'hover:bg-[var(--mx-action-secondary-hover)]'
-              }`}
-            >
-              {t(key === 'sm' ? '小' : key === 'md' ? '标准' : '大')}
-            </button>
-          ))}
-        </div>
+          <SettingRow
+            title={t('界面大小')}
+            desc={t('整个主窗口的字和按钮一起放大或缩小，小屏幕上看着吃力就调大。')}
+          >
+            <div className="flex items-center gap-3">
+              <Slider className="w-40" min={0.3} max={4} step={0.05} value={uiScale} onChange={setUiScale} ariaLabel={t('界面大小')} />
+              <span className="w-11 text-right text-xs tabular-nums text-muted-foreground">{Math.round(uiScale * 100)}%</span>
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+                disabled={uiScale === 1}
+                onClick={() => setUiScale(1)}
+              >
+                {t('恢复默认 100%')}
+              </button>
+            </div>
+          </SettingRow>
 
-        <div className="mt-6 mb-2 text-xs font-medium text-muted-foreground">{t('语音通话')}</div>
-        <div className="flex items-start justify-between gap-4 rounded-lg border px-3 py-2.5">
-          <div className="min-w-0">
-            <div className="text-[13px]">{t('说话打断回答')}</div>
-            <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{t('播放回答时保留麦克风，你一开口就停下来。外放时如果会被自己的声音打断，关掉它。')}</p>
-          </div>
-          <Switch checked={bargeIn} onCheckedChange={setBargeIn} ariaLabel={t('说话打断回答')} />
+          <SettingRow title={t('对话字号')} desc={t('只影响自由对话的正文，觉得小就调大一档。')}>
+            <div className="flex gap-1.5">
+              {(['sm', 'md', 'lg'] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setChatTextSize(key)}
+                  className={`rounded-md border px-3.5 py-2 text-[13px] transition-colors duration-[120ms] ${
+                    chatTextSize === key ? 'border-primary/40 bg-selection text-selection-fg' : 'border-line hover:bg-[var(--mx-action-secondary-hover)]'
+                  }`}
+                >
+                  {t(key === 'sm' ? '小' : key === 'md' ? '标准' : '大')}
+                </button>
+              ))}
+            </div>
+          </SettingRow>
         </div>
-        <div className="mt-3 flex items-center justify-between gap-4 rounded-lg border px-3 py-2.5">
-          <div className="min-w-0">
-            <div className="text-[13px]">{t('停顿多久算说完')}</div>
-            <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{t('越大越不容易把一句话切成两段，但每轮要多等一会。')}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <span className="tabular-nums text-[11px] text-muted-foreground">{endSilenceMs}ms</span>
-            <Slider className="w-36" min={400} max={2000} step={100} value={endSilenceMs} onChange={setEndSilenceMs} ariaLabel={t('停顿多久算说完')} />
-          </div>
+      </Card>
+
+      <Card className="p-5">
+        <SectionHeader title={t('语音通话')} desc={t('控制打断和「说完」的判定；外放时如果会打断自己，先关掉打断。')} />
+        <div className="divide-y divide-line">
+          <SettingRow title={t('说话打断回答')} desc={t('播放回答时保留麦克风，你一开口就停下来。')}>
+            <Switch checked={bargeIn} onCheckedChange={setBargeIn} ariaLabel={t('说话打断回答')} />
+          </SettingRow>
+          <SettingRow title={t('停顿多久算说完')} desc={t('越大越不容易把一句话切成两段，但每轮要多等一会。')}>
+            <div className="flex items-center gap-3">
+              <Slider className="w-36" min={400} max={2000} step={100} value={endSilenceMs} onChange={setEndSilenceMs} ariaLabel={t('停顿多久算说完')} />
+              <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">{endSilenceMs}ms</span>
+            </div>
+          </SettingRow>
         </div>
       </Card>
     </div>
