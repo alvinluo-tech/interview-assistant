@@ -343,17 +343,22 @@ function Sidebar({
   }
   return (
     <aside className="flex min-h-0 w-[200px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface-sunken">
-      <div className="flex items-center gap-2.5 px-4 pb-2 pt-4">
+      <div className="flex items-start gap-2.5 px-4 pb-3 pt-4">
         <BrandMark />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">{BRAND}</div>
           <div className="text-[11px] text-muted-foreground">{t('让面试重新有序')}</div>
         </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          title={t('收起侧栏')}
+          aria-label={t('收起侧栏')}
+          className="-mr-1.5 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink"
+        >
+          <PanelLeftClose size={15} />
+        </button>
       </div>
-      <button type="button" onClick={() => setCollapsed(true)} className="mx-3 mb-3 flex h-8 items-center gap-2 rounded-md px-2 text-left text-[12px] text-ink-muted transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink">
-        <PanelLeftClose size={15} />
-        {t('收起侧栏')}
-      </button>
 
       <div className="flex flex-col gap-0.5 px-3 pt-1">
         {BIG_NAV.map((n) => (
