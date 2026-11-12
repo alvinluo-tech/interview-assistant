@@ -69,8 +69,18 @@ function terms(value: string): string[] {
             tokens.add(phrase.slice(i, i + 2));
     return [...tokens];
 }
-export function buildKnowledgeContext(input: KnowledgeInput): KnowledgeContext {
-    const budget = Math.max(0, Math.min(24000, Math.floor(input.maxChars ?? 12000)));
+export interface KnowledgeChunk {
+    id: string;
+    documentId: string;
+    title: string;
+    kind: ContextSource['kind'];
+    excerpt: string;
+    location: string;
+    selection: 'background' | 'retrieved';
+    origin?: string;
+}
+/** Cuts the authorized documents into retrievable excerpts; ids stay stable so a ranking can be reused. */
+export function knowledgeChunks(input: KnowledgeInput): KnowledgeChunk[] {
     const documents: {
         id: string;
         documentId: string;
@@ -91,10 +101,7 @@ export function buildKnowledgeContext(input: KnowledgeInput): KnowledgeContext {
         material.entries.forEach((entry, index) => documents.push({ ...source, id: `M:${material.id}:entry:${entry.id || index}:`, title: `资料：${material.name} / 问答 ${index + 1}`,
             origin: entry.origin || 'legacy_unknown', text: `问题：${entry.question}\n回答：${entry.answer}` }));
     }
-    const query = terms(input.query || input.goal?.description || input.goal?.name || '');
-    const candidates: (ContextSource & {
-        score: number;
-    })[] = [];
+    const chunks: KnowledgeChunk[] = [];
     for (const document of documents) {
         const text = document.text.replace(/\r\n?/g, '\n').replace(/\u0000/g, '').trim();
         const shortBackground = document.kind !== 'material' && text.length <= 3500;
@@ -105,16 +112,25 @@ export function buildKnowledgeContext(input: KnowledgeInput): KnowledgeContext {
                 if (boundary > start + 300)
                     end = boundary;
             }
-            const excerpt = text.slice(start, end), normalized = excerpt.toLowerCase();
-            const score = query.reduce((sum, term) => sum + (normalized.includes(term) ? Math.min(4, term.length) : 0), 0);
-            const background = shortBackground;
-            candidates.push({ id: `${document.id}${count + 1}`, documentId: document.documentId, title: document.title, kind: document.kind, excerpt, origin: document.origin,
-                location: `正文第 ${start + 1}–${end} 字`, selection: background ? 'background' : 'retrieved', score });
+            chunks.push({ id: `${document.id}${count + 1}`, documentId: document.documentId, title: document.title, kind: document.kind, excerpt: text.slice(start, end), origin: document.origin,
+                location: `正文第 ${start + 1}–${end} 字`, selection: shortBackground ? 'background' : 'retrieved' });
             if (end === text.length)
                 break;
             start = Math.max(start + 1, end - 80);
         }
     }
+    return chunks;
+}
+/** Assembles the reference block. `ranking` is an optional per-chunk semantic score from embeddings. */
+export function buildKnowledgeContext(input: KnowledgeInput, ranking?: Map<string, number>): KnowledgeContext {
+    const budget = Math.max(0, Math.min(24000, Math.floor(input.maxChars ?? 12000)));
+    const query = terms(input.query || input.goal?.description || input.goal?.name || '');
+    const candidates = knowledgeChunks(input).map(chunk => {
+        const normalized = chunk.excerpt.toLowerCase();
+        const lexical = query.reduce((sum, term) => sum + (normalized.includes(term) ? Math.min(4, term.length) : 0), 0);
+        const semantic = ranking?.get(chunk.id);
+        return { ...chunk, lexical, semantic: semantic ?? 0, score: semantic === undefined ? lexical : semantic * 1000 + lexical };
+    });
     const selected = candidates.filter(candidate => candidate.selection === 'background' || candidate.score > 0)
         .sort((a, b) => Number(b.selection === 'background') - Number(a.selection === 'background') || b.score - a.score);
     const sources: ContextSource[] = [], blocks: string[] = [];
@@ -146,7 +162,7 @@ export function buildKnowledgeContext(input: KnowledgeInput): KnowledgeContext {
             continue;
         blocks.push(header + excerpt);
         used += header.length + excerpt.length + (blocks.length > 1 ? 2 : 0);
-        const { score: _score, ...source } = candidate;
+        const { score: _score, lexical: _lexical, semantic: _semantic, ...source } = candidate;
         sources.push({ ...source, excerpt, location });
     }
     return { text: blocks.join('\n\n'), sources, totalChunks: candidates.length, truncated: shortened || sources.length < selected.length };

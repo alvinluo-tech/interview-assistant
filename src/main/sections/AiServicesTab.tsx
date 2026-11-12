@@ -336,6 +336,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
             <p className="break-all text-muted-foreground">{t('自动地址：{endpoint}。也可填写同地域的 WSS 地址；切换地域时清空旧地址，不要把 Key 放入 URL。', { endpoint: automaticRealtimeEndpoint })}</p>
             <label className="block">{t('热词表 ID（可选）')}<Input aria-label={t('ASR 热词表 ID')} className="mt-1" value={draft.realtimeVocabularyId ?? ''} placeholder={t('百炼已创建的 vocabulary_id')} onChange={event => setDraft(value => ({ ...value, realtimeVocabularyId: event.target.value }))} /></label>
           </div>}
+          <label htmlFor="ai-embedding-model" className="col-span-2 text-xs">{t('向量模型（可选）')}<Input id="ai-embedding-model" className="mt-1 font-mono text-xs" value={draft.embeddingModel ?? ''} disabled={busy === 'save'} onChange={event => setDraft(value => ({ ...value, embeddingModel: event.target.value.trim() || undefined }))} placeholder={t('例如 text-embedding-3-small')} /><span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">{t('填写对话服务商支持 /embeddings 的模型后，面试资料会按语义相关性挑选；留空仍按关键词匹配。')}</span></label>
           <label htmlFor="ai-timeout" className="text-xs">{t('请求超时（秒）')}<Input id="ai-timeout" className="mt-1" type="number" min={5} max={300} value={draft.timeoutMs / 1000} disabled={busy === 'save'} onChange={e => setDraft(value => ({ ...value, timeoutMs: Number(e.target.value) * 1000 }))} /></label>
         </div></details>
       </Card>

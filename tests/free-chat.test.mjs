@@ -391,3 +391,23 @@ test('long-term memory rides along with the system prompt',async()=>{
   assert.match(system,/【用户长期记忆】/);
   assert.match(system,/目标岗位是平台工程/);
 });
+
+test('the stored work log keeps the newest steps and trims long text',()=>{
+  const {api}=harness();
+  const raw=Array.from({length:30},(_,index)=>({id:`s${index}`,kind:'reasoning',label:'思考',text:'x'.repeat(3000),input:'i'.repeat(2000),output:'o'.repeat(2000)}));
+  const parsed=api.normalizeSteps(raw);
+  assert.equal(parsed.length,30,'the read path keeps legacy logs readable');
+  assert.equal(parsed[0].text.length,3000);
+  const {steps,trimmed}=api.slimSteps(parsed);
+  assert.equal(trimmed,6);
+  assert.equal(steps.length,24);
+  assert.equal(steps[0].id,'s6','the oldest steps are dropped, not the newest');
+  assert.equal(steps[23].id,'s29');
+  assert.ok(steps[0].text.length<=1201);
+  assert.ok(steps[0].input.length<=801);
+  assert.ok(steps[0].output.length<=801);
+  const closed=api.slimSteps([{id:'r',kind:'reasoning',label:'思考',text:'hi',status:'running'}]);
+  assert.equal(closed.steps[0].status,'done','a stored log has no step still running');
+  const junk=JSON.parse(JSON.stringify(api.normalizeSteps([null,{id:'x'},{id:'y',kind:'tool',text:'ok'}])));
+  assert.deepEqual(junk,[{id:'y',kind:'tool',label:'',text:'ok'}]);
+});

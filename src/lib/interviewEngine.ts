@@ -36,7 +36,8 @@ import { recordFirstToken } from './latencyStats';
 import { tokenScale } from './tokenCalibration';
 import { openMicrophone, type MicrophoneCapture } from './microphone';
 import { joinTranscript } from './speechProtocol';
-import { buildKnowledgeContext,captureKnowledge,authorizedKnowledge,type KnowledgeSnapshot,type ContextSource } from './knowledgeContext';
+import { buildKnowledgeContext,knowledgeChunks,captureKnowledge,authorizedKnowledge,type KnowledgeSnapshot,type ContextSource } from './knowledgeContext';
+import { rankChunks } from './embeddings';
 import { memoryBlock } from './memory';
 import {assembleInterviewHistory,assembleExamContext} from './aiContext';
 import type { RealtimeCapture } from './realtimeAsr';
@@ -640,7 +641,7 @@ export async function answerQuestion(question: string, opts?: { correction?: boo
 
   try {
     const cutoffId=source.metadata?.contextCutoffId || source.id;
-    const { prompt, sources,referenceBlock } = buildSystemPromptForSession(question,cutoffId);
+    const { prompt, sources,referenceBlock } = await buildSystemPromptForSession(question,cutoffId);
     setState({ contextSources: sources });
     const history=assembleInterviewHistory(state.messages,question,{throughMessageId:cutoffId,maxTokens:interviewContextBudget().historyTokens});
     setState({messages:state.messages.map(message=>message.id===assistantMsg.id?{...message,metadata:{...message.metadata,sources}}:message)});
@@ -770,7 +771,7 @@ function interviewContextBudget(){
   return {historyTokens:Math.max(1500,Math.floor(available*0.7/scale)), referenceChars:Math.max(500,Math.floor(available*0.3))};
 }
 
-function buildSystemPromptForSession(question: string,throughMessageId:string): { prompt: string; sources: ContextSource[];referenceBlock:string } {
+async function buildSystemPromptForSession(question: string,throughMessageId:string): Promise<{ prompt: string; sources: ContextSource[];referenceBlock:string }> {
   const prefs = getSetting<Record<string, never>>('interviewPreference', {} as never) as unknown as {
     answerStyle?: AnswerStyle;
     customAnswerStyle?: string;
@@ -788,7 +789,10 @@ function buildSystemPromptForSession(question: string,throughMessageId:string): 
   sessionKnowledge ??= captureKnowledge(currentKnowledge);
   const cutoff=state.messages.findIndex(message=>message.id===throughMessageId);
   const priorQuestion=[...state.messages.slice(0,Math.max(0,cutoff))].reverse().find(knownInterviewer)?.text || '';
-  const context = buildKnowledgeContext({...authorizedKnowledge(sessionKnowledge,currentKnowledge),query:`${question}\n${priorQuestion}`,maxChars:interviewContextBudget().referenceChars});
+  const knowledge={...authorizedKnowledge(sessionKnowledge,currentKnowledge),query:`${question}\n${priorQuestion}`,maxChars:interviewContextBudget().referenceChars};
+  // Semantic ranking is optional: an unconfigured or failing endpoint leaves the lexical order untouched.
+  const ranking=await rankChunks(knowledge.query,knowledgeChunks(knowledge).map(chunk=>({id:chunk.id,text:chunk.excerpt})));
+  const context = buildKnowledgeContext(knowledge,ranking ?? undefined);
   let prompt = buildInterviewSystemPrompt({
     answerStyle: prefs.answerStyle ?? 'natural',
     customAnswerStyle: prefs.customAnswerStyle ?? '',

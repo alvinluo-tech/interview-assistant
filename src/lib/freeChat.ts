@@ -17,7 +17,32 @@ export const LOCAL_DATA_LABELS:Record<LocalDataCategory,string> = {resumes:'简�
 export interface FreeChatQuery {name:string;status:'success'|'error'|'cached';category?:string;title?:string;recordId?:string;count?:number}
 /** One entry of the visible work log: thinking, a tool call, or its result. */
 export interface FreeChatStep { id:string; kind:'reasoning'|'tool'; label:string; text:string; status?:'running'|'done'|'error'; input?:string; output?:string }
-export interface FreeChatMessage { role:'user'|'assistant'; content:string; /** Milliseconds since epoch, for the message clock. */ at?:number; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[]; steps?:FreeChatStep[]; elapsedMs?:number }
+export interface FreeChatMessage { role:'user'|'assistant'; content:string; /** Milliseconds since epoch, for the message clock. */ at?:number; status?:'failed'|'partial'; error?:string; queries?:FreeChatQuery[]; steps?:FreeChatStep[]; /** Steps dropped by slimSteps while saving; the log is display-only. */ stepsTrimmed?:number; elapsedMs?:number }
+/** The work log is stored with every answer, so its limits are part of the data format, not the UI. */
+export const STEP_TEXT_LIMIT = 1200;
+export const STEP_DETAIL_LIMIT = 800;
+export const STEP_COUNT_LIMIT = 24;
+const STEP_KINDS = ['reasoning','tool'] as const;
+const STEP_STATES = ['running','done','error'] as const;
+/** Reads a stored work log defensively: one bad entry must not break the message list. */
+export function normalizeSteps(value:unknown, textLimit=4000, countLimit=60):FreeChatStep[] {
+  if(!Array.isArray(value))return [];
+  return value.flatMap(item=>{
+    if(!item||typeof item!=='object')return [];
+    const step=item as Record<string,unknown>;
+    if(typeof step.id!=='string'||!STEP_KINDS.includes(step.kind as typeof STEP_KINDS[number])||typeof step.text!=='string')return [];
+    return [{id:step.id.slice(0,200),kind:step.kind as FreeChatStep['kind'],label:typeof step.label==='string'?step.label.slice(0,80):'',text:step.text.slice(0,textLimit),...(STEP_STATES.includes(step.status as typeof STEP_STATES[number])?{status:step.status as FreeChatStep['status']}:{}),...(typeof step.input==='string'?{input:step.input.slice(0,textLimit)}:{}),...(typeof step.output==='string'?{output:step.output.slice(0,textLimit)}:{})}];
+  }).slice(-countLimit);
+}
+/** Keeps the newest steps and the readable part of each; returns how many steps were dropped. */
+export function slimSteps(steps:FreeChatStep[]):{steps:FreeChatStep[];trimmed:number} {
+  const kept=steps.slice(-STEP_COUNT_LIMIT).map(step=>({...step,
+    text:step.text.length>STEP_TEXT_LIMIT?`…${step.text.slice(-STEP_TEXT_LIMIT)}`:step.text,
+    ...(step.input&&step.input.length>STEP_DETAIL_LIMIT?{input:`${step.input.slice(0,STEP_DETAIL_LIMIT)}…`}:{}),
+    ...(step.output&&step.output.length>STEP_DETAIL_LIMIT?{output:`${step.output.slice(0,STEP_DETAIL_LIMIT)}…`}:{}),
+    status:step.status==='running'?('done' as const):step.status}));
+  return {steps:kept,trimmed:Math.max(0,steps.length-kept.length)};
+}
 /** 较早对话的压缩摘要：covered 表示它覆盖了从头开始的多少条消息。 */
 export interface FreeChatSummary { text:string; covered:number; updatedAt:number }
 /** Local-data access granted to one conversation; cleared when the user turns it off. */

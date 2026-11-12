@@ -54,7 +54,7 @@ await probe('D04-interview-end-during-bootstrap-setting-write',async()=>{
     './examEngine':{prepareExamRun:()=>{},finishInterviewExam:async()=>{}},
     './store':{getSetting:(_key,fallback)=>fallback,setSetting:async()=>{}},'./events':{bus:{emit:()=>{}}},
     './microphone':{openMicrophone:async()=>{micStarts++;return {label:'Synthetic',close:async()=>{micCloses++;}};}},
-    './speechProtocol':{},'./knowledgeContext':{captureKnowledge:()=>({})},'./aiContext':{},
+    './speechProtocol':{},'./knowledgeContext':{captureKnowledge:()=>({})},'./aiContext':{},'./embeddings':{rankChunks:async()=>null},
     './speechPreferences':{getSpeechProfile:()=>({})},'./speechProfile':{},
     './speakerRouting':{AudioTimeline:class{reset(){}}},'./speakerClient':{},'./speechTranslation':{},
   };

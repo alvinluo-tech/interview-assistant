@@ -52,6 +52,7 @@ function harness({ sampleRate = 48000, suspended = false, denied = false, stt = 
     './aiTaskPolicy': { estimateInputTokens: () => 1 },
     './tokenCalibration': { tokenScale: () => 1 },
     './memory': { memoryBlock: () => '' },
+    './embeddings': { rankChunks: async () => null },
     './latencyStats': { estimateFirstToken: () => null, recordFirstToken: () => {} },
     './events': { bus: { emit() {} } },
     './i18n': evaluateModuleFixture('src/lib/i18n.ts'),
@@ -668,9 +669,10 @@ test('interview answer continuity uses prior AI suggestions and optional actual-
 test('correcting a question cancels and fences old streamed output while preserving revisions',async()=>{
   const requests=[];const resolvers=[];
   const h=harness({chat:options=>{requests.push(options);return new Promise(resolve=>resolvers.push(resolve));}});await h.start();
-  const first=h.engine.answerQuestion('原来的错题');await Promise.resolve();
+  const settle=()=>new Promise(resolve=>setTimeout(resolve,0));
+  const first=h.engine.answerQuestion('原来的错题');await settle();
   const source=h.engine.getInterviewEngineState().messages.find(message=>message.role==='INTERVIEWER');
-  const corrected=h.engine.answerQuestion('更正后的问题',{correction:true,questionMessageId:source.id});await Promise.resolve();
+  const corrected=h.engine.answerQuestion('更正后的问题',{correction:true,questionMessageId:source.id});await settle();
   assert.equal(requests[0].signal.aborted,true);
   requests[0].onDelta('旧输出');resolvers[0]('旧答案');await first;
   requests[1].onDelta('新答案');resolvers[1]('新答案');await corrected;

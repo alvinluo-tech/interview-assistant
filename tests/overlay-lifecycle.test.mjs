@@ -55,6 +55,7 @@ function interview({deferSetting=true,createGate,storedSession=false}={}){
     './latencyStats':{estimateFirstToken:()=>null,recordFirstToken:()=>{}},
     './tokenCalibration':{tokenScale:()=>1},
     './memory':{memoryBlock:()=>''},
+    './embeddings':{rankChunks:async()=>null},
     './microphone':{openMicrophone:async()=>{micStarts++;return {label:'Synthetic',close:async()=>{micCloses++;}};}},
     './speechProtocol':{},'./knowledgeContext':{captureKnowledge:()=>({})},'./aiContext':{},'./speechPreferences':{getSpeechProfile:()=>({})},'./speechProfile':{},
     './speakerRouting':{AudioTimeline:class{reset(){}}},'./speakerClient':{},'./speechTranslation':{},

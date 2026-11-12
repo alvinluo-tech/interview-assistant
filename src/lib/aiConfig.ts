@@ -39,6 +39,8 @@ export interface AiSettings {
   speechInputMode?: 'auto' | 'segmented' | 'file' | 'realtime';
   realtimeEndpoint?: string;
   realtimeVocabularyId?: string;
+  /** Optional embeddings model on the chat provider; enables semantic retrieval. */
+  embeddingModel?: string;
 }
 export const PROVIDER_PRESETS = [
   { id: 'compatible', name: 'OpenAI 兼容接口', baseUrl: '', authMode: 'bearer' as const },
@@ -159,6 +161,8 @@ export function validateAiSettings(settings: AiSettings, allowMissingKeys = fals
     routes[role] = { providerId: route.providerId, modelId: route.modelId };
   }
   if (!Number.isInteger(settings.timeoutMs) || settings.timeoutMs < 5000 || settings.timeoutMs > 300000) throw new Error(t('请求超时需在 5–300 秒之间'));
+  const embeddingModel = settings.embeddingModel?.trim();
+  if (embeddingModel && (embeddingModel.length > 160 || /[\u0000-\u001f]/.test(embeddingModel))) throw new Error(t('向量模型 ID 需为 1–160 个字符'));
   const ttsVoice = settings.ttsVoice.trim();
   if (!ttsVoice || ttsVoice.length > 100 || /[\u0000-\u001f]/.test(ttsVoice)) throw new Error(t('语音音色需为 1–100 个字符'));
   const requestedSpeechMode = settings.speechInputMode ?? 'auto';
@@ -171,6 +175,7 @@ export function validateAiSettings(settings: AiSettings, allowMissingKeys = fals
   if (speechInputMode === 'realtime' && routes.stt && !isRealtimeAsrModel(routes.stt.modelId)) throw new Error(t('持续实时模式仅支持 Fun-ASR-Realtime 或 paraformer-realtime-v2，请在语音转写用途中选择对应模型。'));
   if (speechInputMode === 'realtime') resolveRealtimeEndpoint({ ...settings, providers, routes });
   return { version: 2, providers, routes, timeoutMs: settings.timeoutMs, ttsVoice, speechInputMode,
+    ...(embeddingModel ? { embeddingModel } : {}),
     ...(realtimeEndpoint ? { realtimeEndpoint } : {}), ...(realtimeVocabularyId ? { realtimeVocabularyId } : {}) };
 }
 

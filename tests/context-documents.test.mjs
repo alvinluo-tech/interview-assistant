@@ -108,3 +108,19 @@ test('image imports, page limits and empty OCR fail with explicit errors and rel
   const large={...file,name:'large.txt',arrayBuffer:async()=>new TextEncoder().encode('x'.repeat(150001)).buffer};
   await assert.rejects(parseDocument(large,{},services),error=>error.code==='TOO_MUCH_TEXT');
 });
+
+test('a semantic ranking reaches material the keywords would have missed', () => {
+  const { buildKnowledgeContext, knowledgeChunks } = moduleFrom('src/lib/knowledgeContext.ts');
+  const filler = '无关的演示文字。'.repeat(260);
+  const material = { id: 'm', name: '缓存资料', content: `${filler}高峰时段先降级非核心功能，再分段恢复。`, entries: [] };
+  const input = { materials: [material], query: '怎么保证不出现雪崩', maxChars: 2000 };
+  const chunks = knowledgeChunks(input);
+  assert.ok(chunks.length > 1, 'long material is split');
+  const target = chunks[chunks.length - 1];
+  assert.match(target.excerpt, /降级非核心功能/);
+  const plain = buildKnowledgeContext(input);
+  assert.doesNotMatch(plain.text, /降级非核心功能/, 'keywords alone miss it');
+  const ranked = buildKnowledgeContext(input, new Map([[target.id, 0.82]]));
+  assert.match(ranked.text, /降级非核心功能/, 'the ranking brings it back');
+  assert.ok(ranked.text.indexOf('缓存资料') >= 0);
+});
