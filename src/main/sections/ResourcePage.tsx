@@ -3,7 +3,7 @@
  * 含新建岗位弹窗、资料编辑器（自由资料 + 预设问答 + AI 生成）。
  */
 import { useRef, useState } from 'react';
-import { Briefcase, Check, FileText, Layers, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Briefcase, Check, FileText, HardDrive, Layers, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -51,6 +51,10 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
   const [importFile, setImportFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [previewResume, setPreviewResume] = useState<Resume | null>(null);
+  const [newMaterial, setNewMaterial] = useState(false);
+  const [renaming, setRenaming] = useState<Resume | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renaming2, setRenamingBusy] = useState(false);
   const [importKind, setImportKind] = useState<'resume' | 'material' | 'goal'>('resume');
   const [typeFilter, setTypeFilter] = useState<'all' | 'resume' | 'goal' | 'material'>('all');
   const [search, setSearch] = useState('');
@@ -123,7 +127,14 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-md bg-[var(--mx-selection-bg)] px-2 py-1 text-[11px] text-[var(--mx-selection-text)]">{t('本机存储')}</span>
+          <span className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-sunken px-2 py-1 text-[11px] text-ink-muted">
+            <HardDrive size={12} />
+            {t('本机存储')}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setNewMaterial(true)}>
+            <Plus size={13} />
+            {t('新建资料')}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setGoalDialog({ open: true })}>
             <Plus size={13} />
             {t('新建岗位')}
@@ -182,6 +193,16 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
                   <span className="inline-flex rounded-md bg-[var(--mx-selection-bg)] px-2 py-1 text-[11px] text-[var(--mx-selection-text)]">{kindLabel(detail.kind)}</span>
                   <h3 className="mt-3 text-[18px] font-semibold leading-[26px]">{detail.title}</h3>
                 </div>
+                <div className="flex shrink-0 items-center gap-2">
+                {'resume' in detail && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { setRenaming(detail.resume); setRenameDraft(detail.resume.title); }}
+                  >
+                    {t('重命名')}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -194,6 +215,7 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
                   <Pencil size={13} />
                   {t('编辑')}
                 </Button>
+                </div>
               </div>
 
               {'resume' in detail && (
@@ -322,6 +344,47 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
           onClose={() => setGoalDialog({ open: false })}
         />
       )}
+      {newMaterial && (
+        <NewMaterialDialog
+          onClose={() => setNewMaterial(false)}
+          onCreated={(id) => { setNewMaterial(false); setSelectedKey(`material:${id}`); setTypeFilter('material'); }}
+        />
+      )}
+      {renaming && (
+        <Dialog open onClose={() => { if (!renaming2) setRenaming(null); }} width={420}>
+          <DialogTitle>{t('重命名')}</DialogTitle>
+          <p className="mt-1 text-xs leading-[18px] text-ink-muted">{t('只改列表里显示的名字，不影响正文。')}</p>
+          <Input
+            className="mt-3"
+            maxLength={60}
+            aria-label={t('简历名称')}
+            value={renameDraft}
+            onChange={(event) => setRenameDraft(event.target.value)}
+          />
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" disabled={renaming2} onClick={() => setRenaming(null)}>{t('取消')}</Button>
+            <Button
+              disabled={renaming2 || !renameDraft.trim()}
+              onClick={() => {
+                void (async () => {
+                  setRenamingBusy(true);
+                  try {
+                    await saveResume({ ...renaming, title: renameDraft.trim() });
+                    setRenaming(null);
+                    showToast({ type: 'success', title: t('已重命名') });
+                  } catch (error) {
+                    showToast({ type: 'error', title: t('重命名失败'), description: String((error as Error).message || error) });
+                  } finally {
+                    setRenamingBusy(false);
+                  }
+                })();
+              }}
+            >
+              {renaming2 ? t('保存中…') : t('保存')}
+            </Button>
+          </div>
+        </Dialog>
+      )}
       {editorId && <MaterialEditor id={editorId} onClose={() => setEditorId(null)} />}
       <ConfirmDialog
         open={deleting != null}
@@ -398,6 +461,46 @@ function GoalDialog({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
   );
 }
 
+function NewMaterialDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const [name, setName] = useState('');
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const empty = !name.trim() && !content.trim();
+  const create = async () => {
+    if (empty || saving) return;
+    setSaving(true);
+    try {
+      const created = await saveMaterial({ name: name.trim() || t('未命名资料'), content });
+      showToast({ type: 'success', title: t('已保存') });
+      onCreated(created.id);
+    } catch (error) {
+      showToast({ type: 'error', title: t('资料保存失败，输入已保留'), description: String((error as Error).message || error) });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Dialog open onClose={() => { if (!saving) onClose(); }} dismissable={!saving} width={560}>
+      <DialogTitle>{t('新建资料')}</DialogTitle>
+      <p className="mt-1 text-xs leading-[18px] text-ink-muted">{t('写一段可以随身带进面试的资料，保存后也能继续补充问答。')}</p>
+      <div className="mt-3 flex flex-col gap-3">
+        <label className="text-xs font-medium text-ink-muted">
+          {t('资料名称')}
+          <Input className="mt-1" maxLength={50} value={name} onChange={(event) => setName(event.target.value)} aria-label={t('资料名称')} />
+        </label>
+        <label className="text-xs font-medium text-ink-muted">
+          {t('自由资料（选填）')}
+          <Textarea className="mt-1" rows={7} maxLength={90000} value={content} onChange={(event) => setContent(event.target.value)} aria-label={t('自由资料（选填）')} />
+        </label>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" disabled={saving} onClick={onClose}>{t('取消')}</Button>
+        <Button disabled={saving || empty} onClick={() => void create()}>{saving ? t('保存中…') : t('保存')}</Button>
+      </div>
+    </Dialog>
+  );
+}
+
 function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const [materials] = useData<Material[]>('materials', []);
   const material = materials.find((m) => m.id === id);
@@ -420,6 +523,11 @@ function MaterialEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const dirty = name !== (material?.name ?? '') || content !== (material?.content ?? '');
 
   const save = async (): Promise<boolean> => {
+    // 名称和正文都空时落盘只会产生一条空资料，宁可拦住。
+    if (!name.trim() && !content.trim()) {
+      showToast({ type: 'error', title: t('先写点内容再保存') });
+      return false;
+    }
     try {
     await saveMaterial({ id, name: name.trim() || t('未命名资料'), content });
     showToast({ type: 'success', title: t('已保存') });
