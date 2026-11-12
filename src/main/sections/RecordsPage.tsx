@@ -64,7 +64,7 @@ export function RecordsPage() {
   const [tab, setTab] = useState<'interview' | 'mock' | 'exam'>('interview');
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-1.5">
+      <div className="inline-flex w-fit rounded-lg border border-line bg-surface-sunken p-0.5">
         {[
           { key: 'interview', label: t('面试记录') },
           { key: 'exam', label: t('笔试记录') },
@@ -74,8 +74,9 @@ export function RecordsPage() {
             key={item.key}
             type="button"
             onClick={() => setTab(item.key as 'interview' | 'mock' | 'exam')}
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-              tab === item.key ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-[var(--mx-action-secondary-hover)]'
+            aria-pressed={tab === item.key}
+            className={`rounded-md px-3 py-1 text-[13px] transition-colors ${
+              tab === item.key ? 'bg-surface-raised font-medium shadow-card' : 'text-ink-muted hover:text-ink'
             }`}
           >
             {item.label}
@@ -184,10 +185,14 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
     );
   }
 
+  const [detailTab, setDetailTab] = useState<'timeline' | 'report'>('timeline');
+  const detail = visible.find((s) => s.id === openId) ?? visible[0] ?? null;
+  const detailMeta = detail ? mockMeta(detail) : undefined;
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       {(emptyCount > 0 || showEmpty) && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface-raised px-3 py-2 text-[11px] text-ink-muted">
           <span>{t('共 {count} 场，其中 {empty} 场没有问答记录。', { count: sessions.length, empty: emptyCount })}</span>
           <button type="button" className="text-primary hover:underline" onClick={() => setShowEmpty(!showEmpty)}>
             {showEmpty ? t('隐藏空记录') : t('显示空记录')}
@@ -195,7 +200,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
           {emptyCount > 0 && (
             <button
               type="button"
-              className="text-destructive hover:underline"
+              className="text-[var(--mx-status-error-text)] hover:underline"
               onClick={() => setSessions(prev => prev.filter(session => session.messages.length > 0))}
             >
               {t('清理 {count} 场空记录', { count: emptyCount })}
@@ -203,138 +208,152 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
           )}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-        {selecting ? (
-          <>
-            <span>{t('已选择 {count} 项', { count: selected.length })}</span>
-            <button type="button" className="text-primary hover:underline" onClick={() => setSelected(visible.map(s => s.id))}>{t('全选')}</button>
-            <button type="button" className="text-primary hover:underline" onClick={() => setSelected([])}>{t('清空选择')}</button>
-            <button type="button" className="text-destructive hover:underline disabled:opacity-40" disabled={selected.length === 0} onClick={() => setDeletingMany(true)}>{t('删除所选')}</button>
-            <button type="button" className="hover:underline" onClick={leaveSelect}>{t('取消选择')}</button>
-          </>
-        ) : (
-          <>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 text-[11px] text-ink-muted">
+          {selecting ? (
+            <>
+              <span>{t('已选择 {count} 项', { count: selected.length })}</span>
+              <button type="button" className="text-primary hover:underline" onClick={() => setSelected(visible.map(s => s.id))}>{t('全选')}</button>
+              <button type="button" className="text-primary hover:underline" onClick={() => setSelected([])}>{t('清空选择')}</button>
+              <button type="button" className="text-[var(--mx-status-error-text)] hover:underline disabled:opacity-40" disabled={selected.length === 0} onClick={() => setDeletingMany(true)}>{t('删除所选')}</button>
+              <button type="button" className="hover:underline" onClick={leaveSelect}>{t('取消选择')}</button>
+            </>
+          ) : (
             <span>{t('共 {count} 条记录', { count: visible.length })}</span>
-            <button type="button" className="text-primary hover:underline" onClick={() => setSelecting(true)}>{t('批量选择')}</button>
-          </>
+          )}
+        </div>
+        {!selecting && (
+          <Button size="sm" variant="outline" onClick={() => setSelecting(true)}>{t('批量管理')}</Button>
         )}
       </div>
+
       {visible.length === 0 && (
-        <Card className="p-8 text-center text-sm text-muted-foreground">{t('没有可显示的记录。')}</Card>
+        <Card className="p-8 text-center text-sm text-ink-muted">{t('没有可显示的记录。')}</Card>
       )}
-      {grouped.map((group) => (
-        <div key={group.key} className="flex flex-col gap-2">
-          <div className="mt-1 px-1 text-[11px] font-medium text-muted-foreground">{dayLabel(group.key)}</div>
-          {group.rows.map((s) => {
-        const meta = mockMeta(s);
-        const open = openId === s.id;
-        const reportReady = Boolean(meta?.report);
-        const reportPending = meta?.reportStatus === 'pending' && !reportReady;
-        const reportFailed = meta?.reportStatus === 'error' && !reportReady;
-        const canRegenerate =
-          s.type === 'MOCK_INTERVIEW' &&
-          s.status === 'COMPLETED' &&
-          s.messages.some((m) => m.role === 'ASSISTANT') &&
-          !reportReady &&
-          aiReady;
-        return (
-          <Card key={s.id} className="overflow-hidden">
-            <div className="flex items-center gap-2 p-3">
-              {selecting && (
-                <input
-                  type="checkbox"
-                  className="size-4 shrink-0 accent-[hsl(var(--primary))]"
-                  aria-label={t('选择「{name}」', { name: cleanTitle(s.title) })}
-                  checked={selected.includes(s.id)}
-                  onChange={() => toggleSelect(s.id)}
-                />
-              )}
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={() => (selecting ? toggleSelect(s.id) : setOpenId(open ? null : s.id))}
-              >
-                {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    <span className="truncate" title={s.title}>{cleanTitle(s.title)}</span>
-                    {s.status === 'ACTIVE' && <Badge variant="default">{t('进行中')}</Badge>}
-                  </div>
-                  <div className="text-[11px] tabular-nums text-muted-foreground">
-                    {clockOf(s.createdAt)} · {t('{count} 条', { count: s.messages.length })} ·{' '}
-                    {s.type === 'MOCK_INTERVIEW' ? t('模拟面试') : t('真实面试')}
+
+      {visible.length > 0 && (
+        <div className="grid grid-cols-[248px_minmax(0,1fr)] items-start gap-6">
+          <div className="flex flex-col gap-4">
+            {grouped.map((group) => (
+              <div key={group.key} className="flex flex-col gap-1.5">
+                <div className="px-1 text-[11px] font-medium text-ink-muted">{dayLabel(group.key)}</div>
+                {group.rows.map((s) => {
+                  const active = detail?.id === s.id;
+                  return (
+                    <div key={s.id} className="relative">
+                      {selecting && (
+                        <input
+                          type="checkbox"
+                          className="absolute left-2 top-3 z-10 size-4 accent-[hsl(var(--primary))]"
+                          aria-label={t('选择「{name}」', { name: cleanTitle(s.title) })}
+                          checked={selected.includes(s.id)}
+                          onChange={() => toggleSelect(s.id)}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => (selecting ? toggleSelect(s.id) : setOpenId(s.id))}
+                        className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                          active && !selecting
+                            ? 'border-line bg-surface-raised shadow-card'
+                            : 'border-transparent hover:bg-[var(--mx-action-secondary-hover)]'
+                        } ${selecting ? 'pl-8' : ''}`}
+                      >
+                        <div className="flex items-center gap-1.5 text-[13px] font-medium">
+                          <span className="truncate" title={s.title}>{cleanTitle(s.title)}</span>
+                          {s.status === 'ACTIVE' && <Badge variant="default">{t('进行中')}</Badge>}
+                        </div>
+                        <div className="mt-0.5 text-[11px] tabular-nums text-ink-muted">
+                          {clockOf(s.createdAt)} · {t('{count} 条', { count: s.messages.length })} ·{' '}
+                          {s.type === 'MOCK_INTERVIEW' ? t('模拟面试') : t('真实面试')}
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {detail && (
+            <div className="rounded-xl border border-line bg-surface-raised p-6 shadow-card">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[18px] font-semibold leading-[26px]">{cleanTitle(detail.title)}</h3>
+                  <div className="mt-1 text-[11px] tabular-nums text-ink-muted">
+                    {clockOf(detail.createdAt)} · {t('{count} 条', { count: detail.messages.length })} · {detail.type === 'MOCK_INTERVIEW' ? t('模拟面试') : t('真实面试')}
                   </div>
                 </div>
-              </button>
-              {!selecting && (<>
-              {s.type === 'MOCK_INTERVIEW' && reportReady && (
-                <Button size="sm" variant="secondary" onClick={() => setReportViewingId(s.id)}>
-                  <FileSearch size={13} />
-                  {t('复盘报告')}
-                </Button>
-              )}
-              {reportPending && (
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">{t('复盘报告生成中…')}</span>
-              )}
-              {canRegenerate && !regeneratingId && (
-                <Button size="sm" variant="ghost" onClick={() => void regenerate(s)} title={t('生成复盘报告')}>
-                  <FileSearch size={13} />
-                  {reportFailed ? t('重新生成报告') : t('生成复盘报告')}
-                </Button>
-              )}
-              <Button size="sm" variant="ghost" onClick={() => exportMd(s)} title={t('导出 markdown')}>
-                <Download size={13} />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setRenaming({ id: s.id, title: s.title })}
-                title={t('重命名')}
-              >
-                <Pencil size={13} />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setDeleting(s)} title={t('删除')}>
-                <Trash2 size={13} />
-              </Button>
-              </>)}
-            </div>
-            {open && (
-              <div className="border-t bg-muted/30 p-3">
-                {s.messages.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t('这场没有问答记录。')}</p>
+                <div className="flex gap-1">
+                  {detail.type === 'MOCK_INTERVIEW' && detailMeta?.report && (
+                    <Button size="sm" variant="outline" onClick={() => setReportViewingId(detail.id)}>
+                      <FileSearch size={13} />
+                      {t('复盘报告')}
+                    </Button>
+                  )}
+                  {!selecting && detailMeta?.reportStatus === 'pending' && !detailMeta.report && (
+                    <span className="self-center text-[11px] text-ink-muted">{t('复盘报告生成中…')}</span>
+                  )}
+                  {!selecting && detail.type === 'MOCK_INTERVIEW' && detail.status === 'COMPLETED' && detail.messages.some((m) => m.role === 'ASSISTANT') && !detailMeta?.report && aiReady && !regeneratingId && (
+                    <Button size="sm" variant="ghost" onClick={() => void regenerate(detail)} title={t('生成复盘报告')}>
+                      <FileSearch size={13} />
+                      {detailMeta?.reportStatus === 'error' ? t('重新生成报告') : t('生成复盘报告')}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => exportMd(detail)} title={t('导出 markdown')}>
+                    <Download size={13} />
+                    {t('导出')}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setRenaming({ id: detail.id, title: detail.title })} title={t('重命名')}>
+                    <Pencil size={13} />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleting(detail)} title={t('删除')}>
+                    <Trash2 size={13} />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 inline-flex w-fit rounded-lg border border-line bg-surface-sunken p-0.5">
+                {[
+                  { key: 'timeline' as const, label: t('问答时间线') },
+                  ...(detailMeta?.report ? [{ key: 'report' as const, label: t('复盘摘要') }] : []),
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setDetailTab(item.key)}
+                    aria-pressed={detailTab === item.key}
+                    className={`rounded-md px-3 py-1 text-[12px] transition-colors ${detailTab === item.key ? 'bg-surface-raised font-medium shadow-card' : 'text-ink-muted hover:text-ink'}`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3">
+                {detailTab === 'report' && detailMeta?.report ? (
+                  <div className="records-md"><Md text={detailMeta.report} /></div>
+                ) : detail.messages.length === 0 ? (
+                  <p className="text-[12px] text-ink-muted">{t('这场没有问答记录。')}</p>
                 ) : (
-                  <div className="flex flex-col gap-2.5">
-                    {s.messages.map((m) => (
-                      <div key={m.id}>
-                        <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">
-                          {m.role === 'INTERVIEWER' ? t('面试官') : s.type === 'MOCK_INTERVIEW' ? t('我') : t('AI 回答')}
-                        </div>
-                        <div
-                          className={`records-md whitespace-pre-wrap rounded-md border px-2.5 py-2 ${
-                            m.role === 'INTERVIEWER' ? 'bg-background' : 'border-emerald-500/20 bg-emerald-500/5'
-                          }`}
-                        >
-                          {mdToPlain(m.text)}
-                        </div>
+                  detail.messages.map((m) => (
+                    <div key={m.id}>
+                      <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-ink-muted">
+                        <span>{clockOf(m.createdAt)}</span>
+                        <span>{m.role === 'INTERVIEWER' ? t('面试官') : detail.type === 'MOCK_INTERVIEW' ? t('我') : t('AI 回答')}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-                {meta?.report && (
-                  <div className="mt-3 border-t pt-3">
-                    <div className="mb-1 text-[11px] font-medium text-muted-foreground">{t('复盘报告')}</div>
-                    <div className="records-md whitespace-pre-wrap rounded-md border border-primary/40 bg-selection px-2.5 py-2">
-                      <Md text={meta.report} />
+                      <div className={`whitespace-pre-wrap text-[13px] leading-[22px] ${m.role === 'INTERVIEWER' ? 'text-ink' : 'rounded-lg border border-line bg-surface-sunken px-3 py-2'}`}>
+                        {mdToPlain(m.text)}
+                      </div>
                     </div>
-                  </div>
+                  ))
                 )}
               </div>
-            )}
-          </Card>
-        );
-      })}
+            </div>
+          )}
         </div>
-      ))}
+      )}
 
       {renaming && (
         <div role="dialog" aria-modal="true" aria-label={t('重命名')} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">

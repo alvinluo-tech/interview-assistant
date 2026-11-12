@@ -87,7 +87,7 @@ const PAGE_TITLES: Record<Section, { h1: string; sub: string }> = {
     h1: '资料管理',
     sub: '简历、岗位和面试资料在这里统一维护。面试开始前只需要选，不用临时编辑。',
   },
-  records: { h1: '历史记录', sub: '每场面试的问答记录、每次笔试的题目与答案。' },
+  records: { h1: '每一次，都留下线索。', sub: '按会话回看问题、回答和复盘。' },
 };
 
 let startupHotkeys: Promise<void> | undefined;
