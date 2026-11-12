@@ -2,12 +2,17 @@
  * UI 基础组件：shadcn 风格（Tailwind + 设计令牌），手写轻量实现。
  */
 import {
+  Children,
+  Fragment,
   createContext,
+  isValidElement,
   useContext,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -16,7 +21,7 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { Check, ChevronDown, X } from 'lucide-react';
 import { bus } from '../lib/events';
 import { isTopModal, useModalFocus } from './useModalFocus';
 import { t } from '@/lib/i18n';
@@ -80,14 +85,293 @@ export function Textarea({ className = '', ...props }: TextareaHTMLAttributes<HT
   );
 }
 
-export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+type SelectOption = { value: string; label: ReactNode; text: string; disabled: boolean };
+type SelectGroup = { label: string | null; options: SelectOption[] };
+
+function nodeText(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(nodeText).join('');
+  if (isValidElement(node)) return nodeText((node.props as { children?: ReactNode }).children);
+  return '';
+}
+
+/** 把 `<option>` / `<optgroup>` 子节点读成可渲染的数据，保持原有 value 与顺序。 */
+export function readSelectOptions(children: ReactNode): SelectGroup[] {
+  const groups: SelectGroup[] = [];
+  const push = (label: string | null, option: SelectOption) => {
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.options.push(option);
+    else groups.push({ label, options: [option] });
+  };
+  const walk = (nodes: ReactNode, group: string | null) => {
+    Children.forEach(nodes, (child) => {
+      if (!isValidElement(child)) return;
+      const props = child.props as { value?: unknown; children?: ReactNode; disabled?: boolean; label?: string };
+      if (child.type === 'option') {
+        const value = props.value === undefined ? nodeText(props.children) : String(props.value);
+        push(group, { value, label: props.children, text: nodeText(props.children), disabled: Boolean(props.disabled) });
+      } else if (child.type === 'optgroup') {
+        walk(props.children, props.label ?? '');
+      } else if (child.type === Fragment) {
+        walk(props.children, group);
+      }
+    });
+  };
+  walk(children, null);
+  return groups;
+}
+
+/**
+ * 选择器：原生 select 换成自绘 listbox（方案 A 的打开态合同）。
+ * 保留 value/onChange/disabled/id/title/aria-label 语义，调用方无需改。
+ * 选项超过 12 项时自动带搜索框（模型库有几百项）。
+ */
+export function Select({
+  className = '',
+  children,
+  value,
+  defaultValue,
+  onChange,
+  disabled,
+  title,
+  id,
+  'aria-label': ariaLabel,
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  const groups = useMemo(() => readSelectOptions(children), [children]);
+  const flat = useMemo(() => groups.flatMap((group) => group.options), [groups]);
+  const [uncontrolled, setUncontrolled] = useState(() => (defaultValue === undefined ? '' : String(defaultValue)));
+  const current = value === undefined ? uncontrolled : String(value);
+  const selectedIndex = flat.findIndex((option) => option.value === current);
+  const selected = selectedIndex >= 0 ? flat[selectedIndex] : undefined;
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const [query, setQuery] = useState('');
+  const [rect, setRect] = useState<{ top: number; bottom: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listId = useId();
+  const searchable = flat.length > 12;
+  const trimmed = query.trim().toLowerCase();
+  const visibleGroups = trimmed
+    ? groups
+        .map((group) => ({ ...group, options: group.options.filter((option) => option.text.toLowerCase().includes(trimmed)) }))
+        .filter((group) => group.options.length > 0)
+    : groups;
+  const visible = visibleGroups.flatMap((group) => group.options);
+  // 外部 className 里已经写了高度/宽度时以它为准（基础类与工具类的先后由产物 CSS 决定，不能赌顺序）。
+  const hasHeight = /(^|\s)h-\S/.test(className);
+  const hasWidth = /(^|\s)w-\S/.test(className);
+
+  const place = () => {
+    const node = triggerRef.current;
+    if (!node) return;
+    const box = node.getBoundingClientRect();
+    setRect({ top: box.top, bottom: box.bottom, left: box.left, width: box.width });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const follow = () => place();
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (listRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      window.removeEventListener('scroll', follow, true);
+      window.removeEventListener('resize', follow);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [open]);
+
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    // 弹层要等 rect 量好才会渲染，所以焦点也等它挂载后再给（否则 Esc 会落到 Dialog 上）。
+    if (!open) {
+      focusedRef.current = false;
+      return;
+    }
+    if (!rect || focusedRef.current) return;
+    const node = searchable ? searchRef.current : listRef.current;
+    if (!node) return;
+    focusedRef.current = true;
+    node.focus({ preventScroll: true });
+  }, [open, rect, searchable]);
+
+  const commit = (next: string) => {
+    if (value === undefined) setUncontrolled(next);
+    setOpen(false);
+    setQuery('');
+    requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+    if (next !== current) {
+      onChange?.({ target: { value: next } } as unknown as ChangeEvent<HTMLSelectElement>);
+    }
+  };
+
+  const openList = () => {
+    if (disabled) return;
+    setQuery('');
+    setActive(selectedIndex >= 0 ? selectedIndex : 0);
+    setOpen(true);
+  };
+
+  const move = (delta: number) => {
+    if (visible.length === 0) return;
+    let index = active;
+    for (let step = 0; step < visible.length; step += 1) {
+      index = (index + delta + visible.length) % visible.length;
+      if (!visible[index].disabled) break;
+    }
+    setActive(index);
+  };
+
+  const onListKeyDown = (event: React.KeyboardEvent<HTMLDivElement | HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      // 只关自己：Dialog 的 Esc 处理挂在 document 上，这里先截断。
+      event.preventDefault();
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation?.();
+      setOpen(false);
+      triggerRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      move(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      setActive(event.key === 'Home' ? 0 : visible.length - 1);
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (event.key === ' ' && searchable && event.target === searchRef.current) return;
+      event.preventDefault();
+      const option = visible[active];
+      if (option && !option.disabled) commit(option.value);
+      return;
+    }
+    if (event.key === 'Tab') setOpen(false);
+  };
+
+  const onTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openList();
+    }
+  };
+
+  const spaceBelow = rect ? window.innerHeight - rect.bottom - 12 : 0;
+  const spaceAbove = rect ? rect.top - 12 : 0;
+  const flip = rect ? spaceBelow < 200 && spaceAbove > spaceBelow : false;
+  const listStyle = rect
+    ? {
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - Math.max(rect.width, 180) - 8)),
+        width: Math.max(rect.width, 180),
+        maxHeight: Math.max(160, Math.min(320, flip ? spaceAbove : spaceBelow)),
+        ...(flip ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+      }
+    : undefined;
+
   return (
-    <select
-      className={`flex h-[42px] w-full rounded-md border border-line-control bg-surface-raised px-3 py-1 text-sm transition-[border-color,box-shadow] duration-[120ms] focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${className}`}
-      {...props}
-    >
-      {children}
-    </select>
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        id={id}
+        title={title}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        disabled={disabled}
+        onClick={() => (open ? setOpen(false) : openList())}
+        onKeyDown={onTriggerKeyDown}
+        className={`flex ${hasHeight ? '' : 'h-[42px]'} ${hasWidth ? '' : 'w-full'} items-center justify-between gap-2 rounded-md border border-line-control bg-surface-raised px-3 py-1 text-left text-sm transition-[border-color,box-shadow] duration-[120ms] focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:bg-[var(--mx-action-disabled-bg)] disabled:text-[var(--mx-action-disabled-text)] ${className}`}
+      >
+        <span className="truncate">{selected?.label ?? ''}</span>
+        <ChevronDown size={14} className={`shrink-0 text-ink-muted transition-transform duration-[120ms] ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && rect && listStyle
+        ? createPortal(
+            <div
+              ref={listRef}
+              id={listId}
+              role="listbox"
+              aria-label={ariaLabel}
+              data-modal-popup=""
+              tabIndex={-1}
+              onKeyDown={onListKeyDown}
+              className="fixed z-[70] flex flex-col overflow-hidden rounded-xl border border-line bg-surface-overlay p-1 shadow-popover outline-hidden"
+              style={{ ...listStyle, borderRadius: 12 }}
+            >
+              {searchable && (
+                <div className="px-1 pb-1">
+                  <input
+                    ref={searchRef}
+                    value={query}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setActive(0);
+                    }}
+                    onKeyDown={onListKeyDown}
+                    aria-label={t('搜索选项')}
+                    placeholder={t('搜索选项')}
+                    className="h-8 w-full rounded-md border border-line-control bg-surface-base px-2 text-[13px] focus-visible:border-ring focus-visible:outline-hidden"
+                  />
+                </div>
+              )}
+              {visible.length === 0 ? (
+                <div className="px-2 py-6 text-center text-[12px] text-ink-muted">{t('没有匹配的选项')}</div>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto" onKeyDown={onListKeyDown}>
+                  {visibleGroups.map((group, groupIndex) => (
+                    <div key={`${group.label ?? ''}-${groupIndex}`} role="group" aria-label={group.label ?? undefined}>
+                      {group.label && (
+                        <div className="px-2 pb-1 pt-2 text-[11px] font-medium text-ink-muted">{group.label}</div>
+                      )}
+                      {group.options.map((option) => {
+                        const index = visible.indexOf(option);
+                        const isActive = index === active;
+                        const isSelected = option.value === current;
+                        return (
+                          <button
+                            key={`${option.value}-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            disabled={option.disabled}
+                            data-value={option.value}
+                            onMouseEnter={() => setActive(index)}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => commit(option.value)}
+                            className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors duration-[120ms] ${
+                              isActive ? 'bg-selection text-selection-fg' : 'text-ink'
+                            } disabled:cursor-not-allowed disabled:opacity-45`}
+                          >
+                            <span className="truncate">{option.label}</span>
+                            {isSelected && <Check size={13} className="shrink-0 text-primary" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>,
+            // 放在当前 Dialog 内部：模态的焦点陷阱只认自己的子树；
+            // position: fixed 不会被 Dialog 的 overflow 裁掉。
+            (triggerRef.current?.closest('[role="dialog"]') as HTMLElement | null) ?? document.body,
+          )
+        : null}
+    </>
   );
 }
 
@@ -148,7 +432,9 @@ export function Slider({
 }) {
   const progress = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
-    <div className={`relative flex h-6 w-full items-center ${className}`}>
+    <div
+      className={`relative flex h-6 w-full items-center rounded-full has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/35 ${className}`}
+    >
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 h-1 rounded-full"
@@ -165,7 +451,7 @@ export function Slider({
         aria-label={ariaLabel}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="relative h-6 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow"
+        className="relative h-6 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow"
       />
     </div>
   );
@@ -212,7 +498,7 @@ export function Dialog({
             <button
               type="button"
               onClick={dismiss}
-              className="absolute right-3 top-3 rounded p-1 text-muted-foreground hover:bg-accent"
+              className="absolute right-2 top-2 flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-[120ms] hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35"
               aria-label={t('关闭')}
             >
               <X size={16} />

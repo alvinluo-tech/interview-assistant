@@ -247,7 +247,7 @@ function InterviewShell({
 
   return (
     <div
-      className={`relative flex h-screen flex-col gap-1.5 overflow-hidden rounded-xl p-2 ${isDark ? 'overlay-dark' : ''}`}
+      className={`relative flex h-full flex-col gap-1.5 overflow-hidden rounded-xl p-2 ${isDark ? 'overlay-dark' : ''}`}
       data-overlay-theme={skin.theme}
       style={{
         color: skin.textColor,

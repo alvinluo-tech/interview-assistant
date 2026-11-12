@@ -205,9 +205,9 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
 
           <section>
             <h2 className="mb-3 text-[13px] font-semibold">{t('这一场的背景')}</h2>
-            <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+            <div className="divide-y divide-line rounded-lg border border-line bg-surface-raised">
               <SettingLine icon={Briefcase} title={t('目标岗位')} desc={goal ? (goal.companyName ? `${goal.companyName} · ${goal.name}` : goal.name) : undefined}>
-                <div className="w-[188px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]">
+                <div className="w-[188px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]">
                   <Select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
                     {goals.length === 0 && <option value="">{t('先去资料管理新建')}</option>}
                     {goals.map((g) => (
@@ -217,7 +217,7 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
                 </div>
               </SettingLine>
               <SettingLine icon={FileText} title={t('使用简历')}>
-                <div className="w-[188px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]">
+                <div className="w-[188px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]">
                   <Select value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
                     {resumes.length === 0 && <option value="">{t('先去资料管理上传')}</option>}
                     {resumes.map((r) => (
@@ -258,16 +258,16 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
 
           <section>
             <h2 className="mb-3 text-[13px] font-semibold">{t('这次怎么练')}</h2>
-            <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+            <div className="divide-y divide-line rounded-lg border border-line bg-surface-raised">
               <SettingLine icon={Gauge} title={t('难度')}>
-                <div className="w-[132px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]">
+                <div className="w-[132px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]">
                   <Select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
                     {DIFFICULTY.map((d) => <option key={d.key} value={d.key}>{t(d.label)}</option>)}
                   </Select>
                 </div>
               </SettingLine>
               <SettingLine icon={ListOrdered} title={t('题量')}>
-                <div className="w-[132px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]">
+                <div className="w-[132px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]">
                   <Select value={String(turnBudget)} onChange={(e) => setTurnBudget(Number(e.target.value))}>
                     {ROUNDS.map((r) => <option key={r} value={r}>{t('{n} 题', { n: r })}</option>)}
                   </Select>
@@ -319,7 +319,7 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
         </div>
 
         <aside className="sticky top-4 flex flex-col gap-3">
-          <div className="rounded-xl border border-line bg-surface-raised p-5 shadow-card">
+          <div className="rounded-lg border border-line bg-surface-raised p-5 shadow-card">
             <span className="flex size-9 items-center justify-center rounded-lg bg-selection text-primary">
               <Check size={16} />
             </span>

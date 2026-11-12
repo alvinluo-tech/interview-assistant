@@ -1287,6 +1287,8 @@ export const ptBr: Record<string, string> = {
   "未填写公司": "Empresa não preenchida",
   "公司：{company}": "Empresa: {company}",
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Ainda não há material. Importe um currículo ou crie uma vaga para escolher na entrevista.",
+  "搜索选项": "Buscar opções",
+  "没有匹配的选项": "Nenhuma opção correspondente",
   "语音通话": "Chamada de voz",
   "语音通话已停止": "Chamada de voz encerrada",
   "语音识别中断，已自动重连": "O reconhecimento de voz caiu: reconectado",

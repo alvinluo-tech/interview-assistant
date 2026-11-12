@@ -15,6 +15,7 @@ import {
   DialogTitle,
   Input,
   SectionHeader,
+  Select,
   showToast,
 } from '@/ui/primitives';
 import {
@@ -23,6 +24,7 @@ import {
   type ExamSessionRecord,
   type InterviewSession,
 } from '@/lib/backend';
+import { EXAM_MODES, type ExamModeKey } from '@/lib/examEngine';
 import { generateMockReport, generateWeakPoints, mockMeta } from '@/lib/mock';
 import {currentMockKnowledge} from '@/lib/sessionKnowledge';
 import { useAiReady } from '@/lib/aiSettings';
@@ -34,6 +36,13 @@ import { useSetting } from '@/lib/store';
 
 const DAY_ORDER = ['today', 'yesterday', 'earlier'] as const;
 type DayBucket = (typeof DAY_ORDER)[number];
+
+/** 历史里存的是模式 key（quick / programming…），展示时换成可翻译的名称；未知旧值原样显示。 */
+function modeLabel(mode?: string): string {
+  if (!mode) return '';
+  const info = EXAM_MODES[mode as ExamModeKey];
+  return info ? t(info.label) : mode;
+}
 
 function dayLabel(key: DayBucket): string {
   return key === 'today' ? t('今天') : key === 'yesterday' ? t('昨天') : t('更早');
@@ -524,7 +533,7 @@ function ExamRecords() {
                         </div>
                         <div className="mt-0.5 text-[11px] tabular-nums text-ink-muted">
                           {clockOf(r.createdAt)} · {t('{count} 题', { count: r.questions.length })}
-                          {r.mode ? ` · ${r.mode}` : ''}
+                          {r.mode ? ` · ${modeLabel(r.mode)}` : ''}
                         </div>
                       </button>
                     </div>
@@ -541,14 +550,14 @@ function ExamRecords() {
                   <h3 className="text-[18px] font-semibold leading-[26px]">{cleanTitle(detail.title)}</h3>
                   <div className="mt-1 text-[11px] tabular-nums text-ink-muted">
                     {clockOf(detail.createdAt)} · {t('{count} 题', { count: detail.questions.length })}
-                    {detail.mode ? ` · ${detail.mode}` : ''}
+                    {detail.mode ? ` · ${modeLabel(detail.mode)}` : ''}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <label className="sr-only" htmlFor={`outcome-${detail.id}`}>{t('结果')}</label>
-                  <select
+                  <Select
                     id={`outcome-${detail.id}`}
-                    className="h-8 rounded-md border border-line bg-surface-base px-2 text-[12px]"
+                    className="h-8 w-[124px] gap-1 border-line bg-surface-base px-2 text-[12px]"
                     value={detail.outcome ?? ''}
                     onChange={(e) =>
                       setRecords((prev) =>
@@ -562,7 +571,7 @@ function ExamRecords() {
                     <option value="PASSED">{t('过了')}</option>
                     <option value="FAILED">{t('没过')}</option>
                     <option value="WAITING">{t('还在等')}</option>
-                  </select>
+                  </Select>
                   <Button size="sm" variant="ghost" onClick={() => setDeleting(detail)} aria-label={t('删除')} title={t('删除')}>
                     <Trash2 size={13} />
                   </Button>

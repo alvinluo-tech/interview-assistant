@@ -260,6 +260,23 @@ function OverlayStyleTab() {
   );
   const [presetName, setPresetName] = useState('');
   const [previewOpen, setPreviewOpen] = useState<'interview' | 'exam' | null>(null);
+  // 预览窗口按可用空间等比缩小：默认 400×620 / 420×520 在 600 高的窗口里放不下，
+  // 直接按原尺寸渲染会把底栏裁掉。真实浮窗仍是自身窗口尺寸，这里只调整预览。
+  const [viewport, setViewport] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  useEffect(() => {
+    if (!previewOpen) return;
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [previewOpen]);
+  const frameWidth = previewOpen === 'interview' ? style.interviewWidth : style.examWidth;
+  const frameHeight = previewOpen === 'interview' ? style.interviewHeight : style.examHeight;
+  // 顶部说明 + 底部关闭按钮 + 外边距一共约 150px。
+  const frameScale = previewOpen
+    ? Math.max(0.4, Math.min(1, (viewport.w - 96) / frameWidth, (viewport.h - 150) / frameHeight))
+    : 1;
+
 
   const patch = (p: Partial<OverlayStyle>) => setStyle({ ...style, ...p });
 
@@ -521,18 +538,25 @@ function OverlayStyleTab() {
               {previewOpen === 'interview' ? t('面试浮窗预览') : t('笔试浮窗预览')}{t('（示例内容，非真实会话）')}
             </div>
             <div
-              className="overflow-hidden rounded-xl shadow-2xl"
-              style={{
-                width: previewOpen === 'interview' ? style.interviewWidth : style.examWidth,
-                height: previewOpen === 'interview' ? style.interviewHeight : style.examHeight,
-                backgroundImage:
-                  'repeating-conic-gradient(rgba(15,23,42,0.07) 0% 25%, rgba(148,163,184,0.14) 0% 50%)',
-                backgroundSize: '16px 16px',
-              }}
+              className="relative shrink-0"
+              style={{ width: Math.round(frameWidth * frameScale), height: Math.round(frameHeight * frameScale) }}
             >
-              <SimulatedPlatform mode={previewOpen}>
-                {previewOpen === 'interview' ? <InterviewOverlay preview /> : <ExamOverlay preview />}
-              </SimulatedPlatform>
+              <div
+                className="absolute left-0 top-0 overflow-hidden rounded-xl shadow-2xl"
+                style={{
+                  width: frameWidth,
+                  height: frameHeight,
+                  transform: frameScale < 1 ? `scale(${frameScale})` : undefined,
+                  transformOrigin: 'top left',
+                  backgroundImage:
+                    'repeating-conic-gradient(rgba(15,23,42,0.07) 0% 25%, rgba(148,163,184,0.14) 0% 50%)',
+                  backgroundSize: '16px 16px',
+                }}
+              >
+                <SimulatedPlatform mode={previewOpen}>
+                  {previewOpen === 'interview' ? <InterviewOverlay preview /> : <ExamOverlay preview />}
+                </SimulatedPlatform>
+              </div>
             </div>
             <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(null)}>
               {t('关闭预览')}

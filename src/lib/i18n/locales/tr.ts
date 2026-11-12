@@ -1287,6 +1287,8 @@ export const tr: Record<string, string> = {
   "未填写公司": "Şirket girilmedi",
   "公司：{company}": "Şirket: {company}",
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Henüz materyal yok. Bir özgeçmiş içe aktarın veya pozisyon oluşturun; mülakatta doğrudan seçebilirsiniz.",
+  "搜索选项": "Seçenek ara",
+  "没有匹配的选项": "Eşleşen seçenek yok",
   "语音通话": "Sesli arama",
   "语音通话已停止": "Sesli arama durduruldu",
   "语音识别中断，已自动重连": "Konuşma tanıma kesildi: yeniden bağlandı",

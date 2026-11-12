@@ -1287,6 +1287,8 @@ export const es419: Record<string, string> = {
   "未填写公司": "Empresa sin rellenar",
   "公司：{company}": "Empresa: {company}",
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Aún no hay material. Importa un currículum o crea un puesto y podrás elegirlo en la entrevista.",
+  "搜索选项": "Buscar opciones",
+  "没有匹配的选项": "No hay opciones que coincidan",
   "语音通话": "Llamada de voz",
   "语音通话已停止": "Llamada de voz detenida",
   "语音识别中断，已自动重连": "Se perdió el reconocimiento de voz: reconectado",

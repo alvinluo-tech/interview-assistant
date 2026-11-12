@@ -292,7 +292,7 @@ function ExamShell({
 
   return (
     <div
-      className={`relative flex h-screen flex-col overflow-hidden rounded-xl border text-[13px] ${isDark ? 'overlay-dark' : ''}`}
+      className={`relative flex h-full flex-col overflow-hidden rounded-xl border text-[13px] ${isDark ? 'overlay-dark' : ''}`}
       data-overlay-theme={skin.theme}
       style={{
         color: skin.textColor,

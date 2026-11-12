@@ -140,7 +140,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
           <h2 className="mb-3 text-[13px] font-semibold">{t('这一场的背景')}</h2>
           <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface-raised">
             <SettingLine icon={Target} title={t('目标岗位')}>
-              <div className="w-[188px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]"><Select value={goalId ?? ''} onChange={(e) => setGoalId(e.target.value || null)}>
+              <div className="w-[188px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]"><Select value={goalId ?? ''} onChange={(e) => setGoalId(e.target.value || null)}>
                 {goals.length === 0 && <option value="">{t('先去资料管理新建')}</option>}
                 {goals.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -150,7 +150,7 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
               </Select></div>
             </SettingLine>
             <SettingLine icon={FileText} title={t('使用简历')}>
-              <div className="w-[168px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]"><Select value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
+              <div className="w-[168px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]"><Select value={resumeId} onChange={(e) => setResumeId(e.target.value)}>
                 {resumes.length === 0 && <option value="">{t('先去资料管理上传')}</option>}
                 {resumes.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -247,9 +247,9 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
               <div className="w-40">
                 <Slider min={300} max={6000} step={100} value={silenceGateMs} onChange={setSilenceGateMs} />
                 <div className="mt-1 flex justify-between text-[10px] text-ink-muted">
-                  <button type="button" className="hover:text-ink" onClick={() => setSilenceGateMs(1000)}>{t('灵敏')}</button>
-                  <button type="button" className="hover:text-ink" onClick={() => setSilenceGateMs(1600)}>{t('适中')}</button>
-                  <button type="button" className="hover:text-ink" onClick={() => setSilenceGateMs(2200)}>{t('稳妥')}</button>
+                  <button type="button" className="-my-2 inline-flex min-h-8 items-center rounded-md px-1.5 hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35" onClick={() => setSilenceGateMs(1000)}>{t('灵敏')}</button>
+                  <button type="button" className="-my-2 inline-flex min-h-8 items-center rounded-md px-1.5 hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35" onClick={() => setSilenceGateMs(1600)}>{t('适中')}</button>
+                  <button type="button" className="-my-2 inline-flex min-h-8 items-center rounded-md px-1.5 hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35" onClick={() => setSilenceGateMs(2200)}>{t('稳妥')}</button>
                 </div>
               </div>
             </SettingLine>

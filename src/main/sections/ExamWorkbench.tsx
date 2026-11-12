@@ -9,7 +9,7 @@ import { Check, Copy, FolderPlus, Keyboard, Laptop, Layers, Monitor, MonitorSmar
 import { Badge, Button, Input, Select, Switch, Textarea, showToast } from '@/ui/primitives';
 import { DisclosureLine, SettingLine } from './SettingLine';
 import { useData, saveGoal, readData, updateExamSession, type Goal, type ExamSessionRecord } from '@/lib/backend';
-import { useSetting, setSetting } from '@/lib/store';
+import { useSetting, setSetting, type ExamCustomization } from '@/lib/store';
 import { t } from '@/lib/i18n';
 
 import {
@@ -87,7 +87,7 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
     <div className="grid grid-cols-[minmax(0,1fr)_240px] items-start gap-6">
       <div className="flex min-w-0 flex-col gap-8">
         {interrupted && (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-selection px-4 py-3 text-[12px]">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-selection px-4 py-3 text-[12px]">
             <span className="flex-1 text-selection-fg">
               {t('上次笔试尚未完成：{title}。恢复后可继续作答或重试保存；如提示有未保存内容，请勿退出应用。', { title: interrupted.title })}
             </span>
@@ -110,7 +110,7 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
                   type="button"
                   onClick={() => setMode(key)}
                   aria-pressed={on}
-                  className={`rounded-xl border p-4 text-left transition-colors duration-[120ms] ${
+                  className={`rounded-lg border p-4 text-left transition-colors duration-[120ms] ${
                     on ? 'border-primary bg-selection' : 'border-line bg-surface-raised hover:bg-[var(--mx-action-secondary-hover)]'
                   }`}
                 >
@@ -128,14 +128,14 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
 
         <section>
           <h2 className="mb-3 text-[13px] font-semibold">{t('截图与显示')}</h2>
-          <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+          <div className="divide-y divide-line rounded-lg border border-line bg-surface-raised">
             <SettingLine
               icon={Monitor}
               title={t('截图范围')}
               desc={platform?.platform === 'macos' ? t('屏幕模式截取鼠标所在显示器，并排除本应用窗口；前台窗口模式只截取最靠前的其他应用窗口。') : t('默认截取屏幕；前台窗口模式只捕获当前题目窗口。空白图片会阻止发送。')}
               align="center"
             >
-              <div className="w-[132px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]">
+              <div className="w-[132px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]">
                 <Select value={captureMode} disabled={platform?.screenCapture === false} title={platform?.screenCapture === false ? t('当前系统或权限不支持截图，无法选择截图范围') : undefined} onChange={e=>setCaptureMode(e.target.value)}>
                   <option value="screen">{t('当前屏幕')}</option>
                   <option value="window">{t('前台窗口')}</option>
@@ -148,7 +148,7 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
             <DisclosureLine
               icon={SlidersHorizontal}
               title={t('答题与显示偏好')}
-              desc={customizationSummary()}
+              desc={customizationSummary(mode, customization as Partial<ExamCustomization>)}
               open={prefsOpen}
               onToggle={() => setPrefsOpen((v) => !v)}
             />
@@ -232,9 +232,9 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
 
         <section>
           <h2 className="mb-3 text-[13px] font-semibold">{t('这一场的背景')}</h2>
-          <div className="divide-y divide-line rounded-xl border border-line bg-surface-raised">
+          <div className="divide-y divide-line rounded-lg border border-line bg-surface-raised">
             <SettingLine icon={Target} title={t('目标岗位')} align="center">
-              <div className="w-[188px] [&>select]:h-9 [&>select]:w-full [&>select]:border-line [&>select]:text-[13px]">
+              <div className="w-[188px] [&>button]:h-9 [&>button]:w-full [&>button]:border-line [&>button]:text-[13px]">
                 <Select value={goalId ?? ''} onChange={(e) => setGoalId(e.target.value || null)}>
                   {goals.length === 0 && <option value="">{t('不关联岗位')}</option>}
                   {goals.map((g) => (<option key={g.id} value={g.id}>{g.companyName ? `${g.companyName} · ${g.name}` : g.name}</option>))}
@@ -258,7 +258,7 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
       </div>
 
       <aside className="sticky top-4 flex flex-col gap-4">
-        <div className="rounded-xl border border-line bg-surface-raised p-5 shadow-card">
+        <div className="rounded-lg border border-line bg-surface-raised p-5 shadow-card">
           <div className="mb-4 flex size-9 items-center justify-center rounded-lg bg-selection text-primary">
             <Check size={16} />
           </div>

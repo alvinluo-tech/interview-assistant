@@ -33,12 +33,18 @@ function sync() {
   for (const child of wanted) {if(!inert.has(child))inert.set(child,child.inert);child.inert=true;}
   stack.forEach((entry,index)=>{entry.element.style.zIndex=String(50+index*10);});
 }
+const inPopup = (target: EventTarget | null) =>
+  target instanceof Element && !!target.closest('[data-modal-popup]');
 function onFocus(event: FocusEvent) {
+  // 选择器弹层挂在 Dialog 内的自由浮层：焦点进去时不要把焦点抢回对话框。
+  if (inPopup(event.target)) return;
   const entry=top();if(entry && !entry.element.contains(event.target as Node))focus(entry);
 }
 function onKey(event: KeyboardEvent) {
   const entry=top();if(!entry)return;
   if(event.isComposing)return;
+  // 弹层自己处理 Esc 与 Tab；这里放手，否则会先关掉整个 Dialog。
+  if(inPopup(event.target))return;
   if(event.key==='Escape') {
     // A locked modal must also stop Escape from dismissing a lower layer.
     event.preventDefault();event.stopImmediatePropagation();entry.escape.current?.();return;

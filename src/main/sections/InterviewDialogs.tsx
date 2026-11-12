@@ -93,12 +93,12 @@ export function MaterialsDialog({
       {full && <p className="mt-2 text-[11px] text-ink-muted">{t('最多选 {count} 份；先取消一份，再继续添加。', { count: MATERIAL_LIMIT })}</p>}
       <div className="mt-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button type="button" className="text-xs text-ink-muted hover:text-ink disabled:opacity-40" disabled={draft.length === 0} onClick={() => setDraft([])}>
+          <button type="button" className="-ml-2 inline-flex h-8 items-center rounded-md px-2 text-xs text-ink-muted hover:bg-[var(--mx-action-secondary-hover)] hover:text-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35 disabled:opacity-40" disabled={draft.length === 0} onClick={() => setDraft([])}>
             {t('清空')}
           </button>
           <button
             type="button"
-            className="text-xs text-primary hover:underline"
+            className="inline-flex h-8 items-center rounded-md px-2 text-xs text-primary hover:bg-[var(--mx-action-secondary-hover)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/35"
             onClick={() => {
               onClose();
               onManage();

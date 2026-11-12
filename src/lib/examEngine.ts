@@ -195,9 +195,17 @@ function customization(): ExamCustomization {
   return { ...DEFAULT_EXAM_CUSTOMIZATION, ...getSetting('exam.customization', DEFAULT_EXAM_CUSTOMIZATION) };
 }
 
-export function customizationSummary(): string {
-  const c = customization();
-  const mode = examModeInfo(state.mode);
+/**
+ * 摘要用于工作台与浮窗两处。
+ * 工作台传当前选择（mode 与尚未启动的 customization），浮窗不传时沿用运行中的状态，
+ * 否则刚切换模式、还没开始的那一栏会显示上一个模式的名字。
+ */
+export function customizationSummary(
+  selectedMode?: ExamModeKey,
+  selectedCustomization?: Partial<ExamCustomization>,
+): string {
+  const c: ExamCustomization = { ...DEFAULT_EXAM_CUSTOMIZATION, ...(selectedCustomization ?? customization()) };
+  const mode = examModeInfo(selectedMode ?? state.mode);
   const parts: string[] = [t('{label} · 最多 {n} 页', { label: t(mode.shortLabel), n: mode.maxScreenshotPages })];
   parts.push(c.answerLanguage === 'auto' ? t('答案自动') : t('答案用{lang}', { lang: c.answerLanguage }));
   if (c.programmingLanguage !== 'auto') parts.push(t('编程题 {lang}', { lang: c.programmingLanguage }));
