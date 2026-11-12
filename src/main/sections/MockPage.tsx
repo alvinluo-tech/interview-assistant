@@ -4,14 +4,12 @@ import { useAiReady } from '@/lib/aiSettings';
  * 会话与复盘全部落 data.json：支持「有一场还没结束」续场与历史回看。
  */
 import { useState } from 'react';
-import { Briefcase, Check, Clock, FileSearch, FileText, FolderOpen, Gauge, ListOrdered, Play, SlidersHorizontal, Sparkles, Volume2 } from 'lucide-react';
+import { Briefcase, Check, Clock, FileSearch, FileText, FolderOpen, Gauge, ListOrdered, Play, SlidersHorizontal, Volume2 } from 'lucide-react';
 import {
   Button,
   Card,
   ConfirmDialog,
   Select,
-  Slider,
-  Switch,
   showToast,
 } from '@/ui/primitives';
 import {
@@ -29,9 +27,10 @@ import { captureKnowledge } from '@/lib/knowledgeContext';
 import { cmd } from '@/lib/bridge';
 import { activeMockSession, mockMeta } from '@/lib/mock';
 import { MockReportDialog } from './MockReportDialog';
-import { DisclosureLine, SettingLine } from './SettingLine';
+import { SettingLine, SettingNavigationRow } from './SettingLine';
 import { SPEECH_LANGUAGES } from '@/lib/speechProfile';
-import {SpeechProfilePanel} from './SpeechProfilePanel';
+import { LanguageDialog, MaterialsDialog } from './InterviewDialogs';
+import { MockAdvancedDialog } from './MockDialogs';
 import {useSpeechProfile} from '@/lib/speechPreferences';
 import { t } from '@/lib/i18n';
 
@@ -226,32 +225,13 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
                   </Select>
                 </div>
               </SettingLine>
-              <DisclosureLine
+              <SettingNavigationRow
                 icon={FolderOpen}
                 title={t('关联资料')}
                 desc={materials.length === 0 ? t('还没有面试资料，先在「资料管理」里上传或新建一份') : t('{count} 份 · {names}', { count: materialIds.length, names: materials.filter((m) => materialIds.includes(m.id)).map((m) => m.name).join('、') || t('未选') })}
-                open={materialOpen}
-                onToggle={() => setMaterialOpen((v) => !v)}
+                onOpen={() => setMaterialOpen(true)}
+                testId="open-mock-materials"
               />
-              {materialOpen && (
-                <div className="flex flex-wrap gap-1.5 px-4 py-3">
-                  {materials.length === 0 && <span className="text-[11px] text-ink-muted">{t('还没有面试资料，先在「资料管理」里上传或新建一份')}</span>}
-                  {materials.map((m) => {
-                    const on = materialIds.includes(m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setMaterialIds(on ? materialIds.filter((x) => x !== m.id) : [...materialIds, m.id].slice(0, 20))}
-                        className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${on ? 'border-primary/40 bg-selection text-selection-fg' : 'border-line hover:bg-[var(--mx-action-secondary-hover)]'}`}
-                      >
-                        {m.name}
-                      </button>
-                    );
-                  })}
-                  <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => onNavigate?.('resource')}>{t('管理资料')}</button>
-                </div>
-              )}
             </div>
             <p className="mt-2 text-[11px] text-ink-muted">{t('只使用本场选定的资料组织回答。')}</p>
           </section>
@@ -273,41 +253,20 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
                   </Select>
                 </div>
               </SettingLine>
-              <DisclosureLine
+              <SettingNavigationRow
                 icon={Volume2}
                 title={t('语言与面试官声音')}
                 desc={t('{lang} · {voice}', { lang: SPEECH_LANGUAGES.find((l) => l.id === speechProfile.answerLanguage)?.name ?? speechProfile.answerLanguage, voice: t('系统默认声音，可试听') })}
-                open={speechOpen}
-                onToggle={() => setSpeechOpen((v) => !v)}
+                onOpen={() => setSpeechOpen(true)}
+                testId="open-mock-language"
               />
-              {speechOpen && (
-                <div className="px-4 py-3">
-                  <SpeechProfilePanel mock value={speechProfile} disabled={starting} onChange={value=>void saveSpeechProfile(value).catch(error=>showToast({type:'error',title:t('语言设置保存失败'),description:String(error)}))}/>
-                </div>
-              )}
-              <DisclosureLine
+              <SettingNavigationRow
                 icon={SlidersHorizontal}
                 title={t('高级训练偏好')}
                 desc={t('项目与知识题的比例、AI 辅助提示')}
-                open={advancedOpen}
-                onToggle={() => setAdvancedOpen((v) => !v)}
+                onOpen={() => setAdvancedOpen(true)}
+                testId="open-mock-advanced"
               />
-              {advancedOpen && (
-                <div className="space-y-4 px-4 py-3">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-[11px] text-ink-muted">{t('八股占比')}</span>
-                      <span className="text-[11px] tabular-nums text-ink-muted">{basicsRatio}%</span>
-                    </div>
-                    <Slider min={0} max={100} step={10} value={basicsRatio} onChange={setBasicsRatio} />
-                    <div className="mt-0.5 text-[11px] text-ink-muted">{t('100% = 只问八股，0% = 只问项目')}</div>
-                  </div>
-                  <SettingLine icon={Sparkles} title={t('AI 辅助提示')} desc={t('开启后，每个问题旁会给出提示要点（练手用，正式面试别开）。')}>
-                    <Switch ariaLabel={t('AI 辅助提示')} checked={assistMode} onCheckedChange={setAssistMode} />
-                  </SettingLine>
-                  <p className="text-[11px] leading-[18px] text-ink-muted">{t('报告包含整体表现、逐题点评与改进建议；生成后保存在这场记录里，可在「历史记录」回看。')}</p>
-                </div>
-              )}
             </div>
           </section>
 
@@ -351,6 +310,31 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
         }}
       />
       <MockReportDialog session={reportViewing} onClose={() => setReportViewingId(null)} />
+      <MaterialsDialog
+        open={materialOpen}
+        onClose={() => setMaterialOpen(false)}
+        materials={materials}
+        value={materialIds}
+        onSave={(ids) => setMaterialIds(ids)}
+        onManage={() => onNavigate?.('resource')}
+      />
+      <LanguageDialog
+        open={speechOpen}
+        onClose={() => setSpeechOpen(false)}
+        value={speechProfile}
+        disabled={starting}
+        onSave={(next) => void saveSpeechProfile(next).catch((error) => showToast({ type: 'error', title: t('语言设置保存失败'), description: String(error) }))}
+      />
+      <MockAdvancedDialog
+        open={advancedOpen}
+        onClose={() => setAdvancedOpen(false)}
+        basicsRatio={basicsRatio}
+        assistMode={assistMode}
+        onSave={(next) => {
+          setBasicsRatio(next.basicsRatio);
+          setAssistMode(next.assistMode);
+        }}
+      />
     </>
   );
 }

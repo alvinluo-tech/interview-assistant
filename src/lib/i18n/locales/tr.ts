@@ -1294,6 +1294,8 @@ export const tr: Record<string, string> = {
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Henüz materyal yok. Bir özgeçmiş içe aktarın veya pozisyon oluşturun; mülakatta doğrudan seçebilirsiniz.",
   "搜索选项": "Seçenek ara",
   "没有匹配的选项": "Eşleşen seçenek yok",
+  "这些偏好只影响这一场笔试，点保存后生效。": "Yalnızca bu sınav oturumunu etkiler; kaydedince uygulanır.",
+  "这些偏好只影响这一场模拟面试，点保存后生效。": "Yalnızca bu deneme mülakatını etkiler; kaydedince uygulanır.",
   "语音通话": "Sesli arama",
   "语音通话已停止": "Sesli arama durduruldu",
   "语音识别中断，已自动重连": "Konuşma tanıma kesildi: yeniden bağlandı",

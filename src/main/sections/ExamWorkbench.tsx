@@ -5,9 +5,10 @@ import { useAiReady } from '@/lib/aiSettings';
  */
 import { useEffect, useState } from 'react';
 import { getPlatformCapabilities, isTauri, type PlatformCapabilities } from '@/lib/bridge';
-import { Check, Copy, FolderPlus, Keyboard, Laptop, Layers, Monitor, MonitorSmartphone, Play, SlidersHorizontal, Sparkles, Target, Video, Zap } from 'lucide-react';
-import { Badge, Button, Input, Select, Switch, Textarea, showToast } from '@/ui/primitives';
-import { DisclosureLine, SettingLine } from './SettingLine';
+import { Check, FolderPlus, Laptop, Layers, Monitor, Play, SlidersHorizontal, Sparkles, Target, Video, Zap } from 'lucide-react';
+import { Badge, Button, Input, Select, showToast } from '@/ui/primitives';
+import { DisclosureLine, SettingLine, SettingNavigationRow } from './SettingLine';
+import { ExamPreferencesDialog } from './ExamDialogs';
 import { useData, saveGoal, readData, updateExamSession, type Goal, type ExamSessionRecord } from '@/lib/backend';
 import { useSetting, setSetting, type ExamCustomization } from '@/lib/store';
 import { t } from '@/lib/i18n';
@@ -145,88 +146,16 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
             <SettingLine icon={Layers} title={t('多页输入')} desc={t('随时加页，发送前确认')} align="center">
               <Badge variant="outline">{t('最多 {n} 页', { n: EXAM_MODES[mode].maxScreenshotPages })}</Badge>
             </SettingLine>
-            <DisclosureLine
+            <SettingNavigationRow
               icon={SlidersHorizontal}
               title={t('答题与显示偏好')}
               desc={customizationSummary(mode, customization as Partial<ExamCustomization>)}
-              open={prefsOpen}
-              onToggle={() => setPrefsOpen((v) => !v)}
+              onOpen={() => setPrefsOpen(true)}
+              testId="open-exam-preferences"
             />
-            {prefsOpen && (
-              <div className="space-y-4 px-4 pb-4 pt-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="text-[11px] text-ink-muted">
-                    {t('编程题语言')}
-                    <Select
-                      className="mt-1 h-9 border-line text-[13px]"
-                      value={String(customization.programmingLanguage ?? 'auto')}
-                      onChange={(e) => setCustomization({ ...customization, programmingLanguage: e.target.value })}
-                    >
-                      {['auto', 'Python 3', 'Java', 'C++', 'C', 'Go', 'JavaScript', 'TypeScript', 'C#', 'Rust', 'SQL'].map(
-                        (l) => (<option key={l} value={l}>{l === 'auto' ? t('跟随题目') : l}</option>),
-                      )}
-                    </Select>
-                  </label>
-                  <label className="text-[11px] text-ink-muted">
-                    {t('代码模式')}
-                    <Select
-                      className="mt-1 h-9 border-line text-[13px]"
-                      value={String(customization.codeMode ?? 'auto')}
-                      onChange={(e) => setCustomization({ ...customization, codeMode: e.target.value })}
-                    >
-                      <option value="auto">{t('跟随题目')}</option>
-                      <option value="acm">{t('ACM 模式（完整程序）')}</option>
-                      <option value="core">{t('核心代码模式（只写函数）')}</option>
-                    </Select>
-                  </label>
-                  <label className="text-[11px] text-ink-muted">
-                    {t('编程题取向')}
-                    <Select
-                      className="mt-1 h-9 border-line text-[13px]"
-                      value={String(customization.codeQuality ?? 'standard')}
-                      onChange={(e) => setCustomization({ ...customization, codeQuality: e.target.value })}
-                    >
-                      <option value="standard">{t('标准可提交')}</option>
-                      <option value="readable">{t('清晰易读')}</option>
-                      <option value="concise">{t('简洁直接')}</option>
-                      <option value="performance">{t('优先性能')}</option>
-                    </Select>
-                  </label>
-                  <label className="text-[11px] text-ink-muted">
-                    {t('回答语言')}
-                    <Select
-                      className="mt-1 h-9 border-line text-[13px]"
-                      value={String(customization.answerLanguage ?? 'auto')}
-                      onChange={(e) => setCustomization({ ...customization, answerLanguage: e.target.value })}
-                    >
-                      <option value="auto">{t('跟随界面语言')}</option>
-                      {['zh-CN', 'en-US', 'ja-JP', 'ko-KR'].map((l) => (<option key={l} value={l}>{l}</option>))}
-                    </Select>
-                  </label>
-                </div>
-                <Textarea
-                  rows={3}
-                  maxLength={2000}
-                  placeholder={t('补充要求：希望答案更短 / 多给步骤 / 按考试格式输出…')}
-                  value={String(customization.customRequirements ?? '')}
-                  onChange={(e) => setCustomization({ ...customization, customRequirements: e.target.value })}
-                />
-                <div className="divide-y divide-line rounded-lg border border-line">
-                <SettingLine icon={Copy} title={t('显示复制按钮')} desc={t('答案里有代码就复制代码，没有就复制文字。部分考试平台会记录粘贴内容，也有平台禁止粘贴。')} align="center">
-                  <Switch ariaLabel={t('显示复制按钮')} checked={showCopyCode} onCheckedChange={setShowCopyCode} />
-                </SettingLine>
-                    <SettingLine icon={Keyboard} title={t('快捷键提示')} desc={t('在浮窗按钮上显示对应键位。')} align="center">
-                  <Switch ariaLabel={t('快捷键提示')} checked={showHints} onCheckedChange={setShowHints} />
-                </SettingLine>
-                    <SettingLine icon={Video} title={t('双机位笔试')} desc={t('有第二个摄像头拍你和屏幕时打开。笔试浮窗会换成几乎全透明、只留一圈淡边框，镜头里基本看不出来。')} align="center">
-                  <DualCameraSwitch scope="exam" />
-                </SettingLine>
-                    <SettingLine icon={MonitorSmartphone} title={t('截图兼容模式（Windows）')} desc={t('优先读取前台窗口，失败后回退屏幕截图。默认模式会在屏幕黑屏时尝试窗口读取。')} align="center">
-                  <Switch ariaLabel={t('截图兼容模式（Windows）')} checked={platform?.platform === 'windows' && compatibility} disabled={platform?.platform !== 'windows'} onCheckedChange={setCompatibility} />
-                </SettingLine>
-                </div>
-              </div>
-            )}
+            <SettingLine icon={Video} title={t('双机位笔试')} desc={t('有第二个摄像头拍你和屏幕时打开。笔试浮窗会换成几乎全透明、只留一圈淡边框，镜头里基本看不出来。')} align="center">
+              <DualCameraSwitch scope="exam" />
+            </SettingLine>
           </div>
         </section>
 
@@ -256,6 +185,24 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
         <CodeVerificationPanel />
         <DualScreenCard />
       </div>
+
+      <ExamPreferencesDialog
+        open={prefsOpen}
+        onClose={() => setPrefsOpen(false)}
+        value={{
+          customization,
+          showCopyCode,
+          showHints,
+          compatibility,
+        }}
+        windows={platform?.platform === 'windows'}
+        onSave={(next) => {
+          setCustomization(next.customization);
+          setShowCopyCode(next.showCopyCode);
+          setShowHints(next.showHints);
+          setCompatibility(next.compatibility);
+        }}
+      />
 
       <aside className="sticky top-4 flex flex-col gap-4">
         <div className="rounded-lg border border-line bg-surface-raised p-5 shadow-card">

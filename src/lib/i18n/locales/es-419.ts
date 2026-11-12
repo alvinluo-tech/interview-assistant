@@ -1294,6 +1294,8 @@ export const es419: Record<string, string> = {
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Aún no hay material. Importa un currículum o crea un puesto y podrás elegirlo en la entrevista.",
   "搜索选项": "Buscar opciones",
   "没有匹配的选项": "No hay opciones que coincidan",
+  "这些偏好只影响这一场笔试，点保存后生效。": "Solo afectan a esta sesión de examen; se aplican al guardar.",
+  "这些偏好只影响这一场模拟面试，点保存后生效。": "Solo afectan a esta entrevista simulada; se aplican al guardar.",
   "语音通话": "Llamada de voz",
   "语音通话已停止": "Llamada de voz detenida",
   "语音识别中断，已自动重连": "Se perdió el reconocimiento de voz: reconectado",

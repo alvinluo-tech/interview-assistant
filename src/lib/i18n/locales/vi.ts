@@ -1294,6 +1294,8 @@ export const vi: Record<string, string> = {
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Chưa có tài liệu. Nhập CV hoặc tạo vị trí để chọn ngay khi phỏng vấn.",
   "搜索选项": "Tìm tùy chọn",
   "没有匹配的选项": "Không có tùy chọn phù hợp",
+  "这些偏好只影响这一场笔试，点保存后生效。": "Chỉ áp dụng cho buổi thi này; có hiệu lực khi lưu.",
+  "这些偏好只影响这一场模拟面试，点保存后生效。": "Chỉ áp dụng cho buổi phỏng vấn thử này; có hiệu lực khi lưu.",
   "语音通话": "Cuộc gọi thoại",
   "语音通话已停止": "Cuộc gọi thoại đã dừng",
   "语音识别中断，已自动重连": "Nhận dạng giọng nói bị ngắt: đã kết nối lại",

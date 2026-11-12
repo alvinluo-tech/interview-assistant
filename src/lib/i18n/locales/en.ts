@@ -1294,6 +1294,8 @@ export const en: Record<string, string> = {
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Nothing here yet. Import a resume or create a role, and you can pick it during the interview.",
   "搜索选项": "Search options",
   "没有匹配的选项": "No matching options",
+  "这些偏好只影响这一场笔试，点保存后生效。": "These only affect this exam session; they apply when you save.",
+  "这些偏好只影响这一场模拟面试，点保存后生效。": "These only affect this mock interview; they apply when you save.",
   "语音通话": "Voice call",
   "语音通话已停止": "Voice call stopped",
   "语音识别中断，已自动重连": "Speech recognition dropped — reconnected",

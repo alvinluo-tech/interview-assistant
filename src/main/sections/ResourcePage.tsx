@@ -31,7 +31,7 @@ import {
   type Resume,
 } from '@/lib/backend';
 import {generatePreparation} from '@/lib/preparation';
-import { companyFromJd } from '@/lib/goalImport';
+import { companyFromJd, headingFromJd } from '@/lib/goalImport';
 import { DocumentImportDialog } from '../DocumentImportDialog';
 import { DOCUMENT_ACCEPT } from '@/lib/documentIngest';
 import { useSetting } from '@/lib/store';
@@ -298,10 +298,7 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
             await saveMaterial({ name: document.name.replace(/\.[^.]+$/, ''), source: 'file', content: document.text });
           } else if (importKind === 'goal' && importFile) {
             // 岗位文件的第一行通常是岗位名，比文件名更像标题；读不到就退回文件名。
-            const heading = document.text
-              .split('\n')
-              .map((line) => line.trim())
-              .find((line) => line.length > 0 && line.length <= 40 && !/^公司/.test(line));
+            const heading = headingFromJd(document.text) || undefined;
             const goal = await saveGoal({
               name: heading ?? document.name.replace(/\.[^.]+$/, ''),
               companyName: companyFromJd(document.text),

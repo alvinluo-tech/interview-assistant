@@ -1294,6 +1294,8 @@ export const ptBr: Record<string, string> = {
   "还没有资料。导入简历或新建岗位，面试时就能直接选。": "Ainda não há material. Importe um currículo ou crie uma vaga para escolher na entrevista.",
   "搜索选项": "Buscar opções",
   "没有匹配的选项": "Nenhuma opção correspondente",
+  "这些偏好只影响这一场笔试，点保存后生效。": "Afetam apenas esta sessão de prova; valem ao salvar.",
+  "这些偏好只影响这一场模拟面试，点保存后生效。": "Afetam apenas esta entrevista simulada; valem ao salvar.",
   "语音通话": "Chamada de voz",
   "语音通话已停止": "Chamada de voz encerrada",
   "语音识别中断，已自动重连": "O reconhecimento de voz caiu: reconectado",

@@ -28,7 +28,7 @@ function workbench(source) {
   const componentNames=new Proxy({}, {get:(_target,name)=>name==='showToast'?()=>{}:String(name)});
   const jsx=(type,props)=>({type,props});
   const modules={
-    './SpeechProfilePanel':{},'./PhoneSpeakerSetup':{},'./SettingLine':{SettingLine:componentNames,DisclosureLine:componentNames,SettingNavigationRow:componentNames},'./InterviewDialogs':{MaterialsDialog:componentNames,LanguageDialog:componentNames,PreferencesDialog:componentNames,languageSummary:()=>''},'@/lib/i18n':i18nModule(),'@/lib/ai':{ANSWER_STYLES:[]},'@/ui/primitives':componentNames,'@/lib/speechPreferences':{useSpeechProfile:()=>[{},async()=>{}]},'@/lib/speechProfile':{SPEECH_LANGUAGES:[]},
+    './SpeechProfilePanel':{},'./PhoneSpeakerSetup':{},'./SettingLine':{SettingLine:componentNames,DisclosureLine:componentNames,SettingNavigationRow:componentNames},'./InterviewDialogs':{MaterialsDialog:componentNames,LanguageDialog:componentNames,PreferencesDialog:componentNames,languageSummary:()=>''},'./ExamDialogs':{ExamPreferencesDialog:componentNames},'./MockDialogs':{MockAdvancedDialog:componentNames},'@/lib/i18n':i18nModule(),'@/lib/ai':{ANSWER_STYLES:[]},'@/ui/primitives':componentNames,'@/lib/speechPreferences':{useSpeechProfile:()=>[{},async()=>{}]},'@/lib/speechProfile':{SPEECH_LANGUAGES:[]},
     'react':{useEffect(){},useState:initial=>[typeof initial==='function'?initial():initial,()=>{}]},
     'react/jsx-runtime':{jsx,jsxs:jsx},'lucide-react':componentNames,'@/ui/primitives':componentNames,
     '@/lib/aiSettings':{useAiReady:()=>true,useAiSettings:()=>({routes:{},providers:[]})},
