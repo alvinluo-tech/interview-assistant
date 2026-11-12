@@ -186,7 +186,7 @@ export function JobProgressCards() {
                 inputMode="numeric"
                 value={offerInput}
                 onChange={(e) => setOfferInput(e.target.value)}
-                className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/50"
+                className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground focus:border-primary/50"
               />
             </label>
             <label className="w-28 space-y-1">
@@ -198,7 +198,7 @@ export function JobProgressCards() {
                 inputMode="numeric"
                 value={ocInput}
                 onChange={(e) => setOcInput(e.target.value)}
-                className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/50"
+                className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground focus:border-primary/50"
               />
             </label>
             <div className="flex flex-wrap items-center gap-1.5">

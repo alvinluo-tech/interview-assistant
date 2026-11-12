@@ -85,14 +85,14 @@ export function FreeChatPage() {
       <div className="px-3">
         <div className="relative">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"/>
-          <input value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('搜索对话')} aria-label={t('搜索对话')} className="w-full rounded-lg border bg-background py-1.5 pl-8 pr-7 text-xs outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/30"/>
+          <input value={query} onChange={event=>setQuery(event.target.value)} placeholder={t('搜索对话')} aria-label={t('搜索对话')} className="w-full rounded-lg border bg-background py-1.5 pl-8 pr-7 text-xs outline-hidden placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/30"/>
           {query&&<button onClick={()=>setQuery('')} aria-label={t('清除搜索')} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted"><X size={12}/></button>}
         </div>
       </div>
       <div className="px-3 pb-1 pt-4 text-[11px] font-medium text-muted-foreground">{t('最近对话')}</div>
       <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
         {visible.map(session=>renaming===session.id
-          ? <input key={session.id} autoFocus value={draft} onChange={event=>setDraft(event.target.value)} onBlur={()=>void commitRename(session)} onKeyDown={event=>{if(event.key==='Enter')void commitRename(session);if(event.key==='Escape')setRenaming(null);}} className="w-full rounded-md border border-primary/40 bg-background px-2 py-1.5 text-xs outline-none"/>
+          ? <input key={session.id} autoFocus value={draft} onChange={event=>setDraft(event.target.value)} onBlur={()=>void commitRename(session)} onKeyDown={event=>{if(event.key==='Enter')void commitRename(session);if(event.key==='Escape')setRenaming(null);}} className="w-full rounded-md border border-primary/40 bg-background px-2 py-1.5 text-xs outline-hidden"/>
           : <div key={session.id} className={`group flex items-center gap-1 rounded-md pr-1 ${id===session.id?'bg-primary/10 text-primary':'hover:bg-muted'}`}>
               <button onClick={()=>{if(id!==session.id)openSession(session.id);}} onDoubleClick={()=>{setDraft(session.title);setRenaming(session.id);}} title={t('双击可重命名')} className="min-w-0 flex-1 truncate px-2 py-2 text-left text-xs">{stripAttachmentBlocks(session.title)||session.title}</button>
               <button onClick={()=>void remove(session)} aria-label={t('删除对话')} className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:bg-background hover:text-destructive group-hover:opacity-100 focus:opacity-100"><Trash2 size={12}/></button>
@@ -811,7 +811,7 @@ function Composer({compact,onPreview,settings,model,onModelChange,permission,onP
         :<span key={item.id} className="flex max-w-[15rem] items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1 text-[11px]"><FileText size={12}/><span className="min-w-0 flex-1 truncate" title={`${item.name} · ${formatFileSize(item.size)}`}>{item.name}</span><button type="button" onClick={()=>onDetach(item.id)} aria-label={t('移除附件')} title={t('移除附件')} className="rounded p-0.5 text-muted-foreground hover:text-destructive"><X size={11}/></button></span>)}
       {parsing>0&&<span className="flex items-center gap-1.5 rounded-lg border border-dashed px-2 py-1 text-[11px] text-muted-foreground"><LoaderCircle size={12} className="animate-spin"/>{t('正在解析…')}</span>}
     </div>}
-    <ComposerPrimitive.Input rows={2} onPaste={event=>{const files=event.clipboardData?.files;if(files&&files.length){event.preventDefault();void attach(files);}}} placeholder={compact?t('输入消息，Enter 发送'):t('输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片')} className="max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-6 outline-none placeholder:text-muted-foreground"/>
+    <ComposerPrimitive.Input rows={2} onPaste={event=>{const files=event.clipboardData?.files;if(files&&files.length){event.preventDefault();void attach(files);}}} placeholder={compact?t('输入消息，Enter 发送'):t('输入消息，Enter 发送，Shift + Enter 换行，可直接粘贴或拖入图片')} className="max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm leading-6 outline-hidden placeholder:text-muted-foreground"/>
     <div className="flex items-center gap-1.5 px-2 pb-2">
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
       <div className="relative" ref={permRef}>

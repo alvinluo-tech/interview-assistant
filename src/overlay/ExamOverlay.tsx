@@ -486,7 +486,7 @@ function ExamShell({
               else if (event.key === 'Escape') {event.preventDefault(); closeAsk();}
             }}
             placeholder={t('追问：例如时间复杂度太高，请换成能满足题面限制的写法')}
-            className="ov-input w-full resize-none rounded-md border px-2 py-1.5 text-[11px] outline-none"
+            className="ov-input w-full resize-none rounded-md border px-2 py-1.5 text-[11px] outline-hidden"
           />
           <div className="mt-1 flex items-center gap-2">
             <span className="ov-text-3 text-[10px]">{t('Enter 发送 · Shift + Enter 换行')}</span>

@@ -9,7 +9,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const source = path.dirname(require.resolve('pyodide/package.json'));
 const destination = path.resolve('public/pyodide');
-const files = ['pyodide.js', 'pyodide.asm.js', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'];
+const files = ['pyodide.mjs', 'pyodide.asm.mjs', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'];
 
 // 缺文件时不能让构建通过：运行时才在 Worker 里 404，用户看到的是"Python 执行器直接不可用"。
 const missing = files.filter((file) => !existsSync(path.join(source, file)));

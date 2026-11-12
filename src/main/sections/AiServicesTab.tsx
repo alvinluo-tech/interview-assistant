@@ -224,7 +224,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
             <div className="mb-3 flex items-center justify-between px-1 text-xs font-medium">{t('服务商连接')}<Badge variant="outline">{draft.providers.length}</Badge></div>
             <div className="flex flex-col gap-1" aria-label={t('服务商连接列表')}>
               {draft.providers.map(p => <button key={p.id} type="button" onClick={() => selectProvider(p.id)} disabled={busy === 'save'} aria-pressed={p.id === selectedId}
-                className={`min-w-0 rounded-md border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${p.id === selectedId ? 'border-primary/30 bg-primary/10' : 'border-transparent hover:bg-accent'}`}>
+                className={`min-w-0 rounded-md border p-2.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring ${p.id === selectedId ? 'border-primary/30 bg-primary/10' : 'border-transparent hover:bg-accent'}`}>
                 <span className="flex items-center gap-2 text-xs font-medium"><Server size={13} className="shrink-0" /><span className="truncate">{p.name}</span></span>
                 <span className="mt-1 block truncate pl-[21px] text-[11px] text-muted-foreground">{t('{count} 个模型 · {auth}', { count: p.models.length, auth: p.authMode === 'none' ? t('免密') : 'API Key' })}</span>
               </button>)}

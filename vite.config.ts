@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
@@ -7,7 +8,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   // Concurrent desktop and smoke servers must never invalidate each other's optimized dependencies.
   cacheDir: `node_modules/.vite-${process.env.MIANSHI_UI_SMOKE === '1' ? 'bailian-ui' : process.env.MIANSHI_REALTIME_SMOKE === '1' ? 'audio-smoke' : 'desktop'}`,
   optimizeDeps: {

@@ -62,7 +62,7 @@ export function ModelPicker({settings, value, onChange, placement = 'down', narr
       <span className="min-w-0 flex-1 truncate">{current}</span><ChevronDown size={13} className="shrink-0"/>
     </button>
     {open && <div role="listbox" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); } }} className={`absolute right-0 z-30 w-72 rounded-xl border bg-[hsl(var(--popover))] p-1.5 shadow-lg ${placement === 'up' ? 'bottom-full mb-2' : 'mt-1'}`}>
-      <div className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5"><Search size={13} className="text-muted-foreground"/><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder={t('搜索模型')} className="w-full bg-transparent text-xs outline-none" aria-label={t('搜索模型')}/></div>
+      <div className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5"><Search size={13} className="text-muted-foreground"/><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder={t('搜索模型')} className="w-full bg-transparent text-xs outline-hidden" aria-label={t('搜索模型')}/></div>
       <div className="mt-1 max-h-64 overflow-y-auto">
         <button type="button" onClick={() => pick(null)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted">
           <span className="flex-1 truncate">{t('跟随全局默认')}</span>
