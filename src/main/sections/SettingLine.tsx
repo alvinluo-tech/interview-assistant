@@ -7,7 +7,7 @@ export function SettingLine({
   icon: Icon,
   title,
   desc,
-  align = 'start',
+  align = 'center',
   children,
 }: {
   icon: IconType;
