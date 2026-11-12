@@ -65,7 +65,7 @@ const SMALL_NAV: { key: Section; label: string; icon: React.ReactNode }[] = [
   { key: 'records', label: '历史记录', icon: <History size={15} /> },
 ];
 
-const PAGE_TITLES: Record<Exclude<Section, 'settings'>, { h1: string; sub: string }> = {
+const PAGE_TITLES: Record<Section, { h1: string; sub: string }> = {
   interview: {
     h1: '面试助手',
     sub: '实时听译面试官的话并给出参考回答；浮窗不抢焦点，结束后自动回到工作台。',
@@ -79,6 +79,7 @@ const PAGE_TITLES: Record<Exclude<Section, 'settings'>, { h1: string; sub: strin
     sub: 'AI 面试官按你的简历和岗位出题，你开口回答，结束后出一份复盘报告。',
   },
   chat: {h1:'自由对话',sub:'文字和语音对话。'},
+  settings: { h1: '设置', sub: '语言与外观、AI 服务、快捷键和隐蔽相关都在这里。' },
   'question-bank': { h1: '面试题库', sub: '马上要面的这场，会考什么、你该怎么答。' },
   resource: {
     h1: '资料管理',
@@ -196,7 +197,7 @@ export function MainWindow() {
                 <Onboarding onFinish={finishOnboarding} />
               ) : (
                 <>
-                  {section !== 'settings' && section !== 'chat' && (
+                  {section !== 'chat' && (
                     <header className="mb-6">
                       <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.01em]">{t(PAGE_TITLES[section].h1)}</h1>
                       <p className="mt-2 max-w-2xl text-sm leading-[22px] text-muted-foreground">{t(PAGE_TITLES[section].sub)}</p>
