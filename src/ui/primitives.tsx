@@ -350,7 +350,7 @@ export function SettingRow({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
+    <div className="flex min-h-[62px] items-center justify-between gap-4 py-[13px]">
       <div className="flex min-w-0 items-start gap-2.5">
         {icon && <span className="flex h-5 w-[14px] shrink-0 items-center justify-center text-muted-foreground">{icon}</span>}
         <div className="min-w-0">

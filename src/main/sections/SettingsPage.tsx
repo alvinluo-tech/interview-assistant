@@ -90,7 +90,7 @@ export function SettingsPage() {
   const [pendingTab, setPendingTab] = useState<Tab | null>(null);
   return (
     <div className="flex items-start gap-8">
-      <nav aria-label={t('设置')} className="scroll-thin sticky top-0 w-[184px] shrink-0 space-y-5 py-1">
+      <nav aria-label={t('设置')} className="scroll-thin sticky top-0 w-[160px] shrink-0 space-y-5 py-1">
         {TAB_GROUPS.map((group) => (
           <div key={group.label}>
             <p className="mb-1.5 px-2.5 text-[11px] font-medium tracking-[0.06em] text-ink-muted">{t(group.label)}</p>
@@ -151,7 +151,7 @@ function GeneralTab() {
     <div className="flex flex-col gap-4">
       <Card className="p-5">
         <SectionHeader title={t('语言与外观')} desc={t('应用到所有窗口；切换语言会刷新窗口让翻译生效。')} />
-        <div className="divide-y divide-line">
+        <div className="-mr-5 divide-y divide-line">
           <SettingRow title={t('界面语言')} desc={t('选择「跟随系统」后按操作系统语言显示。')}>
             <Select
               aria-label={t('界面语言')}
@@ -228,7 +228,7 @@ function GeneralTab() {
 
       <Card className="p-5">
         <SectionHeader title={t('语音通话')} desc={t('控制打断和「说完」的判定；外放时如果会打断自己，先关掉打断。')} />
-        <div className="divide-y divide-line">
+        <div className="-mr-5 divide-y divide-line">
           <SettingRow title={t('说话打断回答')} desc={t('播放回答时保留麦克风，你一开口就停下来。')}>
             <Switch checked={bargeIn} onCheckedChange={setBargeIn} ariaLabel={t('说话打断回答')} />
           </SettingRow>
@@ -769,7 +769,7 @@ function HotkeysTab() {
           ))}
         </div>
 
-        <div className="divide-y">
+        <div className="-mr-5 divide-y">
           {ACTIONS.map((action) => {
             const info = ACTION_LABELS[action];
             const value = effective[action];
@@ -862,7 +862,7 @@ function AboutTab() {
   return (
     <Card className="p-5">
       <SectionHeader title={t('关于')} desc={t('版本信息。联系我们反馈问题时，把这里的内容一并带上。')} />
-      <div className="divide-y">
+      <div className="-mr-5 divide-y">
         <Row label={t('客户端版本')} value={APP_VERSION} />
         <Row label={t('界面版本')} value={t('随客户端内置')} />
         <Row label={isWindows() ? t('Windows 版本') : t('系统版本')} value={osVersion || t('无法读取')} />
