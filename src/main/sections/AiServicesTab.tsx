@@ -204,7 +204,7 @@ export function AiServicesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boole
         {AI_ROLES.map(role => {
           const route = draft.routes[role], connection = draft.providers.find(provider => provider.id === route?.providerId);
           const label = route ? t('{name} · {modelId}', { name: connection?.name || t('连接待修复'), modelId: route.modelId }) : role === 'tts' ? t('系统默认语音') : role === 'vision' ? t('跟随对话模型') : t('尚未配置');
-          return <button key={role} className="min-w-0 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent focus-visible:outline focus-visible:outline-primary" onClick={() => document.getElementById(`ai-route-${role}`)?.focus()}>
+          return <button key={role} className="min-w-0 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary" onClick={() => document.getElementById(`ai-route-${role}`)?.focus()}>
             <span className="text-[11px] text-muted-foreground">{t(ROLE_LABELS[role])}</span><span className="mt-2 block truncate text-xs font-medium" title={label}>{label}</span>
           </button>;
         })}

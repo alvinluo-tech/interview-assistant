@@ -300,7 +300,7 @@ function HoverHint({ zoneEl, dragging }: { zoneEl: HTMLElement; dragging: boolea
     <div className="ov-panel ov-text-2 pointer-events-none fixed z-50 rounded-md border px-2 py-1 text-[10px] shadow-md" style={{ top, left, width: HINT_WIDTH }}>
       <div className="truncate">{text}</div>
       {!dragging && (
-        <span className="relative mt-1 block h-0.5 w-full overflow-hidden rounded-xs">
+        <span className="relative mt-1 block h-0.5 w-full overflow-hidden rounded-sm">
           <span aria-hidden="true" className="absolute inset-0 opacity-20" style={{ background: 'currentColor' }} />
           <span aria-hidden="true" className="absolute inset-y-0 left-0" style={{ width: `${Math.round(progress * 100)}%`, background: 'currentColor' }} />
         </span>

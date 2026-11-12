@@ -558,7 +558,7 @@ function MockRoom() {
                 {[0.35, 0.7, 1, 0.7, 0.35].map((f, i) => (
                   <span
                     key={i}
-                    className="w-1 rounded-xs bg-emerald-400 transition-all duration-100"
+                    className="w-1 rounded-sm bg-emerald-400 transition-all duration-100"
                     style={{ height: `${Math.max(12, micLevel * 100 * f)}%` }}
                   />
                 ))}
