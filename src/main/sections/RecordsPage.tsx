@@ -21,6 +21,7 @@ import {
 import {
   updateSession,
   useData,
+  type ChatMessage,
   type ExamSessionRecord,
   type InterviewSession,
 } from '@/lib/backend';
@@ -67,6 +68,26 @@ function cleanTitle(title: string): string {
 function clockOf(at: number): string {
   const d = new Date(at);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** 时间线要看得出「说完」和「生成」各用了多久，所以精确到秒。 */
+function clockSec(at: number): string {
+  const d = new Date(at);
+  return `${clockOf(at)}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+/** 面试官行显示说话区间，回答行显示生成耗时：两者都不是「消息创建时刻」的字面间隔。 */
+function timingOf(message: ChatMessage): { at: number; note: string } {
+  const speech = message.metadata?.speech;
+  if (message.role === 'INTERVIEWER' && speech) {
+    const seconds = (speech.durationMs / 1000).toFixed(1);
+    return { at: speech.startedAt, note: t('说 {seconds} 秒', { seconds }) };
+  }
+  const elapsed = message.metadata?.request?.elapsedMs;
+  if (message.role === 'ASSISTANT' && typeof elapsed === 'number') {
+    return { at: message.createdAt, note: t('生成 {seconds} 秒', { seconds: (elapsed / 1000).toFixed(1) }) };
+  }
+  return { at: message.createdAt, note: '' };
 }
 
 export function RecordsPage() {
@@ -348,17 +369,21 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
                 ) : detail.messages.length === 0 ? (
                   <p className="text-[12px] text-ink-muted">{t('这场没有问答记录。')}</p>
                 ) : (
-                  detail.messages.map((m) => (
+                  detail.messages.map((m) => {
+                    const timing = timingOf(m);
+                    return (
                     <div key={m.id}>
                       <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-ink-muted">
-                        <span>{clockOf(m.createdAt)}</span>
+                        <span className="tabular-nums">{clockSec(timing.at)}</span>
                         <span>{m.role === 'INTERVIEWER' ? t('面试官') : detail.type === 'MOCK_INTERVIEW' ? t('我') : t('AI 回答')}</span>
+                        {timing.note && <span className="text-ink-muted/80">· {timing.note}</span>}
                       </div>
                       <div className={`whitespace-pre-wrap text-[13px] leading-[22px] ${m.role === 'INTERVIEWER' ? 'text-ink' : 'rounded-lg border border-line bg-surface-sunken px-3 py-2'}`}>
                         {mdToPlain(m.text)}
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

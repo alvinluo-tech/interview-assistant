@@ -177,7 +177,9 @@ export interface ChatMessage {
     questionId?:string;revision?:number;contextCutoffId?:string;superseded?:boolean;completionStatus?:string;hintUsed?:boolean;
     sources?:import('./knowledgeContext').ContextSource[];request?:import('./aiTaskPolicy').AiRequestTrace;
     translation?:{language:import('./speechProfile').SpeechLanguage;text:string;status:'pending'|'ready'|'failed';error?:string};
-    speaker?:import('./speakerRouting').SpeakerDecision;observationId?:string;speechProfile?:import('./speechProfile').SpeechProfile };
+    speaker?:import('./speakerRouting').SpeakerDecision;observationId?:string;speechProfile?:import('./speechProfile').SpeechProfile;
+    /** 识别定稿对应的说话区间（扣掉静音等待后的绝对时间），用于历史记录按真实语速显示。 */
+    speech?:{startedAt:number;endedAt:number;durationMs:number} };
   pending?: boolean;
 }
 

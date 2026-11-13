@@ -8,10 +8,13 @@ const provider=(url='https://dashscope-intl.aliyuncs.com/compatible-mode/v1')=>(
 
 test('speech preferences separate input, answer and reading language and migrate old values',()=>{
  const api=load('src/lib/speechProfile.ts');const defaults=api.normalizeSpeechProfile();
- assert.equal(defaults.inputLanguage,'auto');assert.equal(defaults.answerLanguage,'zh-CN');
+ assert.equal(defaults.inputLanguage,'zh');assert.equal(defaults.answerLanguage,'zh-CN');
  const migrated=api.normalizeSpeechProfile(undefined,'en-US');assert.equal(migrated.answerLanguage,'en-US');
- const mixed=api.normalizeSpeechProfile({inputLanguage:'auto',answerLanguage:'en-US',accent:'cantonese',rate:1.2});
- assert.equal(api.recognitionLanguage(mixed),'auto');assert.match(api.languagePrompt(mixed,'interview'),/英语|English/);
+ // 旧版本默认的「自动」会被迁移成中文：短音频判成日/韩语后，噪声会变成问题。
+ const legacy=api.normalizeSpeechProfile({version:1,inputLanguage:'auto'});assert.equal(legacy.inputLanguage,'zh');
+ // 已经明确选过「自动」的配置保持不动。
+ const chosen=api.normalizeSpeechProfile({version:2,inputLanguage:'auto',answerLanguage:'en-US',accent:'cantonese',rate:1.2});
+ assert.equal(api.recognitionLanguage(chosen),'auto');assert.match(api.languagePrompt(chosen,'interview'),/英语|English/);
  assert.throws(()=>api.normalizeSpeechProfile({rate:Infinity}));
 });
 

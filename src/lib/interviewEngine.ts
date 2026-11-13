@@ -209,6 +209,8 @@ function flushPreroll() {
 }
 
 function resetAudio() {
+  // 新会话不该继承上一段没交的短句，否则它会在新会话的第一个问题前冒出来。
+  clearPendingFinal();
   audioBuf = { samples: new Int16Array(16000 * 30), length: 0 };
   lastVoiceAt = 0;
   speechStarted = false;
@@ -446,47 +448,89 @@ async function recognizeUtterance(wavBlob: Blob, controller: AbortController, ge
     if(localSpeaker()){const bytes=await wavBlob.arrayBuffer();const view=new DataView(bytes);if(bytes.byteLength>=44){pcm=new Int16Array((bytes.byteLength-44)/2);for(let i=0;i<pcm.length;i++)pcm[i]=view.getInt16(44+i*2,true);}}
     await deliverPhoneSpeech(text,pcm,generation,controller.signal);return;
   }
-  // 短句先挂在 partial 上等 3 秒，看它是不是一句话被切成了两段。
-  // 文本本身必须由 pendingShort 持有：partial 会被下一句覆盖、被 resetAudio 清空，
-  // 只靠 partial 比较的定时器会把这句话静默丢掉。
-  if (text.length < 6 && liveId === undefined) {
-    flushShortUtterance();
-    setState({ partial: text });
-    const entry = { text, generation, timer: 0 };
-    pendingShort = entry;
-    // 先登记再起定时器：定时器若同步触发（测试替身），flush 也能拿到这句话。
-    entry.timer = window.setTimeout(() => { if (pendingShort === entry) flushShortUtterance(); }, 3000);
+  if (liveId !== undefined) {
+    flushFinal();
+    setState({ partial: '' });
+    await deliverUtterance(text,undefined,undefined,controller.signal);
     return;
   }
-  flushShortUtterance();
-  setState({ partial: '' });
-  await deliverUtterance(text,undefined,undefined,controller.signal);
+  commitFinal(text, undefined, generation, controller.signal);
 }
 
-/** 待确认的短句：partial 只负责显示，真正的文本存在这里。 */
-let pendingShort: { text: string; generation: number; timer: number } | null = null;
-function flushShortUtterance() {
-  const pending = pendingShort;
+/** 实时识别返回的音频区间（相对本次识别流）。 */
+export interface SpeechTiming { beginMs: number; endMs: number }
+
+/**
+ * 实时识别会把一口气切成几段定稿：短片段先压住 3 秒，下一段来了就拼成一句再交上去。
+ * 上一版只有分段链路做了这件事，实时链路每个定稿都直接变成一道题，
+ * 于是「。」「어.」这种噪声也会触发一次回答。
+ */
+const SHORT_FINAL_CHARS = 6;
+const SHORT_FINAL_HOLD_MS = 3000;
+let pendingFinal: { text: string; speech?: SpeechTiming; generation: number; timer: number; at: number } | null = null;
+
+function joinSpeech(left: string, right: string) {
+  const a = left.trim(), b = right.trim();
+  if (!a) return b;
+  if (!b) return a;
+  return /[，。！？、,.!?;；:：]$/.test(a) ? a + b : `${a}，${b}`;
+}
+
+function clearPendingFinal() {
+  if (!pendingFinal) return;
+  clearTimeout(pendingFinal.timer);
+  pendingFinal = null;
+}
+
+function flushFinal() {
+  const pending = pendingFinal;
   if (!pending) return;
-  pendingShort = null;
-  clearTimeout(pending.timer);
+  clearPendingFinal();
   setState({ partial: '' });
   // 采集代次变了说明会话已经重来，这句不该再进新会话。
   if (pending.generation !== captureGeneration) return;
-  void deliverUtterance(pending.text);
+  if (isFillerSentence(pending.text)) return;
+  void deliverUtterance(pending.text, undefined, undefined, undefined, pending.speech);
+}
+
+function commitFinal(text: string, speech: SpeechTiming | undefined, generation: number, signal?: AbortSignal) {
+  if (!text || isFillerSentence(text)) { setState({ partial: '' }); return; }
+  const previous = pendingFinal && pendingFinal.generation === generation && Date.now() - pendingFinal.at <= SHORT_FINAL_HOLD_MS ? pendingFinal : null;
+  if (previous) clearPendingFinal();
+  const combined = previous ? joinSpeech(previous.text, text) : text;
+  const timing = previous?.speech && speech ? { beginMs: previous.speech.beginMs, endMs: speech.endMs } : previous?.speech ?? speech;
+  if (contentChars(combined).length < SHORT_FINAL_CHARS) {
+    const entry = { text: combined, speech: timing, generation, timer: 0, at: Date.now() };
+    pendingFinal = entry;
+    setState({ partial: combined });
+    // 先登记再起定时器：定时器若同步触发（测试替身），flush 也能拿到这句话。
+    entry.timer = window.setTimeout(() => { if (pendingFinal === entry) flushFinal(); }, SHORT_FINAL_HOLD_MS);
+    return;
+  }
+  setState({ partial: '' });
+  void deliverUtterance(combined, undefined, undefined, signal, timing);
 }
 
 /** 分句定稿：入列 + 自动作答 */
-async function deliverUtterance(text: string,speaker?:SpeakerDecision,observationId?:string,signal?:AbortSignal) {
+async function deliverUtterance(text: string,speaker?:SpeakerDecision,observationId?:string,signal?:AbortSignal,speech?:SpeechTiming) {
   if (signal?.aborted) return;
+  if (isFillerSentence(text)) return;
   const sessionId=state.sessionId;
   if(!speaker||speaker.role==='interviewer')bus.emit('interviewer:utterance', text);
+  // 识别定稿总比人真正说完晚一个静音阈值；把这段先扣掉，记录里的时间才对得上当时的语速。
+  const detectedAt = Date.now();
+  const silence = getSetting('interview.silenceGateMs', DEFAULT_SILENCE_GATE_MS);
+  const speechMeta = speech ? (() => {
+    const endedAt = detectedAt - silence;
+    const durationMs = Math.max(0, speech.endMs - speech.beginMs);
+    return { startedAt: endedAt - durationMs, endedAt, durationMs };
+  })() : undefined;
   const msg: ChatMessage = {
     id: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
     role: speaker?.role==='candidate'?'ASSISTANT':'INTERVIEWER',
     text,
-    createdAt: Date.now(),
-    metadata:{origin:speaker?.role==='candidate'?'candidate_response':'audio_transcript',revision:1,...(speaker?{speaker,observationId}:{})},
+    createdAt: detectedAt,
+    metadata:{origin:speaker?.role==='candidate'?'candidate_response':'audio_transcript',revision:1,...(speaker?{speaker,observationId}:{}),...(speechMeta?{speech:speechMeta}:{})},
   };
   msg.metadata!.questionId=speaker?.role==='candidate'?[...state.messages].reverse().find(m=>m.role==='INTERVIEWER'&&(!m.metadata?.speaker||m.metadata.speaker.role==='interviewer'))?.id:msg.id;
   const interviewerSpeech = !speaker || speaker.role === 'interviewer';
@@ -997,7 +1041,7 @@ function scheduleRecovery() {
 async function stopCapture(invalidate = true) {
   if (invalidate) {
     // 暂停/结束前把待确认的短句先落下来，否则它只留在 partial 里，清空后就没了。
-    flushShortUtterance();
+    flushFinal();
     captureGeneration++;
     // 重连/自动恢复（invalidate=false）不该掐掉在飞的翻译：那会让这条转写永远没有译文也没有失败标记。
     translations.forEach(controller=>controller.abort()); translations.clear();
@@ -1061,9 +1105,13 @@ export function beginListening(audioSource: AudioSource, expectedSessionId = sta
               if (!result.isFinal) { setState({ partial: result.text }); return; }
               const text = cleanTranscript(result.text);
               setState({ partial: '', audio: { ...state.audio, lastTranscriptAt: Date.now() } });
-              if (text && !isFillerSentence(text)) void (audioSource==='SPEAKER'?deliverUtterance(text):deliverPhoneSpeech(text,result.beginMs!==undefined&&result.endMs!==undefined?audioTimeline.range(realtimeOriginMs+result.beginMs,realtimeOriginMs+result.endMs):null,generation)).catch(error => {
+              const range = result.beginMs !== undefined && result.endMs !== undefined ? audioTimeline.range(realtimeOriginMs+result.beginMs, realtimeOriginMs+result.endMs) : null;
+              if (!text || isFillerSentence(text)) return;
+              if (audioSource !== 'SPEAKER') { void deliverPhoneSpeech(text, range, generation).catch(error => {
                 if (generation === captureGeneration) setState({ errorMessage: t('转写文字已显示，但记录保存失败：{msg}', { msg: String(error.message || error) }) });
-              });
+              }); return; }
+              commitFinal(text, result.beginMs !== undefined && result.endMs !== undefined ? { beginMs: result.beginMs, endMs: result.endMs } : undefined, generation, asrController.signal);
+              return;
             },
             onState: realtimeState => {
               if (generation !== captureGeneration) return;
@@ -1180,7 +1228,7 @@ export async function pauseListening() {
   // 用户主动暂停：取消自动恢复，避免刚暂停又被自动重连打开。
   resetRecovery();
   // 已经定稿的短句不是「未完成的识别」，暂停前先交上去，别跟着 partial 一起丢掉。
-  flushShortUtterance();
+  flushFinal();
   // Discard the unfinished segment and cancel in-flight transcription on pause.
   const discarded = audioBuf.length > 0 || state.audio.pending > 0 || !!state.partial;
   captureGeneration++;
@@ -1326,6 +1374,8 @@ function encodeWavFromPcm(pcm: Int16Array): Blob {
 const FILLER_WORDS = '嗯啊呃哦噢唔哎诶呀咦嘿哼呵嘛';
 const FILLER_SENTENCES =
   /^(好|好的|行|对|是的|明白|ok|okay|thanks|thank you|嗯嗯|好的好的|对的|没问题|可以)[。..！!？?\s]*$/i;
+/** 别的语言里同样没有信息量的单句，实时识别在噪声上会吐这些。 */
+const FILLER_FOREIGN = /^(oh|ooh|ok|okay|um+|uh+|hmm+|mhm+|yeah|yep|aha|well|right|thanks|thank you|うん|うーん|ええ|えっと|あー|はい|응|응응|어|음|네|예|아)$/i;
 
 export function cleanTranscript(text: string): string {
   const trimmed = text.trim();
@@ -1344,12 +1394,21 @@ export function cleanTranscript(text: string): string {
   return cleaned;
 }
 
+/** 只保留可读的文字与数字：用来挡掉「。」「어.」这类纯噪声定稿。 */
+export function contentChars(text: string): string {
+  return (text.match(/[\p{L}\p{N}]+/gu) ?? []).join('').replace(new RegExp(`[${FILLER_WORDS}]`, 'g'), '');
+}
+
 export function isFillerSentence(text: string): boolean {
   const s = text.trim().toLowerCase();
   if (!s) return true;
   if (FILLER_SENTENCES.test(s)) return true;
-  if (/^\d+[。..？?]?$/.test(s)) return true;
-  return false;
+  const content = contentChars(s);
+  // 纯标点、纯语气词、纯数字，以及只剩一个字的半截话，都不该变成一道题。
+  if (!content) return true;
+  if (FILLER_FOREIGN.test(content)) return true;
+  if (/^\d+$/.test(content)) return true;
+  return (content.match(/[\p{L}\p{N}]/gu)?.length ?? 0) < 2;
 }
 
 export function aiConfigured(): boolean {

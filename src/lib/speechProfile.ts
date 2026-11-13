@@ -2,7 +2,7 @@
 export type SpeechLanguage = 'zh-CN' | 'en-US' | 'yue-HK';
 export type SpeechAccent = 'standard'|'cantonese'|'sichuan'|'chongqing'|'northeastern'|'henan'|'shanghai'|'shaanxi'|'minnan'|'yunnan'|'ningbo'|'gansu';
 export interface SpeechProfile {
-  version:1; inputLanguage:'auto'|'zh'|'en'; answerLanguage:SpeechLanguage|'follow';
+  version:1|2; inputLanguage:'auto'|'zh'|'en'; answerLanguage:SpeechLanguage|'follow';
   translationLanguage:SpeechLanguage|'none'; reportLanguage:SpeechLanguage;
   accent:SpeechAccent; rate:number;
 }
@@ -12,10 +12,13 @@ export const SPEECH_LANGUAGES = [{id:'zh-CN',name:'中文'},{id:'en-US',name:'�
 export const SPEECH_ACCENTS = [{id:'standard',name:'标准发音'},{id:'cantonese',name:'粤语'},{id:'sichuan',name:'四川话'},
   {id:'chongqing',name:'重庆话'},{id:'northeastern',name:'东北口音'},{id:'henan',name:'河南话'},
   {id:'shanghai',name:'上海话'},{id:'shaanxi',name:'陕西话'},{id:'minnan',name:'闽南语'},{id:'yunnan',name:'云南话'},{id:'ningbo',name:'宁波话'},{id:'gansu',name:'甘肃话'}] as const;
-export const DEFAULT_SPEECH_PROFILE:SpeechProfile={version:1,inputLanguage:'auto',answerLanguage:'zh-CN',translationLanguage:'none',reportLanguage:'zh-CN',accent:'standard',rate:1};
+export const DEFAULT_SPEECH_PROFILE:SpeechProfile={version:2,inputLanguage:'zh',answerLanguage:'zh-CN',translationLanguage:'none',reportLanguage:'zh-CN',accent:'standard',rate:1};
 export function normalizeSpeechProfile(value?:Partial<SpeechProfile>,legacyLang?:string):SpeechProfile {
   const legacy=legacyLang?.startsWith('en')?'en-US':legacyLang?.startsWith('yue')?'yue-HK':'zh-CN';
-  const profile={...DEFAULT_SPEECH_PROFILE,...(!value&&legacyLang?{answerLanguage:legacy as SpeechLanguage,inputLanguage:legacy==='en-US'?'en' as const:'zh' as const}:{}),...value,version:1 as const};
+  const profile={...DEFAULT_SPEECH_PROFILE,...(!value&&legacyLang?{answerLanguage:legacy as SpeechLanguage,inputLanguage:legacy==='en-US'?'en' as const:'zh' as const}:{}),...value,version:2 as const};
+  // 旧默认值是「自动」：短音频或噪声会被判成日/韩语，把一句「。」写成回答。
+  // 只在没有明确改过的旧配置上迁移一次，想中英混说仍可在设置里切回「自动」。
+  if(value?.version===1&&profile.inputLanguage==='auto')profile.inputLanguage='zh';
   if(!['auto','zh','en'].includes(profile.inputLanguage)||!['zh-CN','en-US','yue-HK','follow'].includes(profile.answerLanguage)
     ||!['none','zh-CN','en-US','yue-HK'].includes(profile.translationLanguage)||!['zh-CN','en-US','yue-HK'].includes(profile.reportLanguage)
     ||!SPEECH_ACCENTS.some(item=>item.id===profile.accent)||!Number.isFinite(profile.rate)||profile.rate<0.7||profile.rate>1.4)

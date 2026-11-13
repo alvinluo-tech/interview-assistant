@@ -189,8 +189,8 @@ test('answer language is independent of ASR and auxiliary translation never dela
 
 test('a sentence cut in half by a pause is merged into one question instead of answered twice', async () => {
   const prompts = [];
-  const h = harness({ realtime: true, autoAnswer: true, chat: async options => { prompts.push(options.messages.at(-1).content); return '回答'; } });
-  await h.start();
+  const h = harness({ realtime: true, autoAnswer: true, deferWindowTimers: true, chat: async options => { prompts.push(options.messages.at(-1).content); return '回答'; } });
+  await h.start('SPEAKER');
   h.realtimeResult({ id: 'sentence-1', text: '请说说订单系统怎么保证幂等，', isFinal: true });
   for (let i = 0; i < 25; i++) await Promise.resolve();
   h.realtimeResult({ id: 'sentence-2', text: '用了哪些具体方案？', isFinal: true });
@@ -200,6 +200,48 @@ test('a sentence cut in half by a pause is merged into one question instead of a
   assert.equal(questions.length, 1);
   assert.equal(questions[0].text, '请说说订单系统怎么保证幂等，用了哪些具体方案？');
   assert.equal(prompts.at(-1), '请说说订单系统怎么保证幂等，用了哪些具体方案？');
+  await h.engine.endInterview(false);
+});
+
+test('noise-only finals never become questions and short ones wait for the rest of the sentence', async () => {
+  const prompts = [];
+  const h = harness({ realtime: true, autoAnswer: true, deferWindowTimers: true, chat: async options => { prompts.push(options.messages.at(-1).content); return '回答'; } });
+  await h.start('SPEAKER');
+  for (const [id, text] of [['s0', '。'], ['s1', '어.'], ['s2', 'うん。'], ['s3', '多。']]) {
+    h.realtimeResult({ id, text, isFinal: true });
+    for (let i = 0; i < 25; i++) await Promise.resolve();
+  }
+  let questions = h.engine.getInterviewEngineState().messages.filter(message => message.role === 'INTERVIEWER');
+  assert.equal(questions.length, 0, 'punctuation and single-character fragments must not start an answer');
+  // 两个短片段落在合并窗口里，拼成一句再问。
+  h.realtimeResult({ id: 's10', text: '介绍一下', isFinal: true });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  h.realtimeResult({ id: 's11', text: '你们的项目', isFinal: true });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  questions = h.engine.getInterviewEngineState().messages.filter(message => message.role === 'INTERVIEWER');
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].text, '介绍一下，你们的项目');
+  // 单独一个短句等满 3 秒也要交上去，不能吞掉。
+  h.realtimeResult({ id: 's12', text: '还有吗', isFinal: true });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  h.runWindowTimers();
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  questions = h.engine.getInterviewEngineState().messages.filter(message => message.role === 'INTERVIEWER');
+  assert.equal(questions.length, 2);
+  assert.equal(questions[1].text, '还有吗');
+  assert.equal(prompts.length, 2);
+  await h.engine.endInterview(false);
+});
+
+test('a final keeps the spoken window so the record can show how long the question took', async () => {
+  const h = harness({ realtime: true, autoAnswer: false });
+  await h.start('SPEAKER');
+  h.realtimeResult({ id: 's20', text: '你们订单系统怎么保证幂等？', isFinal: true, beginMs: 1200, endMs: 4200 });
+  for (let i = 0; i < 25; i++) await Promise.resolve();
+  const question = h.engine.getInterviewEngineState().messages.find(message => message.role === 'INTERVIEWER');
+  assert.ok(question.metadata.speech, 'speech window is stored on the message');
+  assert.equal(question.metadata.speech.durationMs, 3000);
+  assert.ok(question.metadata.speech.endedAt <= question.createdAt);
   await h.engine.endInterview(false);
 });
 
@@ -650,7 +692,8 @@ test('a pending short transcript is flushed when the next sentence is finalised'
   assert.equal(h.engine.getInterviewEngineState().partial,'你继续说');
   for(let i=0;i<25;i++)h.systemFeed();
   await h.silence();
-  assert.equal(h.engine.getInterviewEngineState().messages.map(message=>message.text).join('|'),'你继续说|那再讲讲项目架构吧');
+  // 3 秒内同一路采集到的两个定稿按一句话处理：停顿把一句话切成两段时，不该问两次。
+  assert.equal(h.engine.getInterviewEngineState().messages.map(message=>message.text).join('|'),'你继续说，那再讲讲项目架构吧');
   await h.engine.endInterview(false);
 });
 
