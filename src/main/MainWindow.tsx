@@ -206,11 +206,13 @@ export function MainWindow() {
             </div>
           ) : (
             <>
-              {/* 页头留在滚动区外：切页时标题不动，长页面也始终知道自己在哪里。 */}
-              <header className="mx-auto w-full max-w-[1080px] shrink-0 px-8 pb-5 pt-7">
-                <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.01em]">{t(PAGE_TITLES[section].h1)}</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-[22px] text-muted-foreground">{t(PAGE_TITLES[section].sub)}</p>
-              </header>
+              {/* 页头留在滚动区外：切页时标题不动，长页面也始终知道自己在哪里。自由对话有自己的直播间头部，不再叠加一层。 */}
+              {section !== 'chat' && (
+                <header className="mx-auto w-full max-w-[1080px] shrink-0 px-8 pb-5 pt-7">
+                  <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.01em]">{t(PAGE_TITLES[section].h1)}</h1>
+                  <p className="mt-2 max-w-2xl text-sm leading-[22px] text-muted-foreground">{t(PAGE_TITLES[section].sub)}</p>
+                </header>
+              )}
               <div className={`scroll-thin min-h-0 flex-1 ${section === 'chat' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                 <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : `max-w-[1080px] px-8 pb-8 ${fixedHeight ? 'h-full' : ''}`}`}>
                   {section === 'interview' && <InterviewWorkbench onNavigate={(s) => setSection(s as Section)} />}

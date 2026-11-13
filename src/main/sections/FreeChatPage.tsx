@@ -80,7 +80,7 @@ export function FreeChatPage() {
   return <div style={{['--chat-text' as string]:`${CHAT_TEXT_PX[chatTextSize(textSize)]}px`}} className="flex h-full min-h-0 w-full bg-background">
     {confirmDialog}
     {!collapsed&&showList&&<>
-    <aside style={{width:list.width}} className="flex shrink-0 flex-col border-r border-line bg-surface-sunken">
+    <aside style={{width:list.width}} className="flex shrink-0 flex-col bg-muted/20">
       <div className="flex items-center gap-1 p-3"><button className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium shadow-xs hover:bg-muted" onClick={()=>openSession(crypto.randomUUID())}><Plus size={15}/>{t('新对话')}</button><button onClick={()=>setCollapsed(true)} aria-label={t('收起侧栏')} title={t('收起侧栏')} className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-muted"><PanelLeftClose size={15}/></button></div>
       <div className="px-3">
         <div className="relative">
@@ -127,6 +127,7 @@ function ChatThread({id,initial,initialModel,initialSummary,listCollapsed,onExpa
   const resources=usePanelWidth('freechat.resourcesWidth',288,220,520,'right');
   const [columnRef,columnWidth]=useElementWidth<HTMLDivElement>();
   const compact=columnWidth>0&&columnWidth<620;
+  const cramped=columnWidth>0&&columnWidth<500;
   const [preview,setPreview]=useState<string|null>(null);
   const [approval,setApproval]=useState<FreeChatApprovalRequest|null>(null);
   const [receipt,setReceipt]=useState('');
@@ -141,7 +142,7 @@ function ChatThread({id,initial,initialModel,initialSummary,listCollapsed,onExpa
   // Attachments live outside the message text once it is stored, so keep a map from
   // message id to the files that were sent with it and render them as chips.
   const [attachmentIndex,setAttachmentIndex]=useState<Record<string,ParsedFile[]>>({});
-  const [resourcesOpen,setResourcesOpen]=useSetting<boolean>('freechat.resourcesOpen',false);
+  const [resourcesOpen,setResourcesOpen]=useSetting<boolean>('freechat.resourcesOpen',true);
   const [askBeforeRead,setAskBeforeRead]=useSetting<boolean>('freechat.askBeforeRead',true);
   const askRef=useRef(askBeforeRead);askRef.current=askBeforeRead;
   const files=useMemo(()=>{
@@ -370,7 +371,7 @@ function ChatThread({id,initial,initialModel,initialSummary,listCollapsed,onExpa
   useEffect(()=>()=>{if(voiceCall.getPhase()!=='idle')voiceCall.stop();},[voiceCall]);
   const endVoice=useCallback(()=>{voiceCall.stop();refreshAfterVoice();},[voiceCall,refreshAfterVoice]);
   return <AssistantRuntimeProvider runtime={runtime}><div className="flex min-w-0 flex-1"><ThreadPrimitive.Root ref={columnRef} inert={callPhase!=='idle'||closingCall} className="flex min-w-0 flex-1 flex-col">
-    <div className={`flex flex-wrap items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}>{listCollapsed&&<button onClick={onExpandList} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="shrink-0 rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>}<div className="min-w-0 flex-1"><div className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-muted-foreground"><span className="truncate">{describeRoute(aiSettings,model)}</span><span className="opacity-40">·</span><span className="shrink-0">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span></div></div>
+    <div className={`flex flex-wrap items-center gap-3 border-b ${compact?'px-3':'px-6'} py-4`}>{listCollapsed&&<button onClick={onExpandList} aria-label={t('展开侧栏')} title={t('展开侧栏')} className="shrink-0 rounded-lg border p-2 text-muted-foreground hover:bg-muted"><PanelLeftOpen size={16}/></button>}<div className={`${cramped?'hidden':''} flex size-9 shrink-0 items-center justify-center rounded-xl bg-selection text-selection-fg`}><AudioLines size={18}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{t('自由对话')}</div><div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground"><span className="truncate">{describeRoute(aiSettings,model)}</span><span className="opacity-40">·</span><span className="shrink-0">{allowLocal?t('资料：{count} 类',{count:categories.length}):t('资料：关闭')}</span></div></div>
       <button onClick={()=>{setSpeak(!speak);if(speak)speaker.stop();}} className="rounded-lg border p-2 text-muted-foreground hover:bg-muted" aria-label={speak?t('关闭语音回复'):t('开启语音回复')} title={speak?t('关闭语音回复'):t('开启语音回复')}>{speak?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
       <CallButton disabled={callPhase!=='idle'||closingCall||manualBusy} onStart={()=>{if(inputOwner.current)return;if(!chatReady||!sttReady){setError(t('请先在「设置 → AI 服务」配置对话模型和语音转写模型。'));return;}inputOwner.current='call';voiceHistory.current=savedMessages(runtime.thread.getState().messages);voiceStartIndex.current=voiceHistory.current.length;setVoiceMessages([]);setVoicePreview('');setError('');voiceCall.start();}}/>
       <DeleteButton onDelete={onDelete} onError={setError}/>
