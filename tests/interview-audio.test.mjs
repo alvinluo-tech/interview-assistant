@@ -182,8 +182,18 @@ test('correcting a phone speaker cancels and fences an answer already streaming'
  let emit,finish;const h=harness({autoAnswer:true,chat:options=>{emit=options.onDelta;return new Promise(resolve=>{finish=resolve;});}});await h.start('PHONE');for(let i=0;i<60;i++)h.feed();await h.silence();const message=h.engine.getInterviewEngineState().messages[0];emit('wrong speaker answer');await h.engine.markTranscriptSpeaker(message.id,'candidate');emit(' stale');finish('late replacement');await new Promise(resolve=>setImmediate(resolve));
  const state=h.engine.getInterviewEngineState();assert.equal(state.messages[0].metadata.origin,'candidate_response');const ai=state.messages.find(m=>m.metadata?.origin==='model_generated');assert.equal(ai.metadata.superseded,true);assert.doesNotMatch(ai.text,/stale|replacement/);await h.engine.endInterview(false);
 });
+test('a translation into the same language is skipped',async()=>{
+ let calls=0;const h=harness({transcribe:async()=> '请介绍一下你自己。',translation:async()=>{calls++;return '请介绍一下你自己。';}});
+ h.settings['interview.speechProfile']={inputLanguage:'zh',answerLanguage:'zh-CN',translationLanguage:'zh-CN'};
+ await h.start('SPEAKER');for(let i=0;i<25;i++)h.systemFeed();await h.silence();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,0,'中文翻中文不该发请求');
+ const message=h.engine.getInterviewEngineState().messages[0];
+ assert.equal(message.metadata?.translation,undefined,'不该写入重复的译文');
+});
+
 test('answer language is independent of ASR and auxiliary translation never delays answering',async()=>{
- let answerOptions,transcriptionOptions;const signals=[];const h=harness({autoAnswer:true,chat:async options=>{answerOptions=options;return 'English answer';},transcribe:async(_wav,options)=>{transcriptionOptions=options;return '请介绍你的项目';},translation:async(_text,_language,signal)=>{signals.push(signal);return new Promise(()=>{});}});
+ let answerOptions,transcriptionOptions;const signals=[];const h=harness({autoAnswer:true,chat:async options=>{answerOptions=options;return 'English answer';},transcribe:async(_wav,options)=>{transcriptionOptions=options;return 'Please introduce your project';},translation:async(_text,_language,signal)=>{signals.push(signal);return new Promise(()=>{});}});
  h.settings['interview.speechProfile']={inputLanguage:'auto',answerLanguage:'en-US',translationLanguage:'zh-CN'};await h.start('SPEAKER');for(let i=0;i<25;i++)h.systemFeed();await h.silence();assert.equal(transcriptionOptions.lang,'auto');assert.match(answerOptions.messages[0].content,/English|英语/);assert.ok(signals.length);await h.engine.endInterview(false);assert.ok(signals.every(signal=>signal.aborted));
 });
 

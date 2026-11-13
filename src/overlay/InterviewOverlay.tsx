@@ -1,4 +1,5 @@
 import {markTranscriptSpeaker} from '@/lib/interviewEngine';
+import type { ChatMessage } from '@/lib/backend';
 import {GenerationDetails} from './GenerationDetails';
 import {selectSolverTurn} from '@/lib/examEngine';
 /*
@@ -421,6 +422,15 @@ function statusOf(engine: EngineState): { text: string; live: boolean } {
 }
 
 /** 对话视图：转写（左竖线）+ AI 答案（markdown 流式），newestFirst/answerFirst */
+function translationOf(message: ChatMessage) {
+  const translation = message.metadata?.translation;
+  if (!translation) return undefined;
+  const text = (translation.text ?? '').trim();
+  // 目标语言和原文相同时翻译结果就是原文，重复显示只会让人以为界面出了问题。
+  if (!text || text === message.text.trim()) return translation.error ? translation : undefined;
+  return translation;
+}
+
 function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<ActionKey, string> }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   // 作答进度：思维链阶段没有任何别的 UI 更新，靠这个 1 秒的定时重渲染让秒表走起来。
@@ -516,7 +526,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         <div className="min-w-0 flex-1">{m.text}
                           {m.metadata?.origin==='screenshot'&&<span className="ov-text-3 ml-2 text-[10px]">{t('屏幕题目')}</span>}
                           {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
-                          {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
+                          {translationOf(m)&&<div className="ov-text-3 mt-1 text-xs">{translationOf(m)!.text||translationOf(m)!.error}</div>}
                           {m.metadata?.superseded ? <span className="ov-text-3 ml-2 text-[10px]">{t('已更正')}</span> : (!m.metadata?.speaker||m.metadata.speaker.role==='interviewer')&&<DwellButton id={`correct-${m.id}`} compact hoverMs={1200} onTrigger={()=>{if(!interactive)toggleInteractive();setEditingQuestion({id:m.id,text:m.text});}}>{t('更正并重答')}</DwellButton>}
                         </div>
                       </div>
@@ -526,7 +536,7 @@ function ChatView({ engine, hotkeys }: { engine: EngineState; hotkeys: Record<Ac
                         {m.metadata?.origin==='candidate_response' && <div className="ov-text-3 text-[10px]">{t('我的实际回答')}</div>}
                         <Md text={m.text} />
                         {m.metadata?.speaker&&<SpeakerIdentity message={m}/>}
-                        {m.metadata?.translation&&<div className="ov-text-3 mt-1 text-xs">{m.metadata.translation.text||m.metadata.translation.error}</div>}
+                        {translationOf(m)&&<div className="ov-text-3 mt-1 text-xs">{translationOf(m)!.text||translationOf(m)!.error}</div>}
                         {!m.pending && <GenerationDetails status={m.metadata?.completionStatus} request={m.metadata?.request}/>}
                         {!!m.metadata?.sources?.length && <DwellDisclosure id={`sources-${m.id}`} label={t('本轮参考资料')} className="ov-text-3 mt-1 text-[10px]">{m.metadata.sources.map(source=><div key={source.id} className="mt-1 whitespace-pre-wrap"><strong>{source.title} · {source.location}</strong><div>{source.excerpt}</div></div>)}</DwellDisclosure>}
                         {m.pending && (

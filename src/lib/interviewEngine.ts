@@ -43,7 +43,7 @@ import {assembleInterviewHistory,assembleExamContext} from './aiContext';
 import type { RealtimeCapture } from './realtimeAsr';
 import {cmd} from './bridge';
 import {getSpeechProfile} from './speechPreferences';
-import {languagePrompt,recognitionLanguage} from './speechProfile';
+import {detectTextLanguage,languagePrompt,recognitionLanguage} from './speechProfile';
 import {AudioTimeline,type SpeakerDecision} from './speakerRouting';
 import {identifySpeaker} from './speakerClient';
 import {translateSpeechText} from './speechTranslation';
@@ -63,7 +63,10 @@ async function deliverPhoneSpeech(text:string,pcm:Int16Array|null,generation:num
 }
 async function translateMessage(id:string){
  const language=getSpeechProfile('interview').translationLanguage;if(language==='none')return;
- const source=state.messages.find(m=>m.id===id);if(!source)return;const sid=state.sessionId,controller=new AbortController();translations.add(controller);
+ const source=state.messages.find(m=>m.id===id);if(!source)return;
+ // 中文翻中文只会得到一段重复的原文：既浪费一次请求，也让浮窗里同一句话出现两遍。
+ if(detectTextLanguage(source.text)===language)return;
+ const sid=state.sessionId,controller=new AbortController();translations.add(controller);
  try{const text=await translateSpeechText(source.text,language,controller.signal);if(controller.signal.aborted||state.sessionId!==sid)return;
   setState({messages:state.messages.map(m=>m.id===id&&!m.metadata?.superseded?{...m,metadata:{...m.metadata,translation:{language,text,status:'ready'}}}:m)});await persistMessages(state.messages);
  }catch{if(!controller.signal.aborted&&state.sessionId===sid){setState({messages:state.messages.map(m=>m.id===id?{...m,metadata:{...m.metadata,translation:{language,text:'',status:'failed',error:t('辅助翻译失败，可继续使用原文。')}}}:m)});}}finally{translations.delete(controller);}
