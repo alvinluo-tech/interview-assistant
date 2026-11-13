@@ -272,9 +272,6 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
 
       <aside className="sticky top-4 flex flex-col gap-4">
         <div className="rounded-lg border border-line bg-surface-raised p-5 shadow-card">
-          <div className="mb-4 flex size-9 items-center justify-center rounded-lg bg-selection text-primary">
-            <Check size={16} />
-          </div>
           <h3 className="text-[15px] font-semibold">{t('这一场，准备好了。')}</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-muted">{t('选项会记住，下次打开可以直接继续。')}</p>
           <ul className="mt-4 space-y-2.5 text-xs">
@@ -295,9 +292,8 @@ export function InterviewWorkbench({ onNavigate }: { onNavigate: (s: string) => 
             <Play size={14} />
             {starting ? t('启动中…') : t('开始面试')}
           </Button>
-          <p className="mt-2 text-center text-[11px] text-ink-muted">{t('Ctrl 全局动作沿用现有配置')}</p>
+          <p className="mt-3 border-t border-line pt-3 text-[11px] leading-[18px] text-ink-muted">{t('Ctrl 全局动作沿用现有配置')}{t('语言与回答策略可随时在偏好中调整。')}</p>
         </div>
-        <p className="px-1 text-[11px] leading-relaxed text-ink-muted">{t('语言与回答策略可随时在偏好中调整。')}</p>
       </aside>
       <Dialog open={outputOpen} onClose={() => setOutputOpen(false)} width={600}>
         <DialogTitle>{t('系统声音')}</DialogTitle>

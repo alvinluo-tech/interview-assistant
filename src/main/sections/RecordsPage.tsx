@@ -93,7 +93,7 @@ function timingOf(message: ChatMessage): { at: number; note: string } {
 export function RecordsPage() {
   const [tab, setTab] = useState<'interview' | 'mock' | 'exam'>('interview');
   return (
-    <div className="flex h-[calc(100vh-232px)] min-h-[380px] flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="inline-flex w-fit shrink-0 rounded-lg border border-line bg-surface-sunken p-0.5">
         {[
           { key: 'interview', label: t('面试记录') },
@@ -256,7 +256,7 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
           )}
         </div>
         {!selecting && (
-          <Button size="sm" variant="outline" onClick={() => setSelecting(true)}>{t('批量管理')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelecting(true)}>{t('批量管理')}</Button>
         )}
       </div>
 
@@ -346,22 +346,24 @@ function InterviewRecords({kind}: {kind: 'interview' | 'mock'}) {
                 </div>
               </div>
 
-              <div className="mt-4 inline-flex w-fit rounded-lg border border-line bg-surface-sunken p-0.5">
-                {[
-                  { key: 'timeline' as const, label: t('问答时间线') },
-                  ...(detailMeta?.report ? [{ key: 'report' as const, label: t('复盘摘要') }] : []),
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setDetailTab(item.key)}
-                    aria-pressed={detailTab === item.key}
-                    className={`rounded-md px-3 py-1 text-[12px] transition-colors ${detailTab === item.key ? 'bg-surface-raised font-medium shadow-card' : 'text-ink-muted hover:text-ink'}`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
+              {detailMeta?.report ? (
+                <div className="mt-4 inline-flex w-fit rounded-lg border border-line bg-surface-sunken p-0.5">
+                  {[
+                    { key: 'timeline' as const, label: t('问答时间线') },
+                    { key: 'report' as const, label: t('复盘摘要') },
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setDetailTab(item.key)}
+                      aria-pressed={detailTab === item.key}
+                      className={`rounded-md px-3 py-1 text-[12px] transition-colors ${detailTab === item.key ? 'bg-surface-raised font-medium shadow-card' : 'text-ink-muted hover:text-ink'}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="mt-4 flex flex-col gap-3">
                 {detailTab === 'report' && detailMeta?.report ? (
@@ -516,7 +518,7 @@ function ExamRecords() {
           )}
         </div>
         {!selecting && (
-          <Button size="sm" variant="outline" onClick={() => setSelecting(true)}>{t('批量管理')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelecting(true)}>{t('批量管理')}</Button>
         )}
       </div>
 

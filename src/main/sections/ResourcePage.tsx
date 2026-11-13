@@ -111,8 +111,9 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
   };
 
   return (
-    <div className="flex min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-lg border border-line bg-surface-sunken p-0.5">
           {filters.map((item) => (
             <button
@@ -126,11 +127,12 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-sunken px-2 py-1 text-[11px] text-ink-muted">
+          <span className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-raised px-2 py-1 text-[11px] text-ink-muted">
             <HardDrive size={12} />
             {t('本机存储')}
           </span>
+        </div>
+        <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={() => setNewMaterial(true)}>
             <Plus size={13} />
             {t('新建资料')}
@@ -158,7 +160,7 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
         </div>
       </div>
 
-      <div className="grid h-[calc(100vh-268px)] min-h-[360px] grid-cols-[230px_minmax(0,1fr)] items-stretch gap-6">
+      <div className="grid min-h-0 flex-1 grid-cols-[230px_minmax(0,1fr)] items-stretch gap-6">
         <div className="flex h-full min-h-0 flex-col gap-1 overflow-y-auto pr-1">
           <label className="mb-2 flex items-center gap-2 rounded-lg border border-line bg-surface-raised px-3">
             <Search size={14} className="shrink-0 text-ink-muted" />
@@ -221,7 +223,7 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
               {'resume' in detail && (
                 <>
                   <p className="mt-4 text-[12px] leading-[22px] text-ink-muted">{detail.meta}</p>
-                  <p className="mt-4 whitespace-pre-wrap text-[12px] leading-[22px] text-ink">
+                  <p className="mt-4 whitespace-pre-wrap text-[13px] leading-[23px] text-ink">
                     {(detail.resume.summary || detail.resume.content || '').slice(0, 1200) || t('这份简历还没有正文。')}
                   </p>
                 </>
@@ -231,7 +233,7 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
                   <p className="mt-4 text-[12px] leading-[22px] text-ink-muted">
                     {t('公司：{company} · 创建于 {date}', { company: detail.goal.companyName || t('未填写'), date: new Date(detail.goal.createdAt).toLocaleDateString('zh-CN') })}
                   </p>
-                  <p className="mt-4 whitespace-pre-wrap text-[12px] leading-[22px] text-ink">
+                  <p className="mt-4 whitespace-pre-wrap text-[13px] leading-[23px] text-ink">
                     {detail.goal.description || t('这个岗位还没有填写 JD。')}
                   </p>
                 </>
@@ -241,7 +243,7 @@ export function ResourcePage({ onNavigate }: { onNavigate?: (section: 'interview
                   <p className="mt-4 text-[12px] leading-[22px] text-ink-muted">
                     {detail.meta}{' · '}{t('更新于 {date}', { date: new Date(detail.material.updatedAt).toLocaleDateString('zh-CN') })}
                   </p>
-                  <p className="mt-4 whitespace-pre-wrap text-[12px] leading-[22px] text-ink">
+                  <p className="mt-4 whitespace-pre-wrap text-[13px] leading-[23px] text-ink">
                     {(detail.material.content || detail.material.entries.map((entry: { answer: string }) => entry.answer).join('\n\n') || '').slice(0, 1600) || t('这份资料还没有内容。')}
                   </p>
                 </>

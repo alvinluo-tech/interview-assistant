@@ -89,9 +89,9 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
           </div>
         )}
 
-        <section>
+        <section className="@container">
           <h2 className="mb-3 text-[13px] font-semibold">{t('回答方式')}</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 @min-[620px]:grid-cols-3">
             {EXAM_MODE_ORDER.map((key) => {
               const m = EXAM_MODES[key];
               const icons = { instant: <Zap size={16} />, quick: <Laptop size={16} />, programming: <Sparkles size={16} /> };
@@ -202,9 +202,6 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
 
       <aside className="sticky top-4 flex flex-col gap-4">
         <div className="rounded-lg border border-line bg-surface-raised p-5 shadow-card">
-          <div className="mb-4 flex size-9 items-center justify-center rounded-lg bg-selection text-primary">
-            <Check size={16} />
-          </div>
           <h3 className="text-[15px] font-semibold">{t('这一场，准备好了。')}</h3>
           <p className="mt-1 text-[11px] leading-[18px] text-ink-muted">{t('选项会记住，下次打开可以直接继续。')}</p>
           <ul className="mt-4 space-y-2.5 text-[12px]">
@@ -230,9 +227,8 @@ export function ExamWorkbench(_props: { onNavigate: (s: string) => void }) {
             <Play size={14} />
             {starting ? t('启动中…') : t('开始笔试')}
           </Button>
-          <p className="mt-2 text-center text-[11px] text-ink-muted">{t('Ctrl 全局动作沿用现有配置')}</p>
+          <p className="mt-3 border-t border-line pt-3 text-[11px] leading-[18px] text-ink-muted">{t('Ctrl 全局动作沿用现有配置')}{t('截图与本地样例验证的结果在浮窗展示。')}</p>
         </div>
-        <p className="px-1 text-[11px] leading-[18px] text-ink-muted">{t('截图与本地样例验证的结果在浮窗展示。')}</p>
       </aside>
     </div>
   );

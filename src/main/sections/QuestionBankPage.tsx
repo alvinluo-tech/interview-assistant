@@ -164,9 +164,21 @@ export function QuestionBankPage({ onNavigate }: { onNavigate?: (section: 'inter
       )}
 
       {questions.length === 0 && !generating && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-line px-4 py-6 text-[12px] text-ink-muted">
-          <BookOpen size={16} className="shrink-0" />
-          <span>{t('还没有生成题目。选好简历和岗位，点「生成准备题」。')}</span>
+        <div className="mx-auto mt-6 flex w-full max-w-[460px] flex-col items-center gap-4 rounded-xl border border-line bg-surface-raised px-6 py-10 text-center shadow-card">
+          <span className="flex size-11 items-center justify-center rounded-xl bg-selection text-primary">
+            <BookOpen size={20} />
+          </span>
+          <div>
+            <p className="text-[15px] font-medium leading-6">{t('还没有准备题')}</p>
+            <p className="mt-1.5 text-[12px] leading-[19px] text-ink-muted">{t('选好岗位和简历，生成一组可以提前练的问题。')}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => void generate()} disabled={!aiReady} title={aiReady ? undefined : t('需要先在「设置 → AI 服务」配置接口。')}>
+              <Sparkles size={13} />
+              {t('生成准备题')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setScopeOpen(true)}>{t('调整范围')}</Button>
+          </div>
         </div>
       )}
 

@@ -160,13 +160,13 @@
     --ring: 216.5 100% 75.5%;
 
     --mx-surface-base: #161618;
-    --mx-surface-raised: #232326;
-    --mx-surface-sunken: #1D1D20;
-    --mx-surface-overlay: #232326;
+    --mx-surface-raised: #26262A;
+    --mx-surface-sunken: #1C1C1F;
+    --mx-surface-overlay: #26262A;
     --mx-text-primary: #F4F4F6;
     --mx-text-secondary: #B1B1BC;
     --mx-text-link: #82B3FF;
-    --mx-border-subtle: #414147;
+    --mx-border-subtle: #4A4A52;
     --mx-border-control: #838385;
     --mx-action-primary: #82B3FF;
     --mx-action-on-primary: #111B2A;
@@ -180,7 +180,7 @@
     --mx-focus-ring: #82B3FF;
     --mx-focus-halo: #293242;
     --mx-scrim: rgba(0, 0, 0, .58);
-    --mx-shadow-card: 0 2px 8px rgba(0, 0, 0, .16);
+    --mx-shadow-card: 0 1px 2px rgba(0, 0, 0, .45);
     --mx-shadow-popover: 0 12px 36px rgba(0, 0, 0, .36);
     --mx-status-success-text: #81D6A4;
     --mx-status-success-bg: #2F3A36;

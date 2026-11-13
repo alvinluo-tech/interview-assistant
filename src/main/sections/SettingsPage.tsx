@@ -202,7 +202,7 @@ function GeneralTab() {
                 disabled={uiScale === 1}
                 onClick={() => setUiScale(1)}
               >
-                {t('恢复默认 100%')}
+                {t('恢复默认')}
               </button>
             </div>
           </SettingRow>

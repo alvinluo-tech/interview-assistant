@@ -1307,6 +1307,8 @@ export const vi: Record<string, string> = {
   "简历名称": "Tên CV",
   "已重命名": "Đã đổi tên",
   "写一段可以随身带进面试的资料，保存后也能继续补充问答。": "Viết tài liệu để mang vào phỏng vấn; có thể bổ sung hỏi đáp sau.",
+  "还没有准备题": "Chưa có câu hỏi luyện tập",
+  "选好岗位和简历，生成一组可以提前练的问题。": "Chọn vị trí và CV để tạo bộ câu hỏi luyện tập trước.",
   "语音通话": "Cuộc gọi thoại",
   "语音通话已停止": "Cuộc gọi thoại đã dừng",
   "语音识别中断，已自动重连": "Nhận dạng giọng nói bị ngắt: đã kết nối lại",

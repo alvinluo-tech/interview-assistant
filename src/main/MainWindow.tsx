@@ -80,7 +80,7 @@ const PAGE_TITLES: Record<Section, { h1: string; sub: string }> = {
     h1: '像正式面试一样练习。',
     sub: '根据你的经历提问，让每一次回答更有把握。',
   },
-  chat: {h1:'自由对话',sub:'文字和语音对话。'},
+  chat: { h1: '想到什么，就说什么。', sub: '文字和语音都行，资料查询也只在本机。' },
   settings: { h1: '设置', sub: '语言与外观、AI 服务、快捷键和隐蔽相关都在这里。' },
   'question-bank': { h1: '练习更有针对性。', sub: '结合岗位和项目经历，先准备最值得讲清楚的问题。' },
   resource: {
@@ -179,6 +179,8 @@ export function MainWindow() {
   };
 
   const showOnboarding = !onboardingSkipped && usageAcked;
+  // 资料与历史这两页自己管理高度（左右栏各自滚动），其余页面交给外层滚动。
+  const fixedHeight = section === 'records' || section === 'resource';
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -196,18 +198,21 @@ export function MainWindow() {
           onHelp={() => setHelpOpen(true)}
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className={`scroll-thin flex-1 ${section === 'chat' ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'}`}>
-            <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : 'max-w-[1080px] px-8 py-7'}`}>
-              {showOnboarding ? (
+          {showOnboarding ? (
+            <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-[1080px] px-8 py-7">
                 <Onboarding onFinish={finishOnboarding} />
-              ) : (
-                <>
-                  {section !== 'chat' && (
-                    <header className="mb-6">
-                      <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.01em]">{t(PAGE_TITLES[section].h1)}</h1>
-                      <p className="mt-2 max-w-2xl text-sm leading-[22px] text-muted-foreground">{t(PAGE_TITLES[section].sub)}</p>
-                    </header>
-                  )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* 页头留在滚动区外：切页时标题不动，长页面也始终知道自己在哪里。 */}
+              <header className="mx-auto w-full max-w-[1080px] shrink-0 px-8 pb-5 pt-7">
+                <h1 className="text-[26px] font-semibold leading-8 tracking-[-0.01em]">{t(PAGE_TITLES[section].h1)}</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-[22px] text-muted-foreground">{t(PAGE_TITLES[section].sub)}</p>
+              </header>
+              <div className={`scroll-thin min-h-0 flex-1 ${section === 'chat' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                <div className={`mx-auto w-full ${section === 'chat' ? 'h-full max-w-none' : `max-w-[1080px] px-8 pb-8 ${fixedHeight ? 'h-full' : ''}`}`}>
                   {section === 'interview' && <InterviewWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'exam' && <ExamWorkbench onNavigate={(s) => setSection(s as Section)} />}
                   {section === 'mock' && <MockPage onNavigate={(s) => setSection(s as Section)} />}
@@ -216,10 +221,10 @@ export function MainWindow() {
                   {section === 'resource' && <ResourcePage onNavigate={setSection} />}
                   {section === 'records' && <RecordsPage />}
                   {section === 'settings' && <SettingsPage />}
-                </>
-              )}
-            </div>
-          </div>
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
       <ToastViewport />
@@ -342,7 +347,7 @@ function Sidebar({
     );
   }
   return (
-    <aside className="flex min-h-0 w-[200px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface-sunken">
+    <aside className="flex min-h-0 w-[200px] shrink-0 flex-col max-[1040px]:w-[172px] overflow-y-auto border-r border-line bg-surface-sunken">
       <div className="flex items-start gap-2.5 px-4 pb-3 pt-4">
         <BrandMark />
         <div className="min-w-0 flex-1">

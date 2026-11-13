@@ -1307,6 +1307,8 @@ export const en: Record<string, string> = {
   "简历名称": "Resume name",
   "已重命名": "Renamed",
   "写一段可以随身带进面试的资料，保存后也能继续补充问答。": "Write something you can bring into an interview; add follow-up Q&A later.",
+  "还没有准备题": "No practice questions yet",
+  "选好岗位和简历，生成一组可以提前练的问题。": "Pick a role and resume, then generate a set of questions to rehearse.",
   "语音通话": "Voice call",
   "语音通话已停止": "Voice call stopped",
   "语音识别中断，已自动重连": "Speech recognition dropped — reconnected",

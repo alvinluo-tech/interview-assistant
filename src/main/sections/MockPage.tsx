@@ -279,10 +279,7 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
 
         <aside className="sticky top-4 flex flex-col gap-3">
           <div className="rounded-lg border border-line bg-surface-raised p-5 shadow-card">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-selection text-primary">
-              <Check size={16} />
-            </span>
-            <h3 className="mt-4 text-[15px] font-semibold">{t('这一场，准备好了。')}</h3>
+            <h3 className="text-[15px] font-semibold">{t('这一场，准备好了。')}</h3>
             <p className="mt-1 text-[11px] leading-[18px] text-ink-muted">{t('进入独立面试间，按你的回答继续追问。')}</p>
             <ul className="mt-3 flex flex-col gap-2 text-[12px]">
               <li className="flex items-center gap-2"><Check size={14} className="text-primary" />{aiReady ? t('演示模型已配置') : t('还没有配置 AI 接口')}</li>
@@ -293,9 +290,8 @@ export function MockPage({ onNavigate }: { onNavigate?: (section: string) => voi
               <Play size={14} />
               {starting ? t('准备中…') : t('开始模拟面试')}
             </Button>
-            <p className="mt-2 text-center text-[11px] text-ink-muted">{t('Ctrl 全局动作沿用现有配置')}</p>
+            <p className="mt-3 border-t border-line pt-3 text-[11px] leading-[18px] text-ink-muted">{t('Ctrl 全局动作沿用现有配置')}{t('语言与回答策略可随时在偏好中调整。')}</p>
           </div>
-          <p className="px-1 text-[11px] leading-[18px] text-ink-muted">{t('语言与回答策略可随时在偏好中调整。')}</p>
         </aside>
       </div>
 

@@ -1307,6 +1307,8 @@ export const es419: Record<string, string> = {
   "简历名称": "Nombre del currículum",
   "已重命名": "Nombre actualizado",
   "写一段可以随身带进面试的资料，保存后也能继续补充问答。": "Escribe material para llevar a la entrevista; luego puedes añadir preguntas.",
+  "还没有准备题": "Aún no hay preguntas de práctica",
+  "选好岗位和简历，生成一组可以提前练的问题。": "Elige un puesto y un currículum para generar preguntas de práctica.",
   "语音通话": "Llamada de voz",
   "语音通话已停止": "Llamada de voz detenida",
   "语音识别中断，已自动重连": "Se perdió el reconocimiento de voz: reconectado",

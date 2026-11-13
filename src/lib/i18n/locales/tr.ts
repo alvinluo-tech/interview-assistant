@@ -1307,6 +1307,8 @@ export const tr: Record<string, string> = {
   "简历名称": "CV adı",
   "已重命名": "Yeniden adlandırıldı",
   "写一段可以随身带进面试的资料，保存后也能继续补充问答。": "Mülakata götürebileceğin bir materyal yaz; sonra soru-cevap ekleyebilirsin.",
+  "还没有准备题": "Henüz alıştırma sorusu yok",
+  "选好岗位和简历，生成一组可以提前练的问题。": "Bir pozisyon ve özgeçmiş seçin, önceden çalışmak için sorular oluşturun.",
   "语音通话": "Sesli arama",
   "语音通话已停止": "Sesli arama durduruldu",
   "语音识别中断，已自动重连": "Konuşma tanıma kesildi: yeniden bağlandı",
